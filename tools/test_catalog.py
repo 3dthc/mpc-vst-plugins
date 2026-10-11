@@ -649,6 +649,13 @@ class BuildTest(Base):
         self.assertEqual(list(v["assets"]), ["armv7"])
         self.assertEqual(catalog_site.tsv(cat, []).splitlines()[1].split("\t")[16:19], ["-", "-", "-"])
 
+    def test_a_pattern_without_armv7_has_no_aarch64_sibling(self):
+        entry = dict(self.ENTRY, asset_pattern="x-*.zip")
+        gh = FakeGitHub({"acme/test-synth": [self.rel("v1.0.0", 1)]}, {1: self.build("1.0.0")})
+        cat, problems = catalog_build.build([entry], gh, os.path.join(self.tmp, "cache"), set())
+        self.assertEqual(problems, [])
+        self.assertFalse(cat["plugins"][0]["versions"][0].get("gen2"))
+
     def test_a_bad_aarch64_asset_is_reported_and_does_not_hide_the_gen1_release(self):
         z32 = self.build("1.0.0")
         wrong = self.build("1.1.0", machine=183, elf_class=2)   # a different version than the armv7 zip

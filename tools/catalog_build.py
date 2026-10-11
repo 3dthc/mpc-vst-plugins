@@ -411,7 +411,8 @@ def build(entries, src, cache, yanked, keep=10, now=None):
             # and agree with the armv7 zip on id, uid and version; a bad one is reported but never hides the Gen1 release.
             rec["assets"] = {"armv7": {k: rec[k] for k in ("sha256", "size") if k in rec} | {"url": asset["browser_download_url"]}}
             pat64 = e.get("asset_pattern", "*-mpc-armv7.zip").replace("armv7", "aarch64")
-            a64 = [x for x in rel.get("assets", []) if fnmatch.fnmatch(x["name"], pat64)]
+            # a pattern with no "armv7" in it has no aarch64 sibling (it would match the armv7 zip again)
+            a64 = [x for x in rel.get("assets", []) if fnmatch.fnmatch(x["name"], pat64)] if pat64 != e.get("asset_pattern", "*-mpc-armv7.zip") else []
             if len(a64) == 1:
                 z64 = os.path.join(cache, "%s-%s.zip" % (e["id"], a64[0]["id"]))
                 try:
