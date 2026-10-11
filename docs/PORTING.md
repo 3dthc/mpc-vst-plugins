@@ -12,6 +12,9 @@
 - A port can live in its own repo next to a checkout of this one (`MPC_VST`), as mpc-vst-maze/-dx7/-acid do.
 - **MIDI generator** (sequencer/arp): MPC ignores VST MIDI out, so send through an ALSA seq port (`poc/midiport.c`).
   Place steps from the host song position, not by counting MIDI clock pulses you synthesized: `docs/MIDI_TIMING.md`.
+  A generator on the shared wrapper (no hand-written one) sets `"defines": {"HAS_SONG_POS": 1}` and provides `song_pos()` in
+  `mpc_engine_t`: called once per block with `ppqPos`, tempo, play state and block length (`poc/songpos` is the test engine).
+  Offline only until a device port uses it.
 - **App** (network, files, child processes): allowed, see NOTES "Beyond synths". Keep the audio thread
   non-blocking, use `posix_spawn` with LD_PRELOAD stripped (never `fork()`), and use libcurl for HTTPS.
 

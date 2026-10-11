@@ -102,6 +102,8 @@ Test with a block-misaligned loop, a mid-song start and tempo lurches in `host_t
 generator: add a plugin Mute (drop note-ons, pass note-offs, keep running). A plugin that spawns an engine process
 needs a watchdog (exit/hang -> respawn with cached params + SPP), child stdio to `/dev/null`, and `steady_clock` timers
 (`mpc-vst-euclidier` 1.0.5). Details: `docs/MIDI_TIMING.md`.
+On the shared wrapper (not a hand-written one) `"defines": {"HAS_SONG_POS": 1}` hands the engine `ppqPos`, tempo and play state each block
+through `song_pos()` (`wrapper/engine.h`, test engine `poc/songpos`; offline only so far).
 Name ports plainly (e.g. client "<Plugin>", port "MIDI Out"): no "(Mockba)" suffix; the user wants MockbaMod
 references kept out of mpc-vst.
 
