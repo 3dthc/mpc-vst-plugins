@@ -1410,3 +1410,18 @@ path dates from 2026-10-02. Fix: the addin installer's `mpc-addins-reload.servic
 776 ms), MPC started at 10.2 s with every addin in its `LD_PRELOAD`, `NRestarts=0`, and USB Audio tapping from that first
 process. About 1 s is added to boot. Not tested: the uninstall path on a device, MPC OS 2.x (no overlay, so no unit) and
 a firmware update.
+
+## 2026-10-12: MIDI channels through a plugin's own port; engine-made changes reach the screen (Live II, MPC OS 3.9.1; device)
+From saustin2010's Percolator 2.0.0 (four drum voices, a MIDI channel each, like the Erica Synths Pērkons;
+[mpc-vst-percolator](https://github.com/saustin2010/mpc-vst-percolator), `src/midiin.h`):
+- **MPC hands a plugin on its track every note-on on channel 1**, whatever channel the MIDI track sent it on, and its
+  note-off on the channel it came on (traced: a MIDI track on channel 3, routed into the plugin's track, arrived as
+  `90 41 7f` then `82 41 40`). So a plugin can't tell channels apart through its track, and should end a note on its
+  note-off whatever the channel (a drone never stopped otherwise).
+- **A plugin's own ALSA sequencer input port works as a MIDI track's output.** A writable port (client named after the
+  plugin, port "MIDI In"; libasound dlopen()ed, read without blocking at the start of each block, no thread) is listed
+  in a MIDI track's MIDI OUTPUT PORT as "<client> MIDI In", and the track's notes and CCs reach it on their own channels.
+- **Engine-made changes reach the screen** with `mpc_engine_changed()` (`wrapper/engine.h`): the engine sets its knobs
+  and switches from that port's CCs and names each, and the wrapper reports them as it does a MIDI CC's change. On the
+  Live II a knob on the page followed a CC stream. Offline: `poc/selfset` in `tools/host_test.c` (reported once, then
+  at most every 1024 frames; an option's change with an UpdateDisplay; nothing the engine didn't name).
