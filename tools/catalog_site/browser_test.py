@@ -1,7 +1,7 @@
 """Browser test of the catalog page's install list (tools/catalog_site/index.template.html): tick plugins, get the command, refuse a
 bad address, keep the selection in the link, no horizontal scroll on a phone. Needs Playwright, which the html_art image has:
 
-  python3 tools/catalog_site.py --out /tmp/site
+  python3 tools/catalog_site.py --catalog tools/catalog_site/fixture-catalog.json --out /tmp/site
   docker build -q -t mpc-vst-html-art tools/html_art
   docker run --rm -v /tmp:/w -v "$PWD/tools/catalog_site":/t -w /w mpc-vst-html-art python3 /t/browser_test.py /w/site/index.html /w
 

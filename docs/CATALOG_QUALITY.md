@@ -37,7 +37,7 @@ own plugins (Force, MPC OS 3.9.1, recorded 2026-10-10; 56 Verified, 50 Listed, 1
 - Verified needs a `tested.json` entry for the *newest stable* version, so every release by an author resets it to unverified until they add a
   line. That is intended, but say so in the announcement follow-up.
 - The tier is computed in `tier_of` in `tools/catalog_build.py`; the registry can only cap it (`"tier": "experimental"`).
-- `fixture-catalog.json` (repo root) drives `tools/catalog_site/browser_test.py`; update it when `catalog.json` gains fields.
+- `tools/catalog_site/fixture-catalog.json` drives `tools/catalog_site/browser_test.py`; update it when `catalog.json` gains fields.
 - The catalog rebuilds nightly; run the "Catalog build" workflow (`gh workflow run catalog.yml`) after merging site changes to publish at once.
 
 ## Principles

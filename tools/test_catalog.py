@@ -1834,7 +1834,7 @@ class AppResolveTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t:
             resolved = self.doc(); resolved["apps"][0]["downloads"] = [{"platform": "macos", "label": "Resolved label", "url": "https://dl/x", "sha256": self.SHA}]
             json.dump(resolved, open(os.path.join(t, "apps.json"), "w"))
-            subprocess.run([sys.executable, os.path.join(HERE, "catalog_site.py"), "--catalog", os.path.join(root, "site-fixture", "catalog.json"),
+            subprocess.run([sys.executable, os.path.join(HERE, "catalog_site.py"), "--catalog", os.path.join(HERE, "catalog_site", "fixture-catalog.json"),
                             "--out", os.path.join(t, "site")], cwd=root, check=True, capture_output=True)
             html = open(os.path.join(t, "site", "index.html"), encoding="utf-8").read()
         self.assertIn("Resolved label", html)
