@@ -57,7 +57,6 @@ dialog .actions { display:flex; gap:10px; justify-content:flex-end; margin-top:1
 .catbar { display:flex; flex-wrap:wrap; gap:6px 16px; justify-content:space-between; align-items:center; margin:2px 0 8px; font-size:13px; color:var(--muted); }
 .linkbtn { font:600 12px/1 var(--display); letter-spacing:.1em; text-transform:uppercase; color:var(--accent); background:none; border:0; padding:6px 0; cursor:pointer; }
 .tag.up { color:#8a5a00; border-color:#c58b00; }
-.tag.warn { color:#4b3f94; border-color:#8a7cc9; }   /* MPC OS 3.x only: not the update tag's amber */
 ul.list .t .d.osn.err { color:var(--accent); } ul.list .t .d.osn.warn { color:#4b3f94; }
 #selbar { position:sticky; bottom:12px; z-index:4; display:flex; gap:12px; align-items:center; justify-content:space-between; background:var(--lcd); color:var(--lcd-fg);
   border-radius:8px; padding:10px 12px 10px 16px; box-shadow:0 6px 24px rgb(0 0 0/.25); margin-top:12px; }
@@ -288,10 +287,11 @@ function vgt(a, b) {   /* is version a newer than version b ("2.34" > "2.33") */
   for (var i = 0; i < Math.max(x.length, y.length); i++) { var p = x[i] || 0, q = y[i] || 0; if (p !== q) return p > q; }
   return false;
 }
+/* MPC OS 3.x is the current, standard OS, so it gets no badge: only a 2.x-capable version with a 2.x device test does (as on the catalog site).
+   A 3.x-only plugin on a device that looks like 2.x still gets osNote's warning. */
 function osTagFor(p) {
-  var g = p.os_compat || []; if (!g.length) return null;
-  if (g.indexOf("2.x") >= 0) { var t = el("span", "tag", "MPC OS 2.x + 3.x"); t.title = "Its skin and library were checked against MPC OS 2.15.1's own skins and glibc. Not the same as tested on a 2.x unit."; return t; }
-  var w = el("span", "tag warn", "MPC OS 3.x only"); w.title = "Not compatible with MPC OS 2.x" + ((p.os_compat_why || []).length ? " (" + p.os_compat_why.join("; ") + ")" : ""); return w;
+  var g = p.os_compat || []; if (g.indexOf("2.x") < 0 || !p.tested_2x) return null;
+  var t = el("span", "tag", "MPC OS 2.x tested"); t.title = "Tested on an MPC OS 2.x unit; its skin and library were also checked against MPC OS 2.15.1's own skins and glibc. Works on MPC OS 3.x too."; return t;
 }
 function osNote(p) {   /* {level, text} when this plugin will not work as expected on the connected device, else null */
   if (S.arch === "aarch64" && !p.gen2) return { level: "err", text: p.name + " has no Gen2 (aarch64) build yet, so it cannot be installed on this device." };
