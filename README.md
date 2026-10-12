@@ -121,6 +121,7 @@ design.
   knob style, gradient or shadow, and artwork drawn in Inkscape, baked into the page.
 - Presets in MPC's PRESET menu, from the engine's own preset parameter or a `presets.json` (the menu listing and loading
   checked on a Force; offline-tested otherwise). CC 20-35 and NRPN control from MIDI (offline-tested only so far).
+- Controls the engine moves by itself (a worker thread, MIDI on a port of its own) followed on the screen.
 - Updating a plugin without restarting MPC: replace the file, remove every copy from the project, insert it again.
 - Shipping a plugin as one zip with an install script.
 
