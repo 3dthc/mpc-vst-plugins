@@ -91,6 +91,9 @@ for the pattern). This applies to every future port, not just ones that hit the 
 
 ## 3. Skin
 - [ ] Design in a layout `.conf` (Force Shadow widget syntax plus `qlinks`/`rows=`), or port an existing shadow page.
+- [ ] **No other company's name or logo in the skin** (manufacturer wordmarks, logo-bearing panel artwork, trademarked
+      product art), none in the plugin name or the catalog `screenshot`. The summary and tags may say what you model
+      ("X-style") but not imply the maker's endorsement. A hardware-clone skin needs its own artwork and generic labels. See `catalog/README.md` "Skins and branding".
 - [ ] **If the app has its own `addon/shadow_page.conf`, copy its `style=`/`theme_*` lines verbatim into
       the top of the port's `layout.conf` before anything else.** Without them the skin renders in
       `shadow_art`'s generic default palette (cream knobs, dark plate, orange accent) instead of the
