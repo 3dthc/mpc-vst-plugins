@@ -5,6 +5,9 @@ on:
   schedule:
     - cron: '17 3 * * *'
   workflow_dispatch:
+  workflow_run:
+    workflows: ["Publish Maschine Group"]
+    types: [completed]
   push:
     branches: [main]
     paths: ['catalog/**', 'tools/catalog_*.py', 'tools/app_*.py', 'tools/catalog_site/**', 'tools/skin_compat.py', 'tools/skin_roles_2x.json', 'tools/test_skin_compat.py']
@@ -19,6 +22,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,7 +45,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 tools/app_resolve.py
       - name: Open and close issues for failing releases
-        if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        if: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_run') }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 tools/catalog_issues.py
@@ -49,7 +53,7 @@ jobs:
         if: ${{ github.event_name != 'pull_request' }}
         run: python3 tools/catalog_site.py
       - name: Upload the Pages artifact
-        if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        if: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_run') }}
         uses: actions/upload-pages-artifact@v3
         with:
           path: catalog/dist/site
@@ -61,7 +65,7 @@ jobs:
           path: catalog/dist/
   deploy:
     # Needs Settings > Pages > Source: GitHub Actions (one-time, by the repo owner).
-    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+    if: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_run') }}
     needs: build
     runs-on: ubuntu-latest
     permissions:
