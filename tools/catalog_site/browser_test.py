@@ -104,7 +104,7 @@ with sync_playwright() as p:
           and pg.locator("#grid article[data-tier=verified] .tag.tier-verified").count() >= 1)
     check("Recommended sorts by tier", [rank[t] for t in tiers] == sorted(rank[t] for t in tiers), str(tiers))
     # Verified is split by device generation: one badge per generation, and a Tier filter option for each
-    both = pg.locator("#grid article:has(h2:text-is('Tested Two')) .tag.tier-verified").all_text_contents()
+    both = pg.locator("#grid article:has(h2:has-text('Tested Two')) .tag.tier-verified").all_text_contents()
     check("a plugin tested on both generations has two Verified badges", both == ["Verified Gen1", "Verified Gen2"], str(both))
     for val, gen in (("verified-gen1", "gen1"), ("verified-gen2", "gen2")):
         pg.select_option("#f-tier", val)
@@ -122,8 +122,8 @@ with sync_playwright() as p:
     pg.goto(URL); pg.reload()
     pg.wait_for_function("!document.querySelector('#grid article[data-tier] a.shot[data-open=tested-two]')")
     check("a card with a screenshot shows it", pg.locator("#grid a.shot[data-open=test-synth] img").count() == 1)
-    check("a card without one has no frame", pg.locator("#grid article:has(h2:text-is('Three Only')) .shot").count() == 0)
-    check("a dead screenshot link leaves no empty frame", pg.locator("#grid article:has(h2:text-is('Tested Two')) .shot").count() == 0)
+    check("a card without one has no frame", pg.locator("#grid article:has(h2:has-text('Old Catalog')) .shot").count() == 0)
+    check("a dead screenshot link leaves no empty frame", pg.locator("#grid article:has(h2:has-text('Tested Two')) .shot").count() == 0)
     shot = pg.locator("#grid a.shot[data-open=test-synth]")
     shot.click()
     check("clicking the screenshot opens the popup", pg.locator("#modal").is_visible() and pg.locator("#modal h2").text_content() == "Test Synth")
@@ -137,6 +137,12 @@ with sync_playwright() as p:
     check("Back closes it", pg.locator("#modal").is_hidden())
     shot.click(); pg.mouse.click(5, 450)
     check("a click on the backdrop closes it", pg.locator("#modal").is_hidden())
+    pg.locator("#grid article:has(h2:has-text('Old Catalog')) h2 a.open").click()
+    check("the title opens the popup too, also on a card without a screenshot",
+          pg.locator("#modal").is_visible() and pg.locator("#modal h2").text_content() == "Old Catalog" and "p=old-catalog" in pg.evaluate("location.hash"))
+    check("the popup's own title is not a link", pg.locator("#modal h2 a").count() == 0)
+    pg.keyboard.press("Escape")
+    check("focus returns to the title", pg.evaluate("document.activeElement.className") == "open" and pg.locator("#modal").is_hidden())
     pg.goto(URL + "#p=test-synth"); pg.reload()
     check("the link opens the popup", pg.locator("#modal").is_visible() and pg.locator("#modal h2").text_content() == "Test Synth")
     pg.wait_for_timeout(300)

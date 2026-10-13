@@ -265,7 +265,8 @@ function card(p, big) {
   var img = '<img src="' + esc(p.screenshot) + '" alt="' + esc(p.name) + ' screenshot" loading="' + (big ? "eager" : "lazy") + '" onerror="this.parentNode.remove()">';
   var shot = !(p.screenshot && safeUrl(p.screenshot) !== "#") ? "" : big ? '<div class="shot">' + img + '</div>'
     : '<a class="shot" href="#p=' + encodeURIComponent(p.id) + '" data-open="' + esc(p.id) + '" title="Open ' + esc(p.name) + '">' + img + '</a>';
-  var head = '<article class="card' + (by ? " by" : "") + (big ? " big" : "") + '" data-tier="' + tierOf(p) + '">' + shot + '<header><div><h2' + (big ? ' id="modal-title"' : '') + '>' + esc(p.name) + '</h2><div class="by">by ' + esc(p.author) + '</div></div>' +
+  var head = '<article class="card' + (by ? " by" : "") + (big ? " big" : "") + '" data-tier="' + tierOf(p) + '">' + shot + '<header><div><h2' + (big ? ' id="modal-title">' + esc(p.name)
+    : '><a class="open" href="#p=' + encodeURIComponent(p.id) + '" data-open="' + esc(p.id) + '">' + esc(p.name) + '</a>') + '</h2><div class="by">by ' + esc(p.author) + '</div></div>' +
     (v ? '<span class="ver" title="Latest ' + (by ? "tag" : esc(v.channel) + " release") + '">v' + esc(v.version) + (v.channel === "beta" ? " beta" : "") + '</span>' : '<span class="ver">' + (by ? "no tag" : "no release") + '</span>') + '</header>' +
     '<div class="tags">' + tags.join("") + '</div><p>' + esc(p.summary) + '</p>' + barLine(p);
   if (by) {
@@ -369,12 +370,12 @@ function modal() {
   document.body.classList.toggle("modal-open", !!p);
   if (p) $("modal-x").focus();
   else if (returnTo) {   /* looked up by id because closing via Back redraws the grid */
-    var a = $("grid").querySelector('[data-open="' + returnTo + '"]'); if (a) a.focus({ preventScroll: true });
+    var a = $("grid").querySelector(returnTo); if (a) a.focus({ preventScroll: true });
     returnTo = null;
   }
 }
 function openPlugin(id, from) {
-  state.open = id; returnTo = from ? id : null;
+  state.open = id; returnTo = from ? '[data-open="' + id + '"].' + from.className.split(" ")[0] : null;
   try { history.pushState(null, "", url()); pushed = true; } catch (e) {}
   modal();
 }
