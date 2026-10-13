@@ -1,12 +1,12 @@
 """Browser test of the catalog page's install list (tools/catalog_site/index.template.html): tick plugins, get the command, refuse a
-bad address, keep the selection in the link, no horizontal scroll on a phone. Needs Playwright, which the html_art image has:
+bad address, keep the selection in the link, the screenshot popup and its link, no horizontal scroll on a phone. Needs Playwright, which the html_art image has:
 
   python3 tools/catalog_site.py --catalog tools/catalog_site/fixture-catalog.json --out /tmp/site
   docker build -q -t mpc-vst-html-art tools/html_art
   docker run --rm -v /tmp:/w -v "$PWD/tools/catalog_site":/t -w /w mpc-vst-html-art python3 /t/browser_test.py /w/site/index.html /w
 
 The last two arguments are the built page and a folder for two screenshots (shot-desktop.png, shot-phone.png)."""
-import sys
+import base64, sys
 from playwright.sync_api import sync_playwright
 URL = "file://" + sys.argv[1]
 SHOTS = sys.argv[2] if len(sys.argv) > 2 else "/tmp"
@@ -19,6 +19,10 @@ with sync_playwright() as p:
     pg = b.new_page(viewport={"width": 1280, "height": 900})
     errors = []
     pg.on("pageerror", lambda e: errors.append(str(e)))
+    # the fixture's screenshots live on a fake host: test-synth gets a 1x1 PNG, tested-two a 404 (a dead link)
+    PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
+    pg.route("https://shots.invalid/**", lambda r: r.fulfill(status=200, content_type="image/png", body=PNG)
+             if r.request.url.endswith("/test-synth.png") else r.fulfill(status=404))
     pg.goto(URL)
     check("panel hidden at first", pg.locator("#inst").is_hidden())
     picks = pg.locator("[data-pick]")
@@ -114,6 +118,36 @@ with sync_playwright() as p:
     check("Show them reveals experimental plugins", pg.locator(".tag.tier-experimental").count() >= 1)
     pg.select_option("#f-tier", index=0)
     check("only a plugin missing something shows 'To improve'", pg.locator("#grid details.how:has-text('To improve')").count() == 1)
+    # Screenshot popup: the image opens the whole card over a dark backdrop, with its own link (#...&p=<id>)
+    pg.goto(URL); pg.reload()
+    pg.wait_for_function("!document.querySelector('#grid article[data-tier] a.shot[data-open=tested-two]')")
+    check("a card with a screenshot shows it", pg.locator("#grid a.shot[data-open=test-synth] img").count() == 1)
+    check("a card without one has no frame", pg.locator("#grid article:has(h2:text-is('Three Only')) .shot").count() == 0)
+    check("a dead screenshot link leaves no empty frame", pg.locator("#grid article:has(h2:text-is('Tested Two')) .shot").count() == 0)
+    shot = pg.locator("#grid a.shot[data-open=test-synth]")
+    shot.click()
+    check("clicking the screenshot opens the popup", pg.locator("#modal").is_visible() and pg.locator("#modal h2").text_content() == "Test Synth")
+    check("the popup has its own link", "p=test-synth" in pg.evaluate("location.hash"), pg.evaluate("location.hash"))
+    check("focus moves to Close", pg.evaluate("document.activeElement.id") == "modal-x")
+    check("the page behind does not scroll", pg.evaluate("getComputedStyle(document.body).overflow") == "hidden")
+    pg.keyboard.press("Escape")
+    check("Escape closes it and drops p= from the link", pg.locator("#modal").is_hidden() and "p=" not in pg.evaluate("location.hash"))
+    check("focus returns to the screenshot", pg.evaluate("document.activeElement.getAttribute('data-open')") == "test-synth")
+    shot.click(); pg.go_back()
+    check("Back closes it", pg.locator("#modal").is_hidden())
+    shot.click(); pg.mouse.click(5, 450)
+    check("a click on the backdrop closes it", pg.locator("#modal").is_hidden())
+    pg.goto(URL + "#p=test-synth"); pg.reload()
+    check("the link opens the popup", pg.locator("#modal").is_visible() and pg.locator("#modal h2").text_content() == "Test Synth")
+    pg.wait_for_timeout(300)
+    check("the popup's picture loads", pg.evaluate("(document.querySelector('#modal .shot img') || {}).naturalWidth") == 1)
+    pg.locator("#modal [data-pick]").check()
+    check("ticking in the popup ticks the card", pg.locator("#grid [data-pick=test-synth]").is_checked() and "sel=test-synth" in pg.evaluate("location.hash"))
+    pg.click("#modal-x")
+    check("Close closes a popup opened from a link", pg.locator("#modal").is_hidden() and "p=" not in pg.evaluate("location.hash"))
+    for junk in ("nope", "<img src=x onerror=alert(1)>", "../test-synth"):
+        pg.goto(URL + "#p=" + junk); pg.reload()
+        check("p=%s opens nothing" % junk, pg.locator("#modal").is_hidden())
     check("no script errors", not errors, str(errors))
     m = b.new_page(viewport={"width": 390, "height": 800}, device_scale_factor=2)
     m.goto(URL + "#sel=" + ids[0]); m.reload()

@@ -228,6 +228,9 @@ Locrian's installer uses a drop-in folder in `Synths` (`docs/CATALOG_SPEC.md`, "
 - [x] (2026-09-30) Catalog page that builds the one-line command (`ssh -t root@<ip> "wget -qO /tmp/mpc-store.sh <site>/mpc-store.sh && sh /tmp/mpc-store.sh install acid jv-880"`: download, then run, not piped into `sh`, so the confirmation prompts can read the keyboard), with the script
       text and a "download and review first" version. Ticks on the cards, IP box, copy button, the review steps with the script's sha256; the
       selection lives in the link (`#sel=acid,jv-880`); `tools/catalog_site/browser_test.py` (Playwright in the html_art image) covers it.
+- [x] (2026-10-12) Screenshot popup: a card's `screenshot` sits at the top of the card (cropped to 2:1, a dead link drops the frame); clicking
+      it opens the whole card over a dark backdrop with the picture uncropped. The popup has its own link, `#p=<id>` added to the page's
+      hash (ids are stable); a link without `tab=` opens on the plugin's tab. Escape, Back, the backdrop and × close it. Same browser test.
 - [x] Desktop helper (2026-09-30): `tools/desktop` (Go, one static binary per OS, one dependency): a local web page on 127.0.0.1 behind a random
       token; connect over SSH, pick catalog plugins and/or drop release zips (build-yourself ones too), install with one MPC stop/start;
       catalog downloads checked against the catalog's sha256; tar stream keeps modes/symlinks; older installers (no `-n`) run first
