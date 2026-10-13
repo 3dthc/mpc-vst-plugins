@@ -215,6 +215,7 @@ Locrian's installer uses a drop-in folder in `Synths` (`docs/CATALOG_SPEC.md`, "
 - [x] Re-release the current plugins in the new layout and test on a device (done 2026-10-02, verified on a Force): Dexed 1.0.4, JV-880 1.0.5, Acid 1.0.3, Crate Digger 1.1.5, Maze Voice 1.0.1, Maze Sequencer 1.0.1; Monomodule 0.10.2 and Machinemodule 0.3.6 are build-yourself (per-user builds go through `release.py`, so they are portable). Euclidier stays parked.
 - [x] Guides (Install, Build, Workflow; Setup was merged into Build on 2026-10-01) checked against the new layout (2026-09-30): Install's manual steps use `plugin-meta.xml`,
       and it has "If a plugin disappears after a restart". Site cards carry no layout-specific text (`index.template.html`).
+- [x] Old-layout releases are flagged (2026-10-13, offline: `tools/test_catalog.py`): warning in `catalog_check.py`, a builder problem for a newest stable release, and a PR check (`--require-portable`) for new or changed registry entries. Prompted by a third-party port whose release zip still used `/sdcard/vst` and did not show up in plugin managers.
 - [x] Published releases still in the old layout dropped off a list-rebuilding scanner (NOTES 2026-09-30); all current plugins were re-released above, so the scanner and the catalog agree.
 
 ### Phase 4: Install and update from the device or desktop
