@@ -199,6 +199,15 @@ footer { margin-top: 36px; color: var(--muted); font-size: 12px; border-top: 1px
 
 /* Tabs: Plugins | Device patches | Companion apps. A mid-grey bar, darker than the page, with the open tab raised in the page colour. */
 .tabs { --bar: #c9c6bd; display: flex; gap: 4px; background: var(--bar); border-radius: var(--radius) var(--radius) 0 0; padding: 8px 8px 0; margin: 12px 0 0; overflow-x: auto; }
+/* Thin scrollbars on the sideways-scrolling rows. Chrome and Firefox take scrollbar-*; Safari only the ::-webkit- rules
+   (Chrome ignores those once scrollbar-color is set). */
+.tabs, .tablewrap, .doc pre { scrollbar-width: thin; scrollbar-color: rgba(27, 28, 31, .28) transparent; }
+.doc pre { scrollbar-color: rgba(255, 255, 255, .25) transparent; }
+.tabs::-webkit-scrollbar, .tablewrap::-webkit-scrollbar, .doc pre::-webkit-scrollbar { height: 6px; }
+.tabs::-webkit-scrollbar-track, .tablewrap::-webkit-scrollbar-track, .doc pre::-webkit-scrollbar-track { background: transparent; }
+.tabs::-webkit-scrollbar-thumb, .tablewrap::-webkit-scrollbar-thumb { background: rgba(27, 28, 31, .28); border-radius: 3px; }
+.doc pre::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .25); border-radius: 3px; }
+.tabs::-webkit-scrollbar-thumb:hover, .tablewrap::-webkit-scrollbar-thumb:hover { background: rgba(27, 28, 31, .45); }
 .tabs [role=tab] { font: 700 16px/1 var(--display); letter-spacing: .08em; text-transform: uppercase; color: #4a4c52; background: transparent; border: 0;
   border-radius: var(--radius) var(--radius) 0 0; padding: 14px 18px 12px; cursor: pointer; white-space: nowrap; }
 .tabs [role=tab]:hover { color: var(--fg); background: #d6d3cb; }
