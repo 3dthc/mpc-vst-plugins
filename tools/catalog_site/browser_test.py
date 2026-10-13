@@ -6,7 +6,7 @@ bad address, keep the selection in the link, the screenshot popup and its link, 
   docker run --rm -v /tmp:/w -v "$PWD/tools/catalog_site":/t -w /w mpc-vst-html-art python3 /t/browser_test.py /w/site/index.html /w
 
 The last two arguments are the built page and a folder for two screenshots (shot-desktop.png, shot-phone.png)."""
-import base64, sys
+import base64, os, re, sys
 from playwright.sync_api import sync_playwright
 URL = "file://" + sys.argv[1]
 SHOTS = sys.argv[2] if len(sys.argv) > 2 else "/tmp"
@@ -149,11 +149,28 @@ with sync_playwright() as p:
     check("the popup's picture loads", pg.evaluate("(document.querySelector('#modal .shot img') || {}).naturalWidth") == 1)
     pg.locator("#modal [data-pick]").check()
     check("ticking in the popup ticks the card", pg.locator("#grid [data-pick=test-synth]").is_checked() and "sel=test-synth" in pg.evaluate("location.hash"))
+    pg.evaluate("navigator.clipboard.writeText = function (t) { window.copied = t; return Promise.resolve(); }")
+    pg.click("#modal-share")
+    check("Copy link copies the share page's address", (pg.evaluate("window.copied") or "").endswith("/p/test-synth.html")
+          and pg.locator("#modal-share").text_content() == "Link copied", str(pg.evaluate("window.copied")))
     pg.click("#modal-x")
     check("Close closes a popup opened from a link", pg.locator("#modal").is_hidden() and "p=" not in pg.evaluate("location.hash"))
     for junk in ("nope", "<img src=x onerror=alert(1)>", "../test-synth"):
         pg.goto(URL + "#p=" + junk); pg.reload()
         check("p=%s opens nothing" % junk, pg.locator("#modal").is_hidden())
+    # Share pages (catalog_site.py share_page): link previews read Open Graph tags from p/<id>.html, and a browser goes on to the popup
+    site = os.path.dirname(sys.argv[1])
+    share = open(os.path.join(site, "p", "test-synth.html"), encoding="utf-8").read()
+    og = dict(re.findall(r'<meta (?:property|name)="([^"]+)" content="([^"]*)"', share))
+    check("share page has the card's Open Graph tags", og.get("og:title") == "Test Synth by A" and og.get("og:image") == "https://shots.invalid/test-synth.png"
+          and og.get("twitter:card") == "summary_large_image" and "og:description" in og, str(og))
+    og = dict(re.findall(r'<meta (?:property|name)="([^"]+)" content="([^"]*)"', open(os.path.join(site, "p", "old-catalog.html"), encoding="utf-8").read()))
+    check("without a screenshot: no og:image, small card", "og:image" not in og and og.get("twitter:card") == "summary", str(og))
+    check("share page does not use a meta refresh (crawlers would follow it)", "http-equiv" not in share)
+    check("the card links point at the share page", pg.locator("#grid a.shot[data-open=test-synth]").get_attribute("href") == "p/test-synth.html")
+    pg.goto("file://" + os.path.join(site, "p", "test-synth.html"))
+    pg.wait_for_url(re.compile(r"index\.html#p=test-synth$"))
+    check("the share page opens the popup", pg.locator("#modal").is_visible() and pg.locator("#modal h2").text_content() == "Test Synth")
     check("no script errors", not errors, str(errors))
     m = b.new_page(viewport={"width": 390, "height": 800}, device_scale_factor=2)
     m.goto(URL + "#sel=" + ids[0]); m.reload()

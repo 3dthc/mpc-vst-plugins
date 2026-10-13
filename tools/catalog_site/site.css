@@ -85,6 +85,9 @@ a { color: inherit; }
 .modal-x { position: absolute; top: -46px; right: -4px; width: 40px; height: 40px; border: 0; background: none; color: #fff;
   font: 400 34px/1 var(--text); cursor: pointer; opacity: .8; }
 .modal-x:hover, .modal-x:focus-visible { opacity: 1; }
+.modal-share { position: absolute; top: -40px; left: 0; height: 30px; padding: 0 12px; border: 1px solid rgba(255, 255, 255, .35); border-radius: 15px;
+  background: none; color: #fff; font: 500 13px/1 var(--text); letter-spacing: .02em; cursor: pointer; opacity: .85; }
+.modal-share:hover, .modal-share:focus-visible { opacity: 1; border-color: #fff; }
 .card.big { box-shadow: 0 24px 60px rgba(0, 0, 0, .45); }
 .card.big .shot { aspect-ratio: auto; }
 .card.big .shot img { height: auto; object-fit: contain; }

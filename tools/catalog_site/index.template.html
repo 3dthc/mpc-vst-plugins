@@ -77,7 +77,8 @@
   <p class="empty" id="empty" hidden>No plugins match these filters.</p>
   <div class="modal" id="modal" hidden>
     <div class="modal-in" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-      <button class="modal-x" type="button" id="modal-x" aria-label="Close">&times;</button>
+      <button class="modal-share" type="button" id="modal-share">Copy link</button>
+    <button class="modal-x" type="button" id="modal-x" aria-label="Close">&times;</button>
       <div id="modal-body"></div>
     </div>
   </div>
@@ -264,9 +265,9 @@ function card(p, big) {
   /* a dead image link removes its frame instead of leaving an empty box */
   var img = '<img src="' + esc(p.screenshot) + '" alt="' + esc(p.name) + ' screenshot" loading="' + (big ? "eager" : "lazy") + '" onerror="this.parentNode.remove()">';
   var shot = !(p.screenshot && safeUrl(p.screenshot) !== "#") ? "" : big ? '<div class="shot">' + img + '</div>'
-    : '<a class="shot" href="#p=' + encodeURIComponent(p.id) + '" data-open="' + esc(p.id) + '" title="Open ' + esc(p.name) + '">' + img + '</a>';
+    : '<a class="shot" href="p/' + encodeURIComponent(p.id) + '.html" data-open="' + esc(p.id) + '" title="Open ' + esc(p.name) + '">' + img + '</a>';
   var head = '<article class="card' + (by ? " by" : "") + (big ? " big" : "") + '" data-tier="' + tierOf(p) + '">' + shot + '<header><div><h2' + (big ? ' id="modal-title">' + esc(p.name)
-    : '><a class="open" href="#p=' + encodeURIComponent(p.id) + '" data-open="' + esc(p.id) + '">' + esc(p.name) + '</a>') + '</h2><div class="by">by ' + esc(p.author) + '</div></div>' +
+    : '><a class="open" href="p/' + encodeURIComponent(p.id) + '.html" data-open="' + esc(p.id) + '">' + esc(p.name) + '</a>') + '</h2><div class="by">by ' + esc(p.author) + '</div></div>' +
     (v ? '<span class="ver" title="Latest ' + (by ? "tag" : esc(v.channel) + " release") + '">v' + esc(v.version) + (v.channel === "beta" ? " beta" : "") + '</span>' : '<span class="ver">' + (by ? "no tag" : "no release") + '</span>') + '</header>' +
     '<div class="tags">' + tags.join("") + '</div><p>' + esc(p.summary) + '</p>' + barLine(p);
   if (by) {
@@ -389,6 +390,15 @@ $("grid").addEventListener("click", function (e) {
   var a = e.target.closest("[data-open]");
   if (!a || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
   e.preventDefault(); openPlugin(a.getAttribute("data-open"), a);
+});
+/* The link to share is p/<id>.html (catalog_site.py share_page): link previews read its Open Graph tags, which a #p= hash can't carry. */
+$("modal-share").addEventListener("click", function () {
+  var b = this, link = new URL("p/" + encodeURIComponent(state.open) + ".html", location.href).href;
+  var name = (P.filter(function (x) { return x.id === state.open; })[0] || {}).name;
+  var done = function () { b.textContent = "Link copied"; setTimeout(function () { b.textContent = "Copy link"; }, 2000); };
+  if (navigator.share && matchMedia("(pointer: coarse)").matches) navigator.share({ title: name, url: link }).catch(function () {});
+  else if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(done, function () { prompt("Copy this link", link); });
+  else prompt("Copy this link", link);
 });
 $("modal").addEventListener("click", function (e) { if (e.target === $("modal") || e.target.closest("#modal-x")) closePlugin(); });
 addEventListener("keydown", function (e) { if (e.key === "Escape" && state.open) closePlugin(); });

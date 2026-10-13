@@ -231,6 +231,10 @@ Locrian's installer uses a drop-in folder in `Synths` (`docs/CATALOG_SPEC.md`, "
 - [x] (2026-10-12) Screenshot popup: a card's `screenshot` sits at the top of the card (cropped to 2:1, a dead link drops the frame); clicking
       it opens the whole card over a dark backdrop with the picture uncropped. The popup has its own link, `#p=<id>` added to the page's
       hash (ids are stable); a link without `tab=` opens on the plugin's tab. Escape, Back, the backdrop and × close it. Same browser test.
+- [x] (2026-10-13) Share links: `catalog_site.py` writes `p/<id>.html` per plugin with the card's Open Graph and Twitter tags (title,
+      summary, screenshot), since link previews read neither the `#p=` hash nor JS. The page sends a browser on to `index.html#p=<id>` by
+      script (no meta refresh: Facebook's crawler would follow it). The popup's "Copy link" button, the card's title and its screenshot all
+      link there; the title opens the popup on cards without a screenshot too.
 - [x] Desktop helper (2026-09-30): `tools/desktop` (Go, one static binary per OS, one dependency): a local web page on 127.0.0.1 behind a random
       token; connect over SSH, pick catalog plugins and/or drop release zips (build-yourself ones too), install with one MPC stop/start;
       catalog downloads checked against the catalog's sha256; tar stream keeps modes/symlinks; older installers (no `-n`) run first
