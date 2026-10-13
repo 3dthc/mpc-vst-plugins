@@ -26,8 +26,8 @@
       "license": "MIT",
       "docs": "tools/mpc_patch/drive_exec/README.md",
       "script": {
-        "url": "https://raw.githubusercontent.com/sd88me/mpc-vst-plugins/c581a9e5efb4f10562b03223f75b0fdd8fd231be/tools/mpc_patch/drive_exec/drive-exec-patch.sh",
-        "sha256": "f8cfa9732737aaa6867b806af6aa80dcc67fad77b4a92355b2dc26bd0cc61d8c"
+        "url": "https://raw.githubusercontent.com/sd88me/mpc-vst-plugins/f036a8791daff1ccf426c3953e84a8942c979564/tools/mpc_patch/drive_exec/drive-exec-patch.sh",
+        "sha256": "500b5ccdfbc4b735a810e747d03c4bab38dec279dff31b682a89a905970d0594"
       },
       "supports": {"os": "MPC OS Gen1 (tried on a Force, MPC OS 3.9.1)", "arch": "armv7l"},
       "modifies": ["/etc/drive-exec", "/etc/systemd/system/drive-exec.timer", "/usr/lib/systemd/system/drive-exec-bootstrap.service", "/media/<your drive>/Synths (an executable bind mount of the folder)"],
