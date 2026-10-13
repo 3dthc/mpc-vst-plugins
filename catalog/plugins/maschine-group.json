@@ -9,5 +9,6 @@
   "license": "MIT",
   "asset_pattern": "Maschine-Group-*-mpc-armv7.zip",
   "screenshot": "https://raw.githubusercontent.com/mmiroshnikov/mpc-maschine-group/main/docs/group.png",
-  "summary": "Opens a Native Instruments Maschine 2 drum group (.mxgrp) and plays its pads and stored patterns, with a three-page touchscreen skin and Q-Links."
+  "summary": "Opens a Native Instruments Maschine 2 drum group (.mxgrp) and plays its pads and stored patterns, with a three-page touchscreen skin and Q-Links.",
+  "flags_reviewed": ["runs programs", "loads code at runtime"]
 }
