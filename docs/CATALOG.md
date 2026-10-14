@@ -69,7 +69,8 @@ list. Each plugin gets a `tier` in `catalog.json`, computed by `catalog_build.py
 (`"tier"` accepts only `"experimental"`); `"featured": true` is a maintainer pick, ignored while experimental. The site hides
 Experimental by default (the Tier filter and a "Show them" link reveal it), badges Verified and Experimental cards only (2026-10-11:
 Listed is the unlabelled middle, still computed and filterable as "Not yet verified"), and the default sort,
-"Recommended", is featured, then tier, then name. Verified is split by device generation (2026-10-12, offline: unit tests and a
+"Recommended", is featured, then tier, then (2026-10-14, offline) Verified on both generations before one, newest hardware-test
+date, downloads, and finally name. Verified is split by device generation (2026-10-12, offline: unit tests and a
 headless-browser check): `verified_on` in `catalog.json` lists `gen1` and/or `gen2` (`verified_on` in `catalog_build.py`). A `tested.json`
 entry whose `device` names Gen2 counts for `gen2`, and only when that version has an aarch64 build; any other entry counts for `gen1`.
 The card shows one badge per generation ("Verified Gen1", "Verified Gen2"), the Tier filter has "Verified on Gen1" and

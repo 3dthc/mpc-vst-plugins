@@ -52,7 +52,8 @@ own plugins (Force, MPC OS 3.9.1, recorded 2026-10-10; 56 Verified, 50 Listed, 1
   generation since 2026-10-12: "Verified Gen1" (a Gen1 device) and "Verified Gen2" (a device naming Gen2, on a release with a Gen2 build).
 - **Listed:** a valid release that passed the catalog's release checks; no recorded test for the newest release. Shown with no badge (since 2026-10-11): in the catalog and not Verified means Listed.
 - **Experimental:** no stable release yet, or capped by a maintainer (`"tier": "experimental"` in the registry entry). Hidden from the default view.
-- Default sort "Recommended": featured, then Verified, then Listed, then name.
+- Default sort "Recommended": featured, then Verified, then Listed. Ties: Verified on both generations first, then the newest
+  hardware-test date, then downloads, then name (2026-10-14, offline).
 - Rejected on purpose: star ratings, comments, upvotes as a quality signal (few users, needs a backend and moderation).
 
 ## Steps

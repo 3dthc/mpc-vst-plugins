@@ -146,8 +146,16 @@ var GENS = { gen1: { label: "Verified Gen1", tip: "The newest release has a reco
              gen2: { label: "Verified Gen2", tip: "The newest release's Gen2 (aarch64) build has a recorded hardware test on a Gen2 MPC (see Tested on)." } };
 function verifiedOn(p) { return tierOf(p) !== "verified" ? [] : Array.isArray(p.verified_on) ? p.verified_on.filter(function (g) { return GENS[g]; }) : ["gen1"]; }
 var TIER_FILTERS = ["verified", "verified-gen1", "verified-gen2", "listed", "experimental", "all"];
+/* Recommended tiebreaker: the date of the newest hardware test on the newest stable release ("" when none). */
+function testedDate(p) {
+  var v = p.versions.filter(function (x) { return !x.yanked && x.channel === "stable"; })[0], d = "";
+  if (v) (v.tested || []).forEach(function (t) { if ((t.date || "") > d) d = t.date; });
+  return d;
+}
 var SORTS = {
-  recommended: { label: "Recommended",     cmp: function (a, b) { return (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || TIERS[tierOf(a)].rank - TIERS[tierOf(b)].rank || a.name.localeCompare(b.name); }, desc: false },
+  /* featured, tier, Verified generations (both before one), newest test date, downloads, then name */
+  recommended: { label: "Recommended",     cmp: function (a, b) { return (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || TIERS[tierOf(a)].rank - TIERS[tierOf(b)].rank ||
+    verifiedOn(b).length - verifiedOn(a).length || testedDate(b).localeCompare(testedDate(a)) || b.downloads - a.downloads || a.name.localeCompare(b.name); }, desc: false },
   name:      { label: "Name",              cmp: function (a, b) { return a.name.localeCompare(b.name); }, desc: false },
   updated:   { label: "Recently updated",  cmp: function (a, b) { return a.updated.localeCompare(b.updated); }, desc: true },
   downloads: { label: "Downloads",         cmp: function (a, b) { return a.downloads - b.downloads; }, desc: true },
