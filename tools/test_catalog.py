@@ -812,6 +812,12 @@ class BuildTest(Base):
         self.assertIn("cannot list", problems[0]["error"])
         self.assertTrue(problems[0]["unreadable"])
 
+    def test_registry_length_limits(self):
+        e = dict(self.ENTRY)
+        self.assertEqual(catalog_build.check_entry(dict(e, summary="x" * 350, tags=["t%d" % i for i in range(8)]), "x/test-synth.json"), [])
+        self.assertTrue(any("summary" in m for m in catalog_build.check_entry(dict(e, summary="x" * 351), "x/test-synth.json")))
+        self.assertTrue(any("tags" in m for m in catalog_build.check_entry(dict(e, tags=["t%d" % i for i in range(9)]), "x/test-synth.json")))
+
     def test_registry_rules(self):
         self.assertEqual(catalog_build.check_entry(self.ENTRY, "x/test-synth.json"), [])
         self.assertTrue(catalog_build.check_entry({**self.ENTRY, "license": "Proprietary"}))

@@ -37,6 +37,10 @@ vst-release.yml  --release-->   nightly + on-dispatch workflow:       device scr
 `tier` (optional, only `"experimental"`) and `featured` (optional bool); see Trust tiers below. `flags_reviewed` (optional list of
 risky-call categories a maintainer has looked at, e.g. `["network"]` for a remote-control plugin; see Validation). Nothing versioned.
 
+Length limits (checked by `tools/catalog_build.py`): `summary` at most 350 characters and `tags` at most 8, so cards and the page stay
+readable. Put the full feature list in the repo README. Maintainers may edit a summary or tags for length and consistency, but do not
+change claims about testing or safety without the author.
+
 ### Distribution types
 `distribution` in the registry entry: `release` (default; everything above) or `build-yourself`.
 
