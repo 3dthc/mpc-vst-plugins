@@ -365,9 +365,11 @@ def tag_versions(e, src, yanked, tested, keep, problems):
     return versions
 
 
-def build(entries, src, cache, yanked, keep=10, now=None):
+def build(entries, src, cache, yanked, keep=10, now=None, require_portable=()):
     """-> (catalog dict, problems list [{id, tag, error, unreadable?, superseded?}]). "unreadable" marks a repo or
-    release list that could not be read at all, as opposed to one that was read and found invalid."""
+    release list that could not be read at all, as opposed to one that was read and found invalid.
+    A plugin whose newest stable release is of the old layout (no "layout" field) gets a problem, so the catalog repo opens an
+    issue for it. require_portable (entry ids): such a release is invalid instead (the PR check for new listings)."""
     os.makedirs(cache, exist_ok=True)
     plugins, problems = [], []
     for e in entries:
@@ -413,7 +415,8 @@ def build(entries, src, cache, yanked, keep=10, now=None):
             try:
                 if not os.path.exists(zpath):
                     src.download(asset, zpath)
-                errors, warnings, rec = catalog_check.check(zpath, catalog=True, expect_id=e["id"], expect_repo=e["repo"])
+                errors, warnings, rec = catalog_check.check(zpath, catalog=True, expect_id=e["id"], expect_repo=e["repo"],
+                                                              require_portable=e["id"] in require_portable)
             except Exception as ex:
                 failed.append(({"id": e["id"], "tag": tag, "error": "download/validate failed: %s" % ex}, pub))
                 continue
@@ -494,6 +497,11 @@ def build(entries, src, cache, yanked, keep=10, now=None):
         item["bar_missing"] = bar_of(e, versions)
         item["featured"] = bool(e.get("featured")) and item["tier"] != "experimental"
         item["latest"] = next((v["version"] for v in versions if v["channel"] == "stable" and not v["yanked"]), None)
+        latest = next((v for v in versions if v["version"] == item["latest"]), None)
+        if latest and "manifest" in latest and latest["manifest"].get("layout") is None:
+            problems.append({"id": e["id"], "tag": "v" + latest["version"], "superseded": False,
+                             "error": "the newest release uses the old /sdcard/vst layout (no portable folder): MPC plugin managers "
+                                      "and Synths-folder scanners will not list it; re-release with the current tools/release.py"})
         item["latest_beta"] = next((v["version"] for v in versions if v["channel"] == "beta" and not v["yanked"]), None)
         item["downloads"] = all_time
         item["updated"] = max((v["date"] for v in versions if not v["yanked"]), default="")
@@ -533,6 +541,8 @@ def main():
     ap.add_argument("--yanked", default="catalog/yanked.json")
     ap.add_argument("--keep", type=int, default=10)
     ap.add_argument("--check-registry", action="store_true")
+    ap.add_argument("--require-portable", metavar="ID", nargs="+",
+                    help="validate only these entries' releases and fail when a newest release is of the old layout (PR check for new listings)")
     a = ap.parse_args()
     entries, reg_problems = load_registry(a.registry)
     for f, m in reg_problems:
@@ -541,6 +551,14 @@ def main():
         print("%d entries, %d problems" % (len(entries), len(reg_problems)))
         sys.exit(1 if reg_problems else 0)
     yanked = set(json.load(open(a.yanked))) if os.path.exists(a.yanked) else set()
+    if a.require_portable:
+        sel = [e for e in entries if e["id"] in a.require_portable]
+        catalog, problems = build(sel, GitHub(os.environ.get("GITHUB_TOKEN")), a.cache, yanked, a.keep, require_portable=set(a.require_portable))
+        bad = [p for p in problems if not p.get("superseded")]
+        for p in bad:
+            print("error: %(id)s %(tag)s: %(error)s" % p, file=sys.stderr)
+        print("%d entries checked for the portable layout, %d problems" % (len(sel), len(bad)))
+        sys.exit(1 if bad or reg_problems else 0)
     catalog, problems = build(entries, GitHub(os.environ.get("GITHUB_TOKEN")), a.cache, yanked, a.keep)
     os.makedirs(a.out, exist_ok=True)
     json.dump(catalog, open(os.path.join(a.out, "catalog.json"), "w"), indent=1)
