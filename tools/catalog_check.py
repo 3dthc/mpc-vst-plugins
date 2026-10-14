@@ -2,7 +2,7 @@
 """Validate a release zip made by tools/release.py (or, for an addin, tools/release_addin.py) against the catalog spec
 (docs/CATALOG_SPEC.md). Zips of the old layout (payload/, no "layout" field) are still accepted so the catalog can list earlier releases.
 
-  tools/catalog_check.py dist/Name-1.2.0-mpc-armv7.zip [--catalog] [--json] [--expect-id ID] [--expect-repo O/N]
+  tools/catalog_check.py dist/Name-1.2.0-mpc-armv7.zip [--catalog] [--json] [--expect-id ID] [--expect-repo O/N] [--require-portable]
 
 Errors make the zip unfit for the catalog (exit 1); warnings need a human look. --catalog additionally requires
 source_repo and license in the manifest. --json prints the version record the catalog builder stores.
@@ -155,7 +155,7 @@ def parse_addin_manifest(text):
     return out
 
 
-def check(zpath, catalog=False, expect_id=None, expect_repo=None):
+def check(zpath, catalog=False, expect_id=None, expect_repo=None, require_portable=False):
     errors, warnings = [], []
     err, warn = errors.append, warnings.append
     with zipfile.ZipFile(zpath) as z:
@@ -188,6 +188,10 @@ def check(zpath, catalog=False, expect_id=None, expect_repo=None):
         return errors, warnings, None
     # Releases made before the portable layout (no "layout" field) keep validating so the catalog can list their history.
     legacy = m.get("layout") is None
+    if legacy:
+        # require_portable (--require-portable): a newly listed release must be the plugin folder; history keeps validating
+        (err if require_portable else warn)("old layout (payload/, installs the .so to /sdcard/vst, no \"layout\" field): "
+                                            "re-release with the current tools/release.py (docs/RELEASING.md)")
     addin = m.get("layout") == "addin"   # a library MPC preloads (tools/release_addin.py), not a plugin
     needs = (("addin.manifest",) + ADDIN_SCRIPTS if addin else ("install.sh", "uninstall.sh", "plugin_list.awk")) + ("INSTALL.md", "SHA256SUMS")
     for need in needs + (("plugin.xml",) if legacy else ()):
@@ -448,9 +452,10 @@ def main():
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--expect-id")
     ap.add_argument("--expect-repo")
+    ap.add_argument("--require-portable", action="store_true", help="error, not a warning, for a zip of the old layout")
     a = ap.parse_args()
     try:
-        errors, warnings, record = check(a.zip, a.catalog, a.expect_id, a.expect_repo)
+        errors, warnings, record = check(a.zip, a.catalog, a.expect_id, a.expect_repo, a.require_portable)
     except zipfile.BadZipFile:
         errors, warnings, record = ["not a valid zip file"], [], None
     for w in warnings:
