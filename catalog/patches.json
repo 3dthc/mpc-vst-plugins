@@ -21,7 +21,7 @@
     {
       "id": "drive-exec",
       "title": "Drive exec: run plugins from a noexec drive (an MPC/Force's SSD)",
-      "summary": "UNTESTED on a device by this project (testers wanted, see issue #150). MPC cannot load a plugin from a drive mounted noexec: it is listed but only shows Load Plugin. This makes one folder of the drive (Synths) executable, through a small boot-time service; the drive itself stays noexec.",
+      "summary": "Replaced by Auto exec (use that instead; this one is kept so it can still be uninstalled). UNTESTED on a device by this project. MPC cannot load a plugin from a drive mounted noexec: it is listed but only shows Load Plugin. This makes one folder of the drive (Synths) executable, through a small boot-time service; the drive itself stays noexec.",
       "author": "timomacquis (adapted by sd88me)",
       "license": "MIT",
       "docs": "tools/mpc_patch/drive_exec/README.md",
@@ -31,6 +31,23 @@
       },
       "supports": {"os": "MPC OS Gen1 (tried on a Force, MPC OS 3.9.1)", "arch": "armv7l"},
       "modifies": ["/etc/drive-exec", "/etc/systemd/system/drive-exec.timer", "/usr/lib/systemd/system/drive-exec-bootstrap.service", "/media/<your drive>/Synths (an executable bind mount of the folder)"],
+      "backup": "/data/mpc-vst-plugins/backups",
+      "restarts_mpc": false,
+      "reversible": true
+    },
+    {
+      "id": "auto-exec",
+      "title": "Auto exec: run plugins from any noexec drive, no setup",
+      "summary": "Recommended for a noexec drive. MPC cannot load a plugin from a drive mounted noexec (SSD, USB stick, SD card): it is listed but only shows Load Plugin. This makes the Synths folder of every noexec drive executable through a small boot-time service, with nothing to choose; the drives stay noexec. Tried on a Force with two USB sticks, a plugin loaded and survived a power cycle (not yet tried: the SSD, an eject without its release command). Replaces drive exec.",
+      "author": "sd88me (mount logic after timomacquis)",
+      "license": "MIT",
+      "docs": "tools/mpc_patch/auto_exec/README.md",
+      "script": {
+        "url": "https://raw.githubusercontent.com/sd88me/mpc-vst-plugins/1a6251e5dc90386a010179cb2173a51831cbbf4b/tools/mpc_patch/auto_exec/auto-exec-patch.sh",
+        "sha256": "23521d7069a19c2fc1bee62414f200f645ef8b7ddc1b916148c565ce73aee486"
+      },
+      "supports": {"os": "MPC OS Gen1 (mount probe on a Force, 2026-10-14)", "arch": "armv7l"},
+      "modifies": ["/etc/auto-exec", "/etc/systemd/system/auto-exec.timer", "/usr/lib/systemd/system/auto-exec-bootstrap.service", "/media/<each noexec drive>/Synths (an executable bind mount of the folder)"],
       "backup": "/data/mpc-vst-plugins/backups",
       "restarts_mpc": false,
       "reversible": true

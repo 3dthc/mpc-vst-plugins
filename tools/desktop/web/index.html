@@ -72,6 +72,8 @@ details.collapse[open] > summary .hint::after { content:"Hide"; font-size:12px; 
 details.collapse[open] > summary { margin-bottom:6px; }
 .row input[type=number] { width:100%; font:400 15px var(--text); color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:10px 12px; }
 ul.list li.grp { display:block; padding:12px 2px 6px; font:700 12px/1 var(--display); letter-spacing:.12em; text-transform:uppercase; color:var(--muted); border-bottom:1px solid var(--line); }
+#drivelist li { flex-wrap:wrap; align-items:center; } #drivelist .t { flex:1 1 180px; min-width:0; } #drivelist button { flex:none; }
+label.opt { display:block; margin:8px 0; }
 fieldset.where { border:1px solid var(--line); border-radius:6px; margin:0 0 12px; padding:8px 12px 10px; }
 fieldset.where[hidden] { display:none; }
 fieldset.where legend { font:600 11px/1 var(--display); letter-spacing:.1em; text-transform:uppercase; color:var(--muted); padding:0 6px; }
@@ -86,6 +88,7 @@ footer { color:var(--muted); font-size:12.5px; margin-top:24px; }
 </head>
 <body>
 <div class="wrap">
+<div id="newver" class="small" hidden style="background:var(--panel);border:1px solid var(--accent);border-radius:6px;padding:10px 14px;margin-top:16px"></div>
 <header>
   <h1>MPC plugin installer</h1>
   <p class="lede">Install plugins from the catalog, or zips you already have, on your MPC or Force. This page runs on your computer only. Nothing about your device is saved.</p>
@@ -124,7 +127,8 @@ footer { color:var(--muted); font-size:12.5px; margin-top:24px; }
 <section id="s3" class="off">
   <h2><span class="n">3</span>Install</h2>
   <p class="sub" id="summary">Nothing selected yet.</p>
-  <fieldset class="where" id="where" hidden><legend>Install to</legend><div id="whereopts"></div><p class="msg" id="wherewarn"></p><p class="small" id="wherefix" hidden><a href="#d7" id="wherefixlink">Open step 7: the drive exec patch</a></p></fieldset>
+  <fieldset class="where" id="where" hidden><legend>Install to</legend><div id="whereopts"></div><div id="drives" hidden><p class="small">These drives have no <code>Synths</code> folder yet. Create one to install there:</p><ul class="list" id="drivelist"></ul></div><p class="msg" id="drivemsg" role="status" aria-live="polite"></p><p class="msg" id="wherewarn"></p><p class="small" id="wherefix" hidden><a href="#d7" id="wherefixlink">Open step 7: the drive exec patch</a></p></fieldset>
+  <label class="small opt" id="regboxl"><input type="checkbox" id="regon" checked> After installing, register every plugin folder on the device with MPC (built in, nothing needed on the device: it adds missing entries, drops broken ones, and backs up MPC's settings first)</label>
   <button class="primary" id="go" disabled>Install…</button>
   <p class="msg" id="result" role="status" aria-live="polite"></p>
   <pre class="log" id="log" hidden></pre>
@@ -190,7 +194,7 @@ footer { color:var(--muted); font-size:12.5px; margin-top:24px; }
 "use strict";
 var T = new URLSearchParams(location.search).get("t") || "";
 try { history.replaceState(null, "", location.pathname); } catch (e) {}
-var S = { connected: false, problems: [], cat: [], ups: [], pickCat: {}, pickUp: {}, running: false, dev: [], pickDev: {}, bk: null, roots: [], root: "", unreg: null, mode: "install", f: { q: "", kind: "instrument", dev: "", show: "", sort: "name" } };
+var S = { connected: false, problems: [], cat: [], ups: [], pickCat: {}, pickUp: {}, running: false, dev: [], pickDev: {}, bk: null, roots: [], drives: [], root: "", unreg: null, mode: "install", f: { q: "", kind: "instrument", dev: "", show: "", sort: "name" } };
 function $(id) { return document.getElementById(id); }
 function text(el, s) { el.textContent = s; }
 function api(path, body, raw) {
@@ -209,7 +213,7 @@ function setConnected(c, info, problems) {
   S.patches = null; drawPatches();
   if (c) {
     var n = (info.installed || []).length;
-    S.roots = info.roots || []; var pr = S.roots.filter(function (r) { return r.primary && !r.noExec; })[0] || S.roots.filter(function (r) { return !r.noExec; })[0] || S.roots[0]; S.root = pr ? pr.path : "";
+    S.roots = info.roots || []; S.drives = info.drives || []; var pr = S.roots.filter(function (r) { return r.primary && !r.noExec; })[0] || S.roots.filter(function (r) { return !r.noExec; })[0] || S.roots[0]; S.root = pr ? pr.path : "";
     var places = S.roots.map(function (r) { return r.label + " (" + (r.fs ? r.fs + ", " : "") + gb(r.freeKB) + " free)"; }).join("; ");
     var m = "Connected to " + info.host + " (" + (info.arch || "?") + "). " + n + " plugin folder" + (n === 1 ? "" : "s") + " found. Plugin locations: " + (places || info.synths) + ". Device key " + info.fingerprint + ".";
     if (S.problems.length) msg($("connmsg"), m + " Cannot install here: " + S.problems.join("; ") + ".", "err"); else msg($("connmsg"), m, "ok");
@@ -327,7 +331,7 @@ function drawCat() {
 }
 function rootNote(r) {
   var n = [];
-  if (r.noExec) n.push("Mounted noexec: this drive does not let MPC run programs from it, so plugins installed here would be listed but only show Load Plugin. Two ways forward: install on the internal drive (pick it above), or keep this drive and apply the drive exec patch in step 7 (Advanced), which makes only this drive's Synths folder executable.");
+  if (r.noExec) n.push("Mounted noexec: this drive does not let MPC run programs from it, so plugins installed here would be listed but only show Load Plugin. Two ways forward: install on the internal drive (pick it above), or keep this drive and apply the auto exec patch in step 7 (Advanced), which makes the Synths folder of every noexec drive executable. If auto exec is already installed, it takes up to five seconds after the folder appears: connect again to rescan.");
   if (r.noSymlinks) n.push("Formatted " + r.fs + ", which cannot store symbolic links: a plugin that needs them (Crate Digger) cannot be installed here.");
   if (!r.inContent) n.push("MPC does not list this folder as a content location, so a plugin's screen may not show until you add it in MPC's settings.");
   if (!r.primary) n.push("If this drive is not in when MPC starts, its plugins drop out of MPC's plugin list until you register them again (step 5).");
@@ -335,14 +339,36 @@ function rootNote(r) {
 }
 function drawWhere() {
   var box = $("whereopts"); box.textContent = "";
-  $("where").hidden = S.roots.length < 2 && !S.roots.some(function (r) { return r.noExec; });
+  $("where").hidden = S.roots.length < 2 && !S.roots.some(function (r) { return r.noExec; }) && !S.drives.length;
   S.roots.forEach(function (r, i) {
     var lab = el("label", "whereopt"), rb = document.createElement("input"); rb.type = "radio"; rb.name = "where"; rb.value = r.path; rb.checked = r.path === S.root;
     rb.addEventListener("change", function () { S.root = r.path; drawWherewarn(); });
     var sp = el("span"); sp.appendChild(el("b", null, r.label + (r.noExec ? " (cannot run plugins: noexec)" : ""))); sp.appendChild(el("small", null, r.path + " · " + (r.fs ? r.fs + " · " : "") + gb(r.freeKB) + " free"));
     lab.appendChild(rb); lab.appendChild(sp); box.appendChild(lab);
   });
-  drawWherewarn();
+  drawWherewarn(); drawDrives();
+}
+function drawDrives() {
+  var ul = $("drivelist"); ul.textContent = ""; $("drives").hidden = !S.drives.length;
+  S.drives.forEach(function (d) {
+    var li = el("li"), t = el("div", "t");
+    t.appendChild(el("b", null, d.label));
+    t.appendChild(el("span", "d", d.path + " · " + (d.fs ? d.fs + " · " : "") + gb(d.freeKB) + " free" + (d.noExec ? " · mounted noexec right now" : "")));
+    var b = el("button", null, "Create Synths folder"); b.type = "button";
+    b.addEventListener("click", function () { makeRoot(d, b); });
+    li.appendChild(t); li.appendChild(b); ul.appendChild(li);
+  });
+}
+function makeRoot(d, b) {
+  b.disabled = true; msg($("drivemsg"), "Creating " + d.path + "/Synths…");
+  api("/api/mkroot", { drive: d.path }).then(function (j) {
+    var info = j.device, made = d.path + "/Synths";
+    S.roots = info.roots || []; S.drives = info.drives || [];
+    var r = S.roots.filter(function (x) { return x.path === made; })[0];
+    if (r && !r.noExec) S.root = r.path;
+    drawWhere(); loadDevice(); loadUnreg();
+    msg($("drivemsg"), "Created " + made + ".", "ok"); refresh();
+  }).catch(function (e) { b.disabled = false; msg($("drivemsg"), e.message, "err"); });
 }
 function drawWherewarn() {
   var r = S.roots.filter(function (x) { return x.path === S.root; })[0], n = r ? rootNote(r) : [];
@@ -469,7 +495,7 @@ function drawUps() {
 }
 function selection() {
   return { catalog: S.cat.filter(function (p) { return S.pickCat[p.id]; }).map(function (p) { return p.id; }),
-           uploads: S.ups.filter(function (p) { return S.pickUp[p.handle]; }).map(function (p) { return p.handle; }), root: S.root };
+           uploads: S.ups.filter(function (p) { return S.pickUp[p.handle]; }).map(function (p) { return p.handle; }), root: S.root, register: $("regon").checked };
 }
 function refresh() {
   var s = selection(), n = s.catalog.length + s.uploads.length;
@@ -595,6 +621,14 @@ function poll(since, log, resultEl, doneText) {
     refresh();
   }).catch(function (e) { setTimeout(function () { poll(since, log, resultEl, doneText); }, 1500); });
 }
+
+api("/api/version").then(function (v) {
+  if (!v || !v.newer) return;
+  var b = $("newver"); b.textContent = "A newer installer is available: " + v.latest + " (you have " + v.current + "). ";
+  var a = el("a", null, "Download it"); a.href = v.url; a.target = "_blank"; a.rel = "noopener"; b.appendChild(a);
+  var x = el("button", null, "Dismiss"); x.type = "button"; x.style.marginLeft = "12px"; x.onclick = function () { b.hidden = true; }; b.appendChild(x);
+  b.hidden = false;
+}).catch(function () {});
 
 api("/api/state").then(function (st) {
   S.ups = st.uploads || []; drawUps();

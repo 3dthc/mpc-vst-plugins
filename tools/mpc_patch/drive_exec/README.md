@@ -2,6 +2,8 @@
 
 Not specific to one drive or device: it works on any drive MPC mounts `noexec` under `/media/<name>`. Its author named it "ForceHD VST Exec" after his own drive (labelled `ForceHD`); it is called **drive exec** here. It has only been tried on a Force Gen1 with MPC OS 3.9.1; nothing is known about other devices or firmware.
 
+> **Replaced by [auto exec](../auto_exec/README.md) (2026-10-14): use that.** This one stays so it can be uninstalled.
+>
 > **UNTESTED on a device by this project.** The original (0.1.3) was run by its author on one Force; this adapted version and its uninstall have only been tested offline (real mounts on a tmpfs, see below). **Testers wanted** (issue #150): a Force with a `noexec` SSD, comfortable with SSH. Report what `status`, `install`, a reboot, loading a plugin from the drive and `uninstall` printed.
 
 **Not part of any plugin release.** `drive-exec-patch.sh` is a standalone script you run on the device yourself, if you want it. The installer app lists it in its read-only "Advanced: device patches" step.
