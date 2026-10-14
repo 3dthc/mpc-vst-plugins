@@ -130,18 +130,18 @@ with sync_playwright() as p:
     check("the popup has its own link", "p=test-synth" in pg.evaluate("location.hash"), pg.evaluate("location.hash"))
     check("focus moves to Close", pg.evaluate("document.activeElement.id") == "modal-x")
     check("the page behind does not scroll", pg.evaluate("getComputedStyle(document.body).overflow") == "hidden")
-    pg.keyboard.press("Escape")
+    pg.keyboard.press("Escape"); pg.wait_for_function("document.getElementById('modal').hidden")   # closing goes through history.back(), which is async
     check("Escape closes it and drops p= from the link", pg.locator("#modal").is_hidden() and "p=" not in pg.evaluate("location.hash"))
     check("focus returns to the screenshot", pg.evaluate("document.activeElement.getAttribute('data-open')") == "test-synth")
-    shot.click(); pg.go_back()
+    shot.click(); pg.go_back(); pg.wait_for_function("document.getElementById('modal').hidden")
     check("Back closes it", pg.locator("#modal").is_hidden())
-    shot.click(); pg.mouse.click(5, 450)
+    shot.click(); pg.mouse.click(5, 450); pg.wait_for_function("document.getElementById('modal').hidden")
     check("a click on the backdrop closes it", pg.locator("#modal").is_hidden())
     pg.locator("#grid article:has(h2:has-text('Old Catalog')) h2 a.open").click()
     check("the title opens the popup too, also on a card without a screenshot",
           pg.locator("#modal").is_visible() and pg.locator("#modal h2").text_content() == "Old Catalog" and "p=old-catalog" in pg.evaluate("location.hash"))
     check("the popup's own title is not a link", pg.locator("#modal h2 a").count() == 0)
-    pg.keyboard.press("Escape")
+    pg.keyboard.press("Escape"); pg.wait_for_function("document.getElementById('modal').hidden")
     check("focus returns to the title", pg.evaluate("document.activeElement.className") == "open" and pg.locator("#modal").is_hidden())
     pg.goto(URL + "#p=test-synth"); pg.reload()
     check("the link opens the popup", pg.locator("#modal").is_visible() and pg.locator("#modal h2").text_content() == "Test Synth")
@@ -153,7 +153,13 @@ with sync_playwright() as p:
     pg.click("#modal-share")
     check("Copy link copies the share page's address", (pg.evaluate("window.copied") or "").endswith("/p/test-synth.html")
           and pg.locator("#modal-share").text_content() == "Link copied", str(pg.evaluate("window.copied")))
-    pg.click("#modal-x")
+    # on a touch device Copy link opens the system share sheet instead of the clipboard
+    pg.evaluate("window.matchMedia = function () { return { matches: true }; }; navigator.share = function (d) { window.shared = d; return Promise.resolve(); }")
+    pg.evaluate("window.copied = null"); pg.click("#modal-share")
+    check("on a touch device Copy link opens the share sheet with the share page's address",
+          (pg.evaluate("(window.shared || {}).url") or "").endswith("/p/test-synth.html") and pg.evaluate("window.shared.title") == "Test Synth"
+          and pg.evaluate("window.copied") is None, str(pg.evaluate("window.shared")))
+    pg.click("#modal-x"); pg.wait_for_function("document.getElementById('modal').hidden")
     check("Close closes a popup opened from a link", pg.locator("#modal").is_hidden() and "p=" not in pg.evaluate("location.hash"))
     for junk in ("nope", "<img src=x onerror=alert(1)>", "../test-synth"):
         pg.goto(URL + "#p=" + junk); pg.reload()
