@@ -86,7 +86,7 @@ the card: a plugin with no badge is simply in the catalog (the Listed tier), and
 - **Experimental**: no stable release yet (a beta alone counts), or a maintainer capped the entry with `"tier": "experimental"`
   (for example a bulk port nobody has run). Hidden from the default catalog view, shown by the Tier filter.
 
-The default sort ("Recommended") lists featured plugins, then Verified, then Listed, then by name. `"featured": true` in the
+The default sort ("Recommended") lists featured plugins, then Verified, then Listed. Within a tier, ties go to Verified on both generations, then the newest hardware-test date, then downloads, then name. `"featured": true` in the
 registry entry is a maintainer's pick and is ignored for Experimental plugins. A listing can be capped, never raised, by the
 registry: `"tier"` accepts only `"experimental"`.
 
