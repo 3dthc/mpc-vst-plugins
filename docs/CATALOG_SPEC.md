@@ -163,6 +163,11 @@ zip uses `layout: "addin"`:
 - **`catalog.tsv`, addins:** `skin` and `uid` are `-`. `mpc-store.sh` installs an addin to `/data/mpc-addins/<id>` and reads the installed
   version from the folder's `addin.manifest` (`ADDIN_VERSION`), not from `.mpc-store`.
 
+- **Share pages, `p/<id>.html`:** `catalog_site.py` writes one small page per plugin id (ids that are lowercase words joined by hyphens) next to
+  `index.html`. It carries the card's Open Graph and Twitter tags (title, summary, https screenshot) because link previews read neither the
+  `#p=<id>` hash nor scripts, then sends a browser on to `index.html#p=<id>` by script (not a meta refresh: Facebook's crawler would follow it).
+  The catalog page's popup, "Copy link" button and card links point at these pages. Not part of `catalog.json`, `catalog.tsv` or any installer.
+
 ## Companion apps (`catalog/apps.json`)
 Desktop tools that work with a standalone MPC but are not plugins. Not part of `catalog.json`, `catalog.tsv` or any installer: the site
 shows them on its Companion apps tab, and `apps.json` is published next to `catalog.json`. Checked by `tools/app_check.py` (the site build
