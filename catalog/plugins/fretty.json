@@ -1,0 +1,10 @@
+{
+  "id": "fretty",
+  "name": "Fretty",
+  "author": "3dthc",
+  "repo": "3dthc/fretty-mpc",
+  "kind": "instrument",
+  "license": "MIT",
+  "summary": "A guitar instrument for Akai MPC OS standalone devices (native VST2, built with mpc-vst-plugins), with a synth layer as a twist.",
+  "asset_pattern": "*-mpc-armv7.zip"
+}
