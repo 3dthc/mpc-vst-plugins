@@ -1477,3 +1477,13 @@ From saustin2010's Percolator 2.0.0 (four drum voices, a MIDI channel each, like
 
 ## 2026-10-14: installer app version check (host tests only)
 - The page asks `/api/version`; the app reads `api.github.com/repos/sd88me/mpc-vst-plugins/releases` (hourly, 5 s timeout), takes the highest published `desktop-v<x>.<y>.<z>` tag (drafts, prereleases and other tags ignored; numeric compare, so 0.5.10 > 0.5.4), and the page shows a dismissible banner with the link when it is newer than the app. Silent on a `dev` build, offline, a non-200 or a bad answer; `--no-update-check` disables it. Tests: `versioncheck_test.go`. Not tried on a real network yet.
+
+## 2026-10-15: SurgeXXL yanked from the catalog (user reports of crashes; not reproduced by us)
+- Users reported SurgeXXL (`sunskiefer/SurgeXXL`) from the catalog crashing their system. Device, MPC OS and plugin versions were not
+  collected; not reproduced by us.
+- All versions are yanked (`"surgexxl@*"` in `catalog/yanked.json`): no version is in `catalog.tsv`, so the device store cannot install
+  it, and with no stable, unyanked release the build makes it Experimental, hidden from the default site view. The desktop app skips yanked versions too. Devices that already have
+  it installed are not touched.
+- A `"tier": "experimental"` cap alone was not enough: it only hides the card on the site; `catalog.tsv` lists every stable,
+  unyanked version whatever the tier.
+- To undo: once a fixed release is out, replace `"surgexxl@*"` with the bad versions (`"surgexxl@<version>"`) or remove it.
