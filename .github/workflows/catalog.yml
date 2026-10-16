@@ -50,6 +50,7 @@ jobs:
         run: python3 tools/app_resolve.py
       - name: Open and close issues for failing releases
         if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 tools/catalog_issues.py
