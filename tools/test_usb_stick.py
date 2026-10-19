@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""Offline tests for tools/usb_stick (run: python3 -I tools/test_usb_stick.py). A made-up salt stands in for the firmware's."""
+import hashlib
+import json
+import lzma
+import os
+import random
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT / "usb_stick"))
+import make_stick  # noqa: E402
+import saltscan  # noqa: E402
+
+SALT = b"00000000-test-salt-0000-000000000000"   # 36 printable bytes, like the real one's shape
+
+
+def encode(salt):
+    pad = salt.ljust(saltscan.WIDTH, b"\0")
+    return bytes(v ^ saltscan.KEY[i % 8] for i, v in enumerate(pad))
+
+
+def firmware(salt=SALT, offset=0x1234568, size=0x1800000, seed=1, extra=()):
+    rnd = random.Random(seed)
+    buf = bytearray(rnd.randbytes(size))
+    for off, s in [(offset, salt)] + list(extra):
+        buf[off:off + saltscan.WIDTH] = encode(s)
+    return bytes(buf)
+
+
+class Scan(unittest.TestCase):
+    def setUp(self):
+        self.d = tempfile.TemporaryDirectory()
+        self.p = Path(self.d.name)
+
+    def tearDown(self):
+        self.d.cleanup()
+
+    def test_raw_executable(self):
+        (self.p / "MPC").write_bytes(firmware())
+        salt, hits = saltscan.find_salt(self.p / "MPC")
+        self.assertEqual(salt, SALT)
+        self.assertEqual(hits, [("file", 0x1234568)])
+
+    def test_every_alignment_and_a_chunk_boundary(self):
+        for off in (8 * 7 + 3, 0x7ffff0 + 5, saltscan.CHUNK - 8, saltscan.CHUNK - 16 - 5):
+            (self.p / "MPC").write_bytes(firmware(offset=off, size=saltscan.CHUNK * 2 + 1000))
+            salt, hits = saltscan.find_salt(self.p / "MPC")
+            self.assertEqual((salt, hits[0][1]), (SALT, off))
+
+    def test_update_image_with_xz_rootfs(self):
+        rootfs = bytearray(0x100000)                      # compressible, so it really is inside the xz stream
+        rootfs[0x40000 + 12:0x40000 + 12 + saltscan.WIDTH] = encode(SALT)
+        img = b"AZ01" + bytes(300) + lzma.compress(bytes(rootfs), format=lzma.FORMAT_XZ)
+        (self.p / "update.img").write_bytes(img)
+        salt, hits = saltscan.find_salt(self.p / "update.img")
+        self.assertEqual(salt, SALT)
+        self.assertTrue(hits[0][0].startswith("xz@"))
+
+    def test_same_value_twice_is_fine(self):
+        (self.p / "MPC").write_bytes(firmware(extra=[(0x400000, SALT)]))
+        self.assertEqual(len(saltscan.find_salt(self.p / "MPC")[1]), 2)
+
+    def test_refuses_two_values_and_none(self):
+        # two genuine (zero-padded, shorter-than-WIDTH) salts disagree -> refuse to guess
+        (self.p / "a").write_bytes(firmware(extra=[(0x400000, b"11111111-other-salt-1111-11111111")]))
+        with self.assertRaises(ValueError):
+            saltscan.find_salt(self.p / "a")
+        (self.p / "b").write_bytes(random.Random(5).randbytes(1 << 20))
+        with self.assertRaises(ValueError):
+            saltscan.find_salt(self.p / "b")
+
+    def test_full_width_runs_are_noise(self):
+        # a coincidental printable run filling the whole WIDTH-byte field (no zero padding) is not the salt:
+        # the real zero-padded salt wins. This is the Gen2 aarch64 rootfs case.
+        noise = (b"A#nn%E70C#nn%y70M" * 3)[:saltscan.WIDTH]  # exactly WIDTH printable bytes, no zero padding
+        self.assertEqual(len(noise), saltscan.WIDTH)
+        (self.p / "MPC").write_bytes(firmware(extra=[(0x400000, noise)]))
+        salt, hits = saltscan.find_salt(self.p / "MPC")
+        self.assertEqual(salt, SALT)              # the zero-padded salt wins, the full-width run is dropped
+        self.assertEqual(len(hits), 1)            # only the salt's location is reported
+
+
+class Stick(unittest.TestCase):
+    def test_layout_and_check(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = make_stick.build(Path(d) / "stick", SALT, ROOT / "mpc-store.sh", ["plugin-manager", "acid"])
+            a = out / "autorun"
+            m = json.loads((a / "autorun.json").read_text())["value0"]
+            self.assertEqual(m["files"], ["runtime/mpc-store.sh", "runtime/run.sh"])
+            self.assertEqual(m["scripts"][0]["path"], "open.sh")
+            want = hashlib.sha256(b"".join((a / n).read_bytes() for n in ["autorun.json", "open.sh"] + m["files"]) + SALT).hexdigest()
+            self.assertEqual((a / "autorun.check").read_text(), want)
+            self.assertEqual((out / "install.txt").read_text().split("\n")[1:3], ["plugin-manager", "acid"])
+            with self.assertRaises(FileExistsError):
+                make_stick.build(out, SALT, ROOT / "mpc-store.sh", [])
+
+    def test_changing_a_file_changes_the_check(self):
+        with tempfile.TemporaryDirectory() as d:
+            a = make_stick.build(Path(d) / "s", SALT, ROOT / "mpc-store.sh", []) / "autorun"
+            files = ["runtime/mpc-store.sh", "runtime/run.sh"]
+            before = make_stick.autorun_check(a, files, SALT)
+            (a / "runtime" / "run.sh").write_text("# changed\n")
+            self.assertNotEqual(before, make_stick.autorun_check(a, files, SALT))
+
+
+class RunScript(unittest.TestCase):
+    """run.sh against a stub mpc-store.sh: which ids it passes, the settings copy, the result file, the exit status."""
+    def run_it(self, install_txt, rc=0):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            usb, work = d / "usb", d / "work"
+            usb.mkdir()
+            work.mkdir()
+            (work / "mpc-store.sh").write_text(f'echo "store args: $*"\nexit {rc}\n')
+            (d / "MPC.settings").write_text("<settings/>\n")
+            if install_txt is not None:
+                (usb / "install.txt").write_text(install_txt)
+            env = dict(os.environ, MPC_USB_TEST="1", MPC_SETTINGS=str(d / "MPC.settings"))
+            r = subprocess.run(["sh", str(ROOT / "usb_stick" / "run.sh"), str(usb), str(work)], env=env, capture_output=True)
+            res = (usb / "mpc-install-result.txt").read_text()
+            return r.returncode, res, (usb / "MPC.settings.backup").exists(), work.exists()
+
+    def test_default_is_the_plugin_manager(self):
+        rc, res, backup, left = self.run_it(None)
+        self.assertEqual(rc, 0)
+        self.assertIn("store args: -y install plugin-manager", res)
+        self.assertTrue(backup)
+        self.assertFalse(left)
+
+    def test_ids_from_install_txt_and_junk_ignored(self):
+        rc, res, *_ = self.run_it("# comment\nacid  \n$(rm -rf x)\nplugin-manager # trailing\n; ls\n")
+        self.assertIn("store args: -y install acid plugin-manager", res)
+        self.assertNotIn("rm -rf", res.split("store args")[1])
+
+    def test_failure_is_reported_and_status_kept(self):
+        rc, res, *_ = self.run_it("acid\n", rc=3)
+        self.assertEqual(rc, 3)
+        self.assertIn("Install failed (status 3)", res)
+
+
+if __name__ == "__main__":
+    unittest.main()

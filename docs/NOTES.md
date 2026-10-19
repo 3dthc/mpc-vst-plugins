@@ -1425,3 +1425,45 @@ From saustin2010's Percolator 2.0.0 (four drum voices, a MIDI channel each, like
   and switches from that port's CCs and names each, and the wrapper reports them as it does a MIDI CC's change. On the
   Live II a knob on the page followed a CC stream. Offline: `poc/selfset` in `tools/host_test.c` (reported once, then
   at most every 1024 frames; an option's change with an UpdateDisplay; nothing the engine didn't name).
+
+## 2026-10-13: community USB plugin manager (autorun stick): what it is, what it needs (read offline; not run on a device by us)
+
+A community developer's on-device installer ("Plugin Manager USB", MIT, its own repository; we link to it and do not host it) installs catalog plugins from a USB stick with no SSH. Read from its public docs and `package.py`; **nothing was run**.
+
+- **Reported by them:** tested only on a Live II Retro (Gen1), MPC OS 3.9.1. No Force or Gen2 claim. Windows and native Linux build hosts unverified.
+- **How the stick is accepted (from its packager):** `autorun.check` is the SHA-256 of `autorun.json`, `open.sh` and every listed runtime file in sorted order, plus a salt. The salt is 37 bytes read from a fixed offset in the stock `usr/bin/MPC`, XOR-ed with an 8-byte key. The packager accepts one exact `MPC` build (one SHA-256) and one offset.
+- **Offline comparison (2026-10-13):** the stock Akai Gen1 3.9.1 update image's `MPC` (112 MB) is exactly the build their packager expects. A modified Gen1 image (extra preload libraries, packed `MPC`) gave no match and no salt; use stock images only. Scanning for 37-byte windows that decode with the published key finds the salt in stock Gen1 3.9.1 (one copy, at their offset), stock Force 3.9.1 (two copies, different offsets) and a device Force `MPC` 3.9.1.2 that differs from stock: **the salt value is identical in all three**. Only its location moves.
+- **So** a stick checked for Gen1 3.9.1 should also pass on a Force at 3.9.1 (inference: not tried on a device; whether Force's firmware has the autorun reader at all is unchecked). Open: other MPC OS versions and Gen2. The salt value is Akai-derived: keep it out of the repo; a generator should find it in the user's own firmware by scanning.
+- **Risks to state wherever it is linked:** the route can be closed by an Akai update; package scripts run as root with no sandbox; a script that fails partway can leave a partial change; no full rollback; saving the session first matters (the app stops).
+- **Not done:** no run on a Force, no docs link yet (add it after a tested result).
+- **Force, MPC OS 3.9.1.2 (device, 2026-10-13):** their v1.0.0 stick (FAT32, checksums verified) showed the stock "Have you saved your project?" prompt on inserting it; Open made `az01-script-runner` run `sh /media/<label>/autorun/open.sh` as root (journal). So **the Force accepts the `autorun.check` made for Gen1 3.9.1 and has the autorun reader** (the salt is shared, see above). The stick mounts `noexec`; the runner uses `sh`. Their `setup.sh` then exited at once with "Existing preload setup is unsupported" (our `LD_PRELOAD` addins are in the `acvs` unit's Environment) before stopping MPC, which kept running. Also blocking on a Force: it looks for a MIDI port named "MPC Private", the Force's is "Akai Pro Force Private". Not tried: an unmodified Force with no addins.
+- **Our own stick (offline, 2026-10-13):** `tools/usb_stick/` (see `docs/USB_STICK.md`): a generator that scans the user's firmware for the salt (found once or twice, identical, in the stock Gen1 and Force images, raw or as an update image; no false hits over whole root filesystems), writes the same `autorun` layout, and a stick script that runs `mpc-store.sh` (plugin manager by default). The check formula was reproduced exactly against Eurikon's published stick. Ten offline tests with a made-up salt. Not run on a device yet.
+- **Our stick on a Force (device, 2026-10-13):** generated from the stock Force 3.9.1 `MPC`, FAT32 stick, MPC OS 3.9.1.2 with four `LD_PRELOAD` addins. Prompt appeared; Install ran `open.sh` as root via `az01-script-runner`, which started `mpc-usb-install.service` (RAM copy of the runtime); `mpc-store.sh` fetched `plugin-manager` 1.2.0 with `wget` (no TLS validation, hashes checked), stopped and started `acvs`, and added the plugin entry. Done in 5 s, MPC running afterwards, `plugin_manager.so` and its entry present, backup beside `MPC.settings`. Addins untouched. Plugin Manager then loaded on a track and worked (user-reported).
+
+## 2026-10-20: autorun route confirmed on Gen2 (community-reported; not run by us)
+
+TheKikGen's MPC-LiveXplore wiki published a write-up of the autorun-stick mechanism (same mechanism as the 2026-10-13
+section above: USB/SD script run as root after the on-screen prompt). It frames autorun as a general no-hack root route on
+MPC **and** Force firmware up to ~v2.9 / v3.9.1, regardless of prior SSH modding, and **predicts Akai will patch it in
+v3.10+** (unverified speculation — a risk to watch for our USB-stick route and the plugin manager).
+
+Community Discord follow-up (2026-10-19/20, relayed, not run by us): the route works on **both generations** — one user
+("fuzboxz") reports it confirmed on **Gen2**, and says he found the same bug independently and used it to **enable SSH** on
+Gen2. This is the first report that the autorun reader exists on Gen2 and yields root/SSH there. It directly addresses the
+open "no documented Gen2 root route" gap in `docs/GEN2.md`, but is **community-reported only**: we have not generated or run a
+Gen2 autorun stick ourselves, and the Gen2 salt/offset (which stock `MPC` build, which location) is still unverified by us.
+
+**Offline check against the Gen2 stock image (2026-10-20, us):** `tools/usb_stick/saltscan.py` run over `MPC-3.9.1-Gen2-update.img`
+finds the autorun salt in the Gen2 main rootfs (xz stream at offset 35289200), **identical to the Gen1/Force value**
+(`f7bed1c9-7e90-4731-9194-c996666b4331`, 36 bytes, two copies). So the autorun-check scheme and salt are the **same on Gen2** —
+offline corroboration of the Gen2 device report, and our generator's stick should be accepted on Gen2. This is still offline: no
+Gen2 device run by us. Caveat/tooling gap: `find_salt()` won't auto-pick on the Gen2 image — it reports "7 different salt
+candidates" because the aarch64 rootfs yields 6 coincidental 37-byte printable runs (max WIDTH, no reserved zero-padding) alongside
+the real 36-byte salt.
+
+**Fixed (2026-10-20, us):** `saltscan.find_salt()` now drops any candidate whose length equals `WIDTH` (no zero padding) when a
+shorter, zero-padded candidate is also present, and only refuses if more than one *padded* value remains. Verified against all three
+stock images: Gen2, Gen1 and Force each resolve to the single value `f7bed1c9-7e90-4731-9194-c996666b4331` (36 bytes, 2 locations
+each) with no manual override needed. `tools/test_usb_stick.py` gained `test_full_width_runs_are_noise`; its two-values test was
+adjusted so both artificial salts are genuinely padded (so the "refuse on real disagreement" case still holds). 11/11 tests pass.
+`tools/usb_stick/make_stick.py` can now build a Gen2 stick unattended from a stock Gen2 image; still no real Gen2 device run.
