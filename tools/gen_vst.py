@@ -94,7 +94,7 @@ def gen_params(cfg, params, out):
              "typedef struct { const char *key, *name, *unit; float min, max, def; int nopts; "
              "const char *const *opts; int momentary; int string_display; int int_display; "
              "int step_target; float step_delta; int popup_of; int hold_ms; int dynamic_name; int dynamic_display; "
-             "int qlink_ticks; int no_poll; int nudge_pct; int nudge_gain; } param_t;"]
+             "int qlink_ticks; int no_poll; int nudge_pct; int nudge_gain; int refresh_display; } param_t;"]
     key_to_index = {p["key"]: i for i, p in enumerate(params)}
     rows = []
     for i, p in enumerate(params):
@@ -144,23 +144,28 @@ def gen_params(cfg, params, out):
         # a Q-Link event 1/128) by this, so the jog wheel crosses 0-127 in fewer clicks. 0 or 1 = off; a drag or a jump (a move of 2%
         # of the range or more) is never scaled. 3 = about 40 clicks end to end.
         ngain = int(p.get("nudge_gain", 0))
+        # "refresh_display": true -- a host write of this param also asks MPC for an audioMasterUpdateDisplay, for text that
+        # depends on it and is not polled: a "poll": false readout bound with get=, another param's dynamic_name/_display.
+        # Off by default: MPC answers every UpdateDisplay by rebuilding its parameter screen, and doing that on each host
+        # write broke Q-Links on the automation screen (docs/NOTES.md, 2026-10-21). Polled readouts refresh on their own.
+        refresh = int(bool(p.get("refresh_display")))
         if opts:
             lines.append("static const char *const OPTS_%d[] = {%s};" % (i, ", ".join(c_str(o) for o in opts)))
             d = p.get("default", 0)
             if isinstance(d, str):
                 d = opts.index(d) if d in opts else 0
             norm = d / (len(opts) - 1) if len(opts) > 1 else 0
-            rows.append("    {%s, %s, \"\", 0, 0, %s, %d, OPTS_%d, %d, %d, %d, %d, %s, %d, %d, %d, %d, %d, %d, %d, %d}," % (
+            rows.append("    {%s, %s, \"\", 0, 0, %s, %d, OPTS_%d, %d, %d, %d, %d, %s, %d, %d, %d, %d, %d, %d, %d, %d, %d}," % (
                 c_str(p["key"]), name, fl(norm), len(opts), i, bool(p.get("momentary")), is_str, is_int,
-                step_target, fl(step_delta), popup_of, p.get("hold_ms", 0), dyn, dyn_disp, qticks, no_poll, nudge, ngain))
+                step_target, fl(step_delta), popup_of, p.get("hold_ms", 0), dyn, dyn_disp, qticks, no_poll, nudge, ngain, refresh))
         else:
             lo, hi = p.get("min", 0), p.get("max", 1)
             d = p.get("default", lo)
             norm = (d - lo) / (hi - lo) if hi > lo else 0
-            rows.append("    {%s, %s, %s, %s, %s, %s, 0, 0, %d, %d, %d, %d, %s, %d, %d, %d, %d, %d, %d, %d, %d}," % (
+            rows.append("    {%s, %s, %s, %s, %s, %s, 0, 0, %d, %d, %d, %d, %s, %d, %d, %d, %d, %d, %d, %d, %d, %d}," % (
                 c_str(p["key"]), name, c_str(p.get("unit", "")), fl(lo), fl(hi), fl(norm),
                 bool(p.get("momentary")), is_str, is_int, step_target, fl(step_delta), popup_of, p.get("hold_ms", 0), dyn, dyn_disp,
-                qticks, no_poll, nudge, ngain))
+                qticks, no_poll, nudge, ngain, refresh))
     lines += ["static const param_t PARAMS[] = {"] + rows + ["};", "#define NPARAMS %d" % len(params),
               "#define PLUG_NAME %s" % c_str(cfg["name"]), "#define PLUG_VENDOR %s" % c_str(cfg["vendor"]),
               "#define PLUG_UID 0x%08x /* '%s' */" % (int.from_bytes(cfg["uid"].encode(), "big"), cfg["uid"]),

@@ -116,6 +116,10 @@ for the pattern). This applies to every future port, not just ones that hit the 
       draws it wrongly (misaligned half-frames); reduce the frame count or size. (Reported by another port author; not yet
       reproduced on our device. `catalog_check.py` warns about such images.)
 - [ ] Q-Links: 1–8 = knob bank 1, 9–16 = bank 2; nested pages via several `qlinks` lines.
+- [ ] Labels or unpolled text that follow another param (`dynamic_name` / `dynamic_display` reading a selector, a
+      `"poll": false` readout bound with `get=`): put `"refresh_display": true` on that selector. A plain host write
+      no longer asks MPC for an UpdateDisplay (NOTES.md 2026-10-21). Test Q-Links on track edit → automation, not only
+      on the plugin screen: that screen takes a different host path.
 - [ ] Option lists and `"display": "int"` params step one option or whole number per Q-Link event and per data wheel
       click (`settle()`). If a short one races by under a Q-Link, `"qlink_ticks": N` on that param (opt-in, off by default)
       counts N events per step: 6 suited a 9-option list on a Key 37. It costs N wheel clicks per step too, and on a Force

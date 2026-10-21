@@ -347,7 +347,11 @@ static void set_param_now(AEffect *e, int32_t i, float n) {
     eng_set(w, PARAMS[i].key, buf);
     if (PARAMS[i].momentary && n > 0.5f) w->holdFrames[i] = PARAMS[i].hold_ms > 0 ? (int)(PARAMS[i].hold_ms * 44.1f) : 1;
     if (!nudge) popup_picked(w->open, w->holdFrames, i);   /* a list pick closes it; a Q-Link nudge doesn't */
-    w->need_update_display = 1;   /* deferred to processReplacing(), see the step_target branch above */
+    /* No UpdateDisplay for a plain host write: the host knows the value it sent, and MPC answers every UpdateDisplay by
+     * rebuilding its parameter screen, so asking on each write (each automation step, each Q-Link event) left Q-Links
+     * unable to move a param on the track's automation screen (docs/NOTES.md, 2026-10-21). Polled readouts see the
+     * change within 100 ms (housekeeping); "refresh_display" opts a param back in for unpolled text that depends on it. */
+    if (p->refresh_display) w->need_update_display = 1;   /* deferred to processReplacing(), see the step_target branch */
 }
 
 /* MPC's plugin host (JUCE) sets parameter 0 to the far end of its range and straight back whenever it gets ready to play:

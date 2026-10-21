@@ -1487,3 +1487,17 @@ From saustin2010's Percolator 2.0.0 (four drum voices, a MIDI channel each, like
 - A `"tier": "experimental"` cap alone was not enough: it only hides the card on the site; `catalog.tsv` lists every stable,
   unyanked version whatever the tier.
 - To undo: once a fixed release is out, replace `"surgexxl@*"` with the bad versions (`"surgexxl@<version>"`) or remove it.
+
+## 2026-10-21: no UpdateDisplay on a host write (a port author's device report; verified on our Force)
+Reported by another port author (a Dexed+ port built on this wrapper), checked on their Force: on track edit →
+automation the physical Q-Links did not move a plugin parameter, or it snapped straight back, while the on-screen knobs
+worked. Instruments for sure; effects reported too. Cause: `set_param_now()` set `need_update_display` on every host write,
+so each Q-Link event and automation step was followed by an `audioMasterUpdateDisplay`, which MPC answers by rebuilding its
+parameter screen (the same rebuild that closed the PRESET popup, `DISPLAY_REV_NO_UPDATE`). They confirmed that removing it fixes
+the problem on the device. Our version (`wrapper/vst2_wrap.c`) drops it for plain writes and keeps it for
+`step_of` buttons and for params with the new `"refresh_display": true` (gen_vst.py). The 100 ms readout poll (2026-10-01)
+already covers what the jv880 fix of 2026-09-24 needed it for. The host test checks that 32 writes cause no UpdateDisplay.
+Ports that need the opt-in: `dynamic_name` labels following a selector (Machinedrum's `trackN_machine` → `syn1..8`) and
+`"poll": false` readouts that depend on a written param. Every port must be rebuilt to get the fix. Checked on our Force (2026-10-21,
+JV-880 rebuilt with this and the 50 ms cap): Q-Links on track edit → automation work, and the bank and patch readouts still follow
+the stepper arrows and a direct Q-Link turn.
