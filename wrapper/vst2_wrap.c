@@ -149,6 +149,7 @@ typedef struct {
     int nrpn_msb;
     volatile char cc_changed[NPARAMS];   /* set from MIDI CC/NRPN, reported to the host at most every 1024 frames */
     int cc_report;           /* frames until CC-driven changes are reported again */
+    int update_wait;         /* frames until another audioMasterUpdateDisplay may be sent (see housekeeping) */
     int program;             /* NPRESETS: the preset last picked (not in the engine's state; 0 after a reload) */
 #if SAMPLE_ACCURATE
     struct { int32_t frame; uint8_t msg[3]; } evq[WRAP_EVQ];   /* this block's MIDI, sorted by frame (see queue_midi) */
@@ -552,8 +553,12 @@ static void housekeeping(AEffect *e, int32_t n) {
         for (int i = 0; i < NPARAMS; i++)
             if (w->cc_changed[i]) { w->cc_changed[i] = 0; w->master(&w->fx, audioMasterAutomate, i, 0, 0, get_norm(w, i)); }
     }
-    if (w->need_update_display) {
+    /* At most one UpdateDisplay per 50 ms (2205 frames); a request inside that window waits, it is not dropped. MPC rebuilds its
+     * parameter screen on each one, so a burst (a held stepper, readouts that change every poll) must not become a rebuild per block. */
+    if (w->update_wait > 0) w->update_wait -= n;
+    if (w->need_update_display && w->update_wait <= 0) {
         w->need_update_display = 0;
+        w->update_wait = 2205;
         w->master(&w->fx, audioMasterUpdateDisplay, 0, 0, 0, 0.0f);
     }
 }

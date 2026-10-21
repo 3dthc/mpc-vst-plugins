@@ -195,6 +195,11 @@ static void step_of_option_tests(AEffect *a) {
     a->setP(a, prev, 1.0f); run(a, 1); a->setP(a, prev, 0.0f);
     CHECK(fabsf(a->getP(a, t) - (float)(n - 2) / (n - 1)) < 1e-3f, "step_of %s on %s: steps one option (%.3f)",
           PARAMS[prev].key, PARAMS[t].key, a->getP(a, t));
+    /* a stepper pressed every block asks for an UpdateDisplay each time; the wrapper sends at most one per 50 ms */
+    run(a, 40); updates = 0;
+    for (int k = 0; k < 32; k++) { a->setP(a, next, 1.0f); run(a, 1); a->setP(a, next, 0.0f); }
+    CHECK(updates >= 1 && updates <= 2, "step_of %s pressed every block for 4096 frames: %d UpdateDisplay(s) (want 1-2, one per 50 ms)",
+          PARAMS[next].key, updates);
 }
 
 /* MIDI control (gen_vst.py cc_lines()): CC 20 moves the first Q-Link's parameter, NRPN n sets parameter n, and the

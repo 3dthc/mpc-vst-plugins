@@ -1488,6 +1488,12 @@ From saustin2010's Percolator 2.0.0 (four drum voices, a MIDI channel each, like
   unyanked version whatever the tier.
 - To undo: once a fixed release is out, replace `"surgexxl@*"` with the bad versions (`"surgexxl@<version>"`) or remove it.
 
+## 2026-10-21: at most one UpdateDisplay per 50 ms (offline only)
+Follow-up to "no UpdateDisplay on a host write" above: `housekeeping()` now sends at most one `audioMasterUpdateDisplay`
+every 2205 frames. A request inside that window waits for the next block after it rather than being dropped, so a held
+stepper or readouts that change on every poll can no longer trigger a screen rebuild on every block. host_test checks a
+stepper pressed every block for 4096 frames (2 UpdateDisplays). Not yet tried on a device.
+
 ## 2026-10-21: no UpdateDisplay on a host write (a port author's device report; verified on our Force)
 Reported by another port author (a Dexed+ port built on this wrapper), checked on their Force: on track edit →
 automation the physical Q-Links did not move a plugin parameter, or it snapped straight back, while the on-screen knobs
