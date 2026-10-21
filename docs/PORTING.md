@@ -88,6 +88,8 @@ for the pattern). This applies to every future port, not just ones that hit the 
 
 ## 2. Parameters
 - [ ] Stable order (the VST index is what skins and projects bind to). Append only; never reorder a shipped plugin.
+      `gen_vst.py` writes `params.lock` next to `vst.json` on the first build: commit it. A build fails when an existing key
+      changes index; `GEN_VST_RELOCK=1` accepts the break (before a first release only). Rebuild the skin after any change.
 - [ ] Options: an index; nudges step one option (the wrapper does this). Triggers: `"momentary": true`, which springs back.
 - [ ] Display strings are the only dynamic text channel into the skin (see NOTES on refresh behaviour).
       A param whose `get_param()` returns real text (a name, a status message), not a number, needs

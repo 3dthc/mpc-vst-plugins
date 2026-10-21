@@ -38,7 +38,8 @@ The sources provide mpc_engine() (wrapper/engine.h). An engine from another ecos
 parameter source instead of "params" and gets its adapter linked in (adapters/<name>/README.md).
 The VST parameter index of each key is its position in the list; skins bind to it as "Parameter N".
 A layout's popups add one hidden "<key>__open" param each, after the list.
-Keep uid and so fixed across releases, and never reorder the list (saved projects store values by index).
+Keep uid and so fixed across releases, and never reorder the list (saved projects store values by index): <port>/params.lock
+(written on the first build, commit it) fails the build when an existing key changes index (check_lock() below).
 """
 import json
 import os
@@ -83,6 +84,29 @@ def layout_warnings(cfg):
         return ["%s hardcodes a device path (%s): set MODULE_SUBDIR so the data is found next to the .so "
                 "(docs/PORTING.md); an absolute MODULE_DIR may stay as the fallback" % (cfg.get("name", "port"), ", ".join(bad))]
     return []
+
+
+def check_lock(here, plist):
+    """<port>/params.lock: the parameter keys in VST index order, written on the first build and extended as keys are appended.
+    Saved projects, automation and Q-Link maps store parameters by index, so an existing key that moves (a param inserted
+    mid-list, a reorder) fails the build; a key removed from the end is only a warning. GEN_VST_RELOCK=1 rewrites the file
+    (a deliberate break, before a first release). The layout's hidden popup params come after the list and are not locked."""
+    path = os.path.join(here, "params.lock")
+    keys = [p["key"] for p in plist]
+    if os.path.exists(path) and os.environ.get("GEN_VST_RELOCK") != "1":
+        locked = [k for k in open(path).read().split() if k]
+        for i, k in enumerate(locked):
+            if i >= len(keys):
+                print("warning: params.lock: %d locked key(s) from %r on are gone (removed from the end)" % (len(locked) - i, k),
+                      file=sys.stderr)
+                return
+            if keys[i] != k:
+                sys.exit("params.lock: parameter %d was %r and is now %r. Saved projects, automation and skins bind by index: "
+                         "append new params at the end, never insert or reorder (GEN_VST_RELOCK=1 to accept the break)" % (i, k, keys[i]))
+        if len(keys) == len(locked):
+            return
+    open(path, "w").write("".join(k + "\n" for k in keys))
+    print("params.lock: %d keys" % len(keys))
 
 
 def gen_params(cfg, params, out):
@@ -298,6 +322,7 @@ def main():
             print("%s=%s" % (k, shlex.quote(v)))
         return
     plist, sections = params.load(os.path.join(here, src))
+    check_lock(here, plist)
     import shadow_skin
     if cfg.get("layout"):
         plist = plist + shadow_skin.popup_params(os.path.join(here, cfg["layout"]), plist)
