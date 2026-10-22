@@ -33,7 +33,7 @@
 #
 # Version @@VERSION@@. Source: tools/mpc_patch/auto_exec of the repository this came from.
 set -u
-VERSION=0.3.0
+VERSION=0.3.1
 P=${AEX_PREFIX:-}                    # tests only: a folder that stands for / (files), nothing else changes
 BK_ROOT=$P/data/mpc-vst-plugins/backups
 MOUNTINFO=${AEX_MOUNTINFO:-/proc/self/mountinfo}
@@ -106,6 +106,10 @@ cmd_status() {
         if [ "$v" != "$VERSION" ]; then
             echo "Another version of this patch is installed ($v; this script is $VERSION): remove it with its own uninstaller first."
             state_line unsupported 0 other-version; return
+        fi
+        if ! /bin/sh "$ETC/root-bootstrap.sh" check; then
+            echo "The bootstrap unit is not in the root filesystem (an overlay over /usr hides where it is, or a firmware update removed it): it will not start at boot. Run: sh $0 uninstall, then install again."
+            state_line partial 1 bootstrap-missing; return
         fi
         out=$(helper status 2>&1); echo "$out"
         case "$out" in *"ACTIVE "*) echo "Installed and active. Check that MPC sees it: sh $0 verify"; state_line patched 1 ;;
