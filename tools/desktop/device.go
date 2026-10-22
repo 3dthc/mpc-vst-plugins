@@ -144,6 +144,55 @@ type Device struct {
 	Info   DeviceInfo
 	// for reconnect: kept in memory for this connection only, never written anywhere
 	host, password, fp string
+	done               chan struct{} // closed by Close() to stop the keepalive goroutine
+	closeOnce          sync.Once
+}
+
+// Keepalive timing. SSH command execution (Run) has no deadline, so a transport that silently stalls (common on flaky
+// Wi-Fi) would otherwise block a command forever. The keepalive goroutine pings the current connection; after a few
+// missed pings it closes the connection, which unblocks any in-flight Run with an error instead of hanging. Vars, not
+// consts, so a test can shorten them.
+var (
+	keepaliveInterval = 15 * time.Second
+	keepaliveTimeout  = 8 * time.Second
+	keepaliveMaxFails = 2
+)
+
+// keepalive runs until Close(). Each tick it asks the current connection for a reply; if several pings in a row get no
+// reply, the transport is treated as dead and closed so a stuck Run returns (the next Run reconnects on its own).
+func (d *Device) keepalive() {
+	t := time.NewTicker(keepaliveInterval)
+	defer t.Stop()
+	fails := 0
+	for {
+		select {
+		case <-d.done:
+			return
+		case <-t.C:
+			c := d.conn()
+			if c == nil {
+				continue
+			}
+			res := make(chan error, 1)
+			go func() { _, _, err := c.SendRequest("keepalive@openssh.com", true, nil); res <- err }()
+			var err error
+			select {
+			case err = <-res:
+			case <-time.After(keepaliveTimeout):
+				err = errors.New("keepalive timed out")
+			case <-d.done:
+				return
+			}
+			if err != nil {
+				if fails++; fails >= keepaliveMaxFails {
+					c.Close() // unblocks any in-flight Run on this client; its next Run reconnects
+					fails = 0
+				}
+			} else {
+				fails = 0
+			}
+		}
+	}
 }
 
 var hostRe = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$`)
@@ -201,15 +250,19 @@ func Dial(host, password string, cfg Config) (*Device, error) {
 		}
 		return nil, fmt.Errorf("cannot log in to %s: %w", host, err)
 	}
-	d := &Device{client: c, cfg: cfg, host: host, password: password, fp: fp}
+	d := &Device{client: c, cfg: cfg, host: host, password: password, fp: fp, done: make(chan struct{})}
 	if err := d.readInfo(host, fp); err != nil {
 		c.Close()
 		return nil, err
 	}
+	go d.keepalive()
 	return d, nil
 }
 
 func (d *Device) Close() {
+	if d.done != nil {
+		d.closeOnce.Do(func() { close(d.done) })
+	}
 	if c := d.conn(); c != nil {
 		c.Close()
 	}
