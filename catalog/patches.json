@@ -38,13 +38,13 @@
     {
       "id": "auto-exec",
       "title": "Auto exec: run plugins from any noexec drive, no setup",
-      "summary": "Recommended for a noexec drive. MPC cannot load a plugin from a drive mounted noexec (SSD, USB stick, SD card): it is listed but only shows Load Plugin. This makes the Synths folder of every noexec drive executable through a small boot-time service, with nothing to choose; the drives stay noexec. Tried on a Force with two USB sticks, a plugin loaded and survived a power cycle (not yet tried: an eject without its release command); 0.3.1 also starts after a reboot when an overlay is mounted on /usr (tried on a second Force, two reboots), and 0.3.2 finds drives with a space in the name. To update an installed version, run its uninstaller first. Replaces drive exec.",
+      "summary": "Recommended for a noexec drive. MPC cannot load a plugin from a drive mounted noexec (SSD, USB stick, SD card): it is listed but only shows Load Plugin. This makes the Synths folder of every noexec drive executable through a small boot-time service, with nothing to choose; the drives stay noexec. Tried on a Force with two USB sticks, a plugin loaded and survived a power cycle (not yet tried: an eject without its release command); 0.3.1 also starts after a reboot when an overlay is mounted on /usr (tried on a second Force, two reboots), and 0.3.2 finds drives with a space in the name. Apply updates an installed 0.3.0 or 0.3.1 in place. Replaces drive exec.",
       "author": "sd88me (mount logic after timomacquis)",
       "license": "MIT",
       "docs": "tools/mpc_patch/auto_exec/README.md",
       "script": {
-        "url": "https://raw.githubusercontent.com/sd88me/mpc-vst-plugins/854ea8fbe0ec342b9b702459f92ebfc7066e651f/tools/mpc_patch/auto_exec/auto-exec-patch.sh",
-        "sha256": "1f94c13f30ec92d099b906f18630d6300455437e0ef742b6a867958bbb62acba"
+        "url": "https://raw.githubusercontent.com/sd88me/mpc-vst-plugins/40df2587d906cd44d064597472e7ae0ee92ed94a/tools/mpc_patch/auto_exec/auto-exec-patch.sh",
+        "sha256": "8302f19dac337c98408c0f92867fb3a67fe494fa7cb58a91d347a30f128e6421"
       },
       "supports": {"os": "MPC OS Gen1 (mount probe on a Force, 2026-10-14)", "arch": "armv7l"},
       "modifies": ["/etc/auto-exec", "/etc/systemd/system/auto-exec.timer", "/usr/lib/systemd/system/auto-exec-bootstrap.service", "/media/<each noexec drive>/Synths (an executable bind mount of the folder)"],
