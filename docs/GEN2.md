@@ -82,5 +82,5 @@ Done (offline, 2026-10-09; checked with the `poc/inputprobe` port: armv7 and aar
 
 Still to do:
 1. A port template repo with both builds in its `build.sh`.
-2. `bench.c` for aarch64, once a Gen2 device is reachable.
+2. ~~`bench.c` for aarch64~~: done, `tools/bench.sh` picks the build from the device (docs/BENCH.md).
 3. Pilot with one real port. The glibc ceiling for aarch64 is 2.39 (MPC OS 3.x; Gen2 never runs 2.x); checked 2026-10-09 (offline, from `MPC-3.9.1-Gen2-update.img`'s main rootfs): `/usr/lib/libc.so.6` is aarch64 GNU libc 2.39, so the ceiling matches. libstdc++ was not inspected.
