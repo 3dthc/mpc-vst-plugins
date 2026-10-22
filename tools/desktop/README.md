@@ -31,7 +31,9 @@ one MPC stop and start around the whole batch when the installers allow it.
    If the SSH connection drops during a copy (a laptop waking from sleep, a Wi-Fi or VPN change), the app reconnects once, after
    checking that the device presents the same key, and copies that package again; MPC is not stopped and nothing is installed
    until every copy is done, so this is safe. A second drop stops with "Nothing was installed and MPC was not stopped"
-   (`TestACopyThatLosesTheConnectionIsRetriedOnce`, offline, 2026-10-14).
+   (`TestACopyThatLosesTheConnectionIsRetriedOnce`, offline, 2026-10-14). A connection that silently stalls (a weak Wi-Fi
+   link, not a clean drop) is caught by SSH keepalives: the app pings the device every 15 s and, after a couple of missed
+   replies, closes the dead connection so a command returns an error you can retry instead of hanging (2026-10-23).
    **Register every plugin folder** (ticked by default, under Install to; `InstallOpts.Register`): after the packages are in
    place, and while MPC is still stopped for the batch, the app runs its own embedded `sync.sh` with every plugin location, so
    folders you copied in by hand or that MPC forgot also get into MPC's plugin list, `MPC.settings` is backed up first, and MPC
