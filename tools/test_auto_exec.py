@@ -254,6 +254,32 @@ class Refusals(Rig):
         self.assertNotEqual(self.run_patch("uninstall", "--confirmed").returncode, 0)
         self.assertEqual(read(self.root + "/etc/auto-exec/VERSION"), "0.0.1\n")
 
+    def test_an_older_version_is_updated_in_place(self):
+        # The installer app only runs the current script, so it must replace 0.3.0 / 0.3.1 itself (with their own uninstallers).
+        usb, _ = self.drive_with_plugin("E6CA-9201")
+        for commit, old in (("7184764", "0.3.0"), ("af05a83", "0.3.1")):
+            r = subprocess.run(["git", "-C", HERE, "show", commit + ":tools/mpc_patch/auto_exec/auto-exec-patch.sh"], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, "needs the git history (CI: fetch-depth 0): " + r.stderr)
+            old_script = os.path.join(self.work, "old-%s.sh" % old)
+            write(old_script, r.stdout)
+            r = subprocess.run([SH, old_script, "install", "--confirmed"], env=self.env, capture_output=True, text=True, timeout=120)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertEqual(read(self.root + "/etc/auto-exec/VERSION").strip(), old)
+            st = self.state(self.run_patch("status").stdout)
+            self.assertEqual((st["state"], st["supported"]), ("old-patch", "1"))
+            r = self.install()
+            self.assertIn("Version %s removed." % old, r.stdout)
+            self.assertEqual(read(self.root + "/etc/auto-exec/VERSION").strip(), "0.3.2")
+            self.assertEqual(len(self.mountinfo(usb + "/Synths")), 1, "exactly one executable mount after the update")
+            self.assertEqual(self.state(self.run_patch("status").stdout)["state"], "patched")
+            self.assertEqual(self.run_patch("uninstall", "--confirmed").returncode, 0)
+            self.assertFalse(os.path.exists(self.root + "/etc/auto-exec"))
+        # an old version can also just be removed with this script
+        subprocess.run([SH, old_script, "install", "--confirmed"], env=self.env, capture_output=True, text=True, timeout=120)
+        self.assertEqual(self.run_patch("uninstall", "--confirmed").returncode, 0)
+        self.assertFalse(os.path.exists(self.root + "/etc/auto-exec"))
+        self.assertEqual(len(self.mountinfo(usb + "/Synths")), 0)
+
     def test_a_loaded_plugin_blocks_removal_until_it_is_gone(self):
         if not self.probe:
             self.skipTest("no C compiler")
