@@ -33,7 +33,7 @@
 #
 # Version 1. Source: tools/mpc_patch/auto_exec of the repository this came from.
 set -u
-VERSION=0.3.0
+VERSION=0.3.2
 P=${AEX_PREFIX:-}                    # tests only: a folder that stands for / (files), nothing else changes
 BK_ROOT=$P/data/mpc-vst-plugins/backups
 MOUNTINFO=${AEX_MOUNTINFO:-/proc/self/mountinfo}
@@ -60,12 +60,12 @@ mpc_service() {
     else echo acvs; fi
 }
 candidates() {   # drives mounted noexec directly under /media, one per line (internal storage left out)
-    awk '$5 ~ /^\/media\/[^\/]+$/ { n = split($6, o, ","); for (i = 1; i <= n; i++) if (o[i] == "noexec") print $5 }' "$MOUNTINFO" | mi_unescape | while IFS= read -r d; do
+    awk '$5 ~ "^/media/[^/]+$" { n = split($6, o, ","); for (i = 1; i <= n; i++) if (o[i] == "noexec") print $5 }' "$MOUNTINFO" | mi_unescape | while IFS= read -r d; do
         valid_root "$d" && printf '%s\n' "$d"
     done
 }
 media_mounts() {   # every mount directly under /media: "<mount point>  <fs>  <device>  <noexec|exec>" (what the drive really is, whatever its folder is called)
-    awk '$5 ~ /^\/media\/[^\/]+$/ { ex = "exec"; n = split($6, o, ","); for (i = 1; i <= n; i++) if (o[i] == "noexec") ex = "noexec"; for (i = 7; i <= NF && $i != "-"; i++) ; printf "%s  %s  %s  %s\n", $5, $(i+1), $(i+2), ex }' "$MOUNTINFO" | mi_unescape
+    awk '$5 ~ "^/media/[^/]+$" { ex = "exec"; n = split($6, o, ","); for (i = 1; i <= n; i++) if (o[i] == "noexec") ex = "noexec"; for (i = 7; i <= NF && $i != "-"; i++) ; printf "%s  %s  %s  %s\n", $5, $(i+1), $(i+2), ex }' "$MOUNTINFO" | mi_unescape
 }
 write_payload() {   # $1 = folder to write the patch's files into
     d=$1
@@ -102,7 +102,7 @@ mount_id() { P=$(mi_path "$1") awk '$5==ENVIRON["P"]{v=$1} END{if(v)print v}' "$
 mount_options() { P=$(mi_path "$1") awk '$5==ENVIRON["P"]{v=$6} END{if(v)print v}' "$MOUNTINFO"; }
 valid_drive() { printf '%s\n' "$1" | grep -Eq '^/media/[A-Za-z0-9][A-Za-z0-9._+() -]*$' && case "$1" in /media/az01-internal|/media/az01-internal-*|/media/acvs-synths) false ;; *) true ;; esac; }
 noexec_drives() {   # one per line: "<mount id> <mount point, unescaped>" for each noexec mount directly under /media
- awk '$5 ~ /^\/media\/[^\/]+$/ { n = split($6, o, ","); for (i = 1; i <= n; i++) if (o[i] == "noexec") print $1, $5 }' "$MOUNTINFO" | mi_unescape
+ awk '$5 ~ "^/media/[^/]+$" { n = split($6, o, ","); for (i = 1; i <= n; i++) if (o[i] == "noexec") print $1, $5 }' "$MOUNTINFO" | mi_unescape
 }
 log() { echo "$*"; }
 owned_line() { awk -v id="$1" '$1==id' "$OWNED"; }
@@ -187,7 +187,7 @@ P=${AEX_PREFIX:-}
 if [ -z "$P" ]; then PATH=/usr/sbin:/usr/bin:/sbin:/bin; export PATH; fi   # fixed PATH on the device; tests (AEX_PREFIX) bring their own shims
 [ "$(id -u)" = 0 ] || { echo 'Root required'; exit 1; }
 [ -f "$P/etc/auto-exec/VERSION" ] || { echo 'Patch not installed'; exit 0; }
-[ "$(cat "$P/etc/auto-exec/VERSION")" = 0.3.0 ] || { echo 'Different version: use its matching uninstaller'; exit 1; }
+[ "$(cat "$P/etc/auto-exec/VERSION")" = 0.3.2 ] || { echo 'Different version: use its matching uninstaller'; exit 1; }
 mpc_service() {
  if systemctl cat acvs >/dev/null 2>&1; then echo acvs
  elif systemctl cat inmusic-mpc >/dev/null 2>&1; then echo inmusic-mpc
@@ -235,27 +235,34 @@ AEX_EOF_BOOTSTRAP_SH
 #!/bin/sh
 set -eu
 # Adds or removes the bootstrap unit in the system image (the root filesystem is read-only on the device: it is remounted
-# writable only for this and restored afterwards). Original: timomacquis, 0.1.3. AEX_PREFIX (tests only) redirects the paths
-# and skips the remount.
+# writable only for this and restored afterwards). The files are written through a bind mount of /, so they land in the
+# root filesystem even when something has mounted an overlay over /usr: systemd reads the wants link at boot, before
+# such an overlay exists (0.3.1; 0.3.0 wrote into the overlay and never started at boot there). Original: timomacquis,
+# 0.1.3. `check` (read-only) succeeds when both are in the root filesystem. AEX_PREFIX (tests only) redirects the paths and skips the remount.
 P=${AEX_PREFIX:-}
-UNIT=$P/usr/lib/systemd/system/auto-exec-bootstrap.service
-LINK=$P/usr/lib/systemd/system/multi-user.target.wants/auto-exec-bootstrap.service
 ROOT_RO=0
-if [ -z "$P" ]; then
+if [ -z "$P" ] && [ "$1" != check ]; then
  case ",$(findmnt -rn -M / -o OPTIONS)," in *,ro,*) ROOT_RO=1; mount -o remount,rw /;; esac
 fi
-restore_root() { sync; if [ "$ROOT_RO" = 1 ]; then mount -o remount,ro /; fi; }
+VIEW=$(mktemp -d)
+mount --bind "${P:-/}" "$VIEW"
+restore_root() { sync; umount "$VIEW" && rmdir "$VIEW"; if [ "$ROOT_RO" = 1 ]; then mount -o remount,ro /; fi; }
 trap restore_root EXIT
+UNIT=$VIEW/usr/lib/systemd/system/auto-exec-bootstrap.service
+LINK=$VIEW/usr/lib/systemd/system/multi-user.target.wants/auto-exec-bootstrap.service
 case "$1" in
  install)
   [ ! -e "$UNIT" ] && [ ! -L "$LINK" ] || { echo 'Bootstrap already exists'; exit 1; }
-  mkdir -p "$P/usr/lib/systemd/system/multi-user.target.wants"
+  mkdir -p "$VIEW/usr/lib/systemd/system/multi-user.target.wants"
   cp "$2" "$UNIT"
   chmod 644 "$UNIT"
   ln -s ../auto-exec-bootstrap.service "$LINK"
   ;;
  remove)
   rm -f "$LINK" "$UNIT"
+  ;;
+ check)
+  [ -f "$UNIT" ] && [ -L "$LINK" ]
   ;;
  *) exit 1;;
 esac
@@ -334,6 +341,10 @@ cmd_status() {
         if [ "$v" != "$VERSION" ]; then
             echo "Another version of this patch is installed ($v; this script is $VERSION): remove it with its own uninstaller first."
             state_line unsupported 0 other-version; return
+        fi
+        if ! /bin/sh "$ETC/root-bootstrap.sh" check; then
+            echo "The bootstrap unit is not in the root filesystem (an overlay over /usr hides where it is, or a firmware update removed it): it will not start at boot. Run: sh $0 uninstall, then install again."
+            state_line partial 1 bootstrap-missing; return
         fi
         out=$(helper status 2>&1); echo "$out"
         case "$out" in *"ACTIVE "*) echo "Installed and active. Check that MPC sees it: sh $0 verify"; state_line patched 1 ;;

@@ -38,13 +38,13 @@
     {
       "id": "auto-exec",
       "title": "Auto exec: run plugins from any noexec drive, no setup",
-      "summary": "Recommended for a noexec drive. MPC cannot load a plugin from a drive mounted noexec (SSD, USB stick, SD card): it is listed but only shows Load Plugin. This makes the Synths folder of every noexec drive executable through a small boot-time service, with nothing to choose; the drives stay noexec. Tried on a Force with two USB sticks, a plugin loaded and survived a power cycle (not yet tried: the SSD, an eject without its release command). Replaces drive exec.",
+      "summary": "Recommended for a noexec drive. MPC cannot load a plugin from a drive mounted noexec (SSD, USB stick, SD card): it is listed but only shows Load Plugin. This makes the Synths folder of every noexec drive executable through a small boot-time service, with nothing to choose; the drives stay noexec. Tried on a Force with two USB sticks, a plugin loaded and survived a power cycle (not yet tried: an eject without its release command); 0.3.1 also starts after a reboot when an overlay is mounted on /usr (tried on a second Force, two reboots), and 0.3.2 finds drives with a space in the name. To update an installed version, run its uninstaller first. Replaces drive exec.",
       "author": "sd88me (mount logic after timomacquis)",
       "license": "MIT",
       "docs": "tools/mpc_patch/auto_exec/README.md",
       "script": {
-        "url": "https://raw.githubusercontent.com/sd88me/mpc-vst-plugins/1a6251e5dc90386a010179cb2173a51831cbbf4b/tools/mpc_patch/auto_exec/auto-exec-patch.sh",
-        "sha256": "23521d7069a19c2fc1bee62414f200f645ef8b7ddc1b916148c565ce73aee486"
+        "url": "https://raw.githubusercontent.com/sd88me/mpc-vst-plugins/854ea8fbe0ec342b9b702459f92ebfc7066e651f/tools/mpc_patch/auto_exec/auto-exec-patch.sh",
+        "sha256": "1f94c13f30ec92d099b906f18630d6300455437e0ef742b6a867958bbb62acba"
       },
       "supports": {"os": "MPC OS Gen1 (mount probe on a Force, 2026-10-14)", "arch": "armv7l"},
       "modifies": ["/etc/auto-exec", "/etc/systemd/system/auto-exec.timer", "/usr/lib/systemd/system/auto-exec-bootstrap.service", "/media/<each noexec drive>/Synths (an executable bind mount of the folder)"],

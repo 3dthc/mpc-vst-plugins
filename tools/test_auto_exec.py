@@ -99,6 +99,39 @@ class Mechanism(Rig):
         self.assertFalse(os.path.exists(self.root + "/etc/auto-exec"))
         self.assertTrue(os.path.isfile(so1), "plugins are never touched")
 
+    def test_the_bootstrap_lands_in_the_root_filesystem_under_a_usr_overlay(self):
+        # A Force where something mounts an overlay over /usr after boot (seen 2026-10-22): systemd reads the wants link
+        # before that mount exists, so the unit must be written underneath it. A bind mount stands for the overlay.
+        boot = "usr/lib/systemd/system/auto-exec-bootstrap.service"
+        link = "usr/lib/systemd/system/multi-user.target.wants/auto-exec-bootstrap.service"
+        upper = tempfile.mkdtemp(prefix="usr-upper-", dir=self.work)
+        os.makedirs(self.root + "/usr", exist_ok=True)
+        sh("mount --bind '%s' '%s/usr'" % (upper, self.root))
+        try:
+            self.install()
+            st = self.state(self.run_patch("status").stdout)
+            self.assertNotEqual(st.get("reason"), "bootstrap-missing")
+            self.assertFalse(os.path.exists(os.path.join(upper, boot[4:])), "nothing goes into the overlay")
+        finally:
+            sh("umount '%s/usr'" % self.root)
+        self.assertTrue(os.path.isfile(os.path.join(self.root, boot)))
+        self.assertTrue(os.path.islink(os.path.join(self.root, link)))
+
+    def test_status_reports_a_bootstrap_that_only_an_overlay_holds(self):
+        # 0.3.0's failure mode: the unit is visible through /usr but not in the root filesystem.
+        self.install()
+        unit = self.root + "/usr/lib/systemd/system"
+        upper = tempfile.mkdtemp(prefix="usr-upper-", dir=self.work)
+        shutil.copytree(unit, upper + "/s", symlinks=True)
+        os.remove(unit + "/auto-exec-bootstrap.service")
+        os.remove(unit + "/multi-user.target.wants/auto-exec-bootstrap.service")
+        sh("mount --bind '%s/s' '%s'" % (upper, unit))
+        try:
+            st = self.state(self.run_patch("status").stdout)
+            self.assertEqual((st["state"], st.get("reason")), ("partial", "bootstrap-missing"))
+        finally:
+            sh("umount '%s'" % unit)
+
     def test_a_drive_plugged_in_later_is_picked_up_and_an_unplugged_one_released(self):
         self.install()
         usb, so = self.drive_with_plugin("E6CA-9201")
@@ -262,6 +295,12 @@ class Generated(unittest.TestCase):
         for f in [SCRIPT] + [os.path.join(DIR, "src", n) for n in os.listdir(os.path.join(DIR, "src")) if n.endswith(".sh")]:
             r = subprocess.run([SH, "-n", f], capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, f + r.stderr)
+
+    def test_no_bracket_expression_holds_an_escaped_slash(self):
+        # BusyBox awk (the device's) reads `[^\/]` as "not a backslash or a slash", so a mount point with a space (\040 in
+        # mountinfo, "Force SSD") was skipped; gawk and mawk here do not, so the mount tests cannot see it (2026-10-22).
+        for f in [SCRIPT] + [os.path.join(DIR, "src", n) for n in os.listdir(os.path.join(DIR, "src"))]:
+            self.assertNotIn("[^\\/]", read(f), f)
 
 
 def main():
