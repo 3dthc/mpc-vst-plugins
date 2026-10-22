@@ -12,6 +12,12 @@ feature on our side). Both plugins' `tested.json` carry the device. This settles
   right; `plugin_list.awk -v listkey=...` and `install.sh`/`sync.sh`'s arch-based choice need no further change).
 - Install target: on this device `-t` had to point at a removable Synths folder (`/media/<label>/Synths`); `/sdcard` wasn't mounted
   and `/synths/Synths` was mounted read-only (see NOTES.md 2026-10-10). No Gen2-specific install default was needed.
+- **Second Gen2 unit, MPC OS 3.9.1 (2026-10-22): the writable internal drive is `/nvme`.** On a user's MPC Live III (aarch64,
+  glibc 2.39) the rootfs is dm-verity read-only, `/sdcard` isn't mounted, `/synths` is read-only, and the only `/media` drive was
+  mounted `noexec` (unusable for a `.so`). The one writable+exec location is **`/nvme/Synths`** (`/dev/nvme0n1p2`, exfat); settings
+  are at `/data/Settings/MPC/MPC.settings`. JV-880 1.0.8 aarch64 installed there (`install.sh -t /nvme/Synths`) loads, draws its
+  skin, browses expansions and makes sound — `pluginList-arm-64bit` confirmed again. The installer now handles this: `mpc-store.sh`
+  defaults to `/nvme/Synths` when `/sdcard` is absent, and `tools/desktop` scans `/nvme/Synths` and makes it the "internal drive".
 - `vst.json` `targets: ["armv7", "aarch64"]` + `tools/build_port.sh ... all` is now proven end to end on a second, ordinary port
   (Profit-08: no custom build script, just the generic path) — any future port can follow the same checklist (docs/PORTING.md).
 
