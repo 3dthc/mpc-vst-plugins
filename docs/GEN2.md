@@ -5,7 +5,8 @@ Gen2 MPC devices (MPC Live III and kin, RK3588) run a 64-bit userland: `/usr/bin
 (analysed 2026-10-06 from the 3.9.1 Gen2 update image, offline; see `docs/FIRMWARE_BUILDER.md`). A plugin needs a second, aarch64 build.
 
 **Status (2026-10-11): two Gen2 device confirmations, pilot phase done.** Crate Digger 1.1.9 and Profit-08 0.1.1's aarch64 builds
-both installed on a real MPC Live III (MPC OS 5.0.18), registered, showed up in MPC's plugin browser and ran (Crate Digger's skin
+both installed on a real MPC Live III (MPC OS 3.9.1, the official user-facing version; the "5.0.18 (scarthgap)" read on the
+device is the underlying az01/buildroot base, not the MPC OS version), registered, showed up in MPC's plugin browser and ran (Crate Digger's skin
 and open/close were checked in detail; Profit-08 was reported "working well" by the same tester, not yet broken down feature by
 feature on our side). Both plugins' `tested.json` carry the device. This settles the open questions from the first pilot:
 - **`pluginList-arm-64bit` is confirmed correct** for registering an aarch64 package (the earlier third-party tester report was
