@@ -33,7 +33,7 @@
 #
 # Version 1. Source: tools/mpc_patch/auto_exec of the repository this came from.
 set -u
-VERSION=0.3.1
+VERSION=0.3.2
 P=${AEX_PREFIX:-}                    # tests only: a folder that stands for / (files), nothing else changes
 BK_ROOT=$P/data/mpc-vst-plugins/backups
 MOUNTINFO=${AEX_MOUNTINFO:-/proc/self/mountinfo}
@@ -60,12 +60,12 @@ mpc_service() {
     else echo acvs; fi
 }
 candidates() {   # drives mounted noexec directly under /media, one per line (internal storage left out)
-    awk '$5 ~ /^\/media\/[^\/]+$/ { n = split($6, o, ","); for (i = 1; i <= n; i++) if (o[i] == "noexec") print $5 }' "$MOUNTINFO" | mi_unescape | while IFS= read -r d; do
+    awk '$5 ~ "^/media/[^/]+$" { n = split($6, o, ","); for (i = 1; i <= n; i++) if (o[i] == "noexec") print $5 }' "$MOUNTINFO" | mi_unescape | while IFS= read -r d; do
         valid_root "$d" && printf '%s\n' "$d"
     done
 }
 media_mounts() {   # every mount directly under /media: "<mount point>  <fs>  <device>  <noexec|exec>" (what the drive really is, whatever its folder is called)
-    awk '$5 ~ /^\/media\/[^\/]+$/ { ex = "exec"; n = split($6, o, ","); for (i = 1; i <= n; i++) if (o[i] == "noexec") ex = "noexec"; for (i = 7; i <= NF && $i != "-"; i++) ; printf "%s  %s  %s  %s\n", $5, $(i+1), $(i+2), ex }' "$MOUNTINFO" | mi_unescape
+    awk '$5 ~ "^/media/[^/]+$" { ex = "exec"; n = split($6, o, ","); for (i = 1; i <= n; i++) if (o[i] == "noexec") ex = "noexec"; for (i = 7; i <= NF && $i != "-"; i++) ; printf "%s  %s  %s  %s\n", $5, $(i+1), $(i+2), ex }' "$MOUNTINFO" | mi_unescape
 }
 write_payload() {   # $1 = folder to write the patch's files into
     d=$1
@@ -102,7 +102,7 @@ mount_id() { P=$(mi_path "$1") awk '$5==ENVIRON["P"]{v=$1} END{if(v)print v}' "$
 mount_options() { P=$(mi_path "$1") awk '$5==ENVIRON["P"]{v=$6} END{if(v)print v}' "$MOUNTINFO"; }
 valid_drive() { printf '%s\n' "$1" | grep -Eq '^/media/[A-Za-z0-9][A-Za-z0-9._+() -]*$' && case "$1" in /media/az01-internal|/media/az01-internal-*|/media/acvs-synths) false ;; *) true ;; esac; }
 noexec_drives() {   # one per line: "<mount id> <mount point, unescaped>" for each noexec mount directly under /media
- awk '$5 ~ /^\/media\/[^\/]+$/ { n = split($6, o, ","); for (i = 1; i <= n; i++) if (o[i] == "noexec") print $1, $5 }' "$MOUNTINFO" | mi_unescape
+ awk '$5 ~ "^/media/[^/]+$" { n = split($6, o, ","); for (i = 1; i <= n; i++) if (o[i] == "noexec") print $1, $5 }' "$MOUNTINFO" | mi_unescape
 }
 log() { echo "$*"; }
 owned_line() { awk -v id="$1" '$1==id' "$OWNED"; }
@@ -187,7 +187,7 @@ P=${AEX_PREFIX:-}
 if [ -z "$P" ]; then PATH=/usr/sbin:/usr/bin:/sbin:/bin; export PATH; fi   # fixed PATH on the device; tests (AEX_PREFIX) bring their own shims
 [ "$(id -u)" = 0 ] || { echo 'Root required'; exit 1; }
 [ -f "$P/etc/auto-exec/VERSION" ] || { echo 'Patch not installed'; exit 0; }
-[ "$(cat "$P/etc/auto-exec/VERSION")" = 0.3.1 ] || { echo 'Different version: use its matching uninstaller'; exit 1; }
+[ "$(cat "$P/etc/auto-exec/VERSION")" = 0.3.2 ] || { echo 'Different version: use its matching uninstaller'; exit 1; }
 mpc_service() {
  if systemctl cat acvs >/dev/null 2>&1; then echo acvs
  elif systemctl cat inmusic-mpc >/dev/null 2>&1; then echo inmusic-mpc

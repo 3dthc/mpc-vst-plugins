@@ -33,7 +33,7 @@
 #
 # Version @@VERSION@@. Source: tools/mpc_patch/auto_exec of the repository this came from.
 set -u
-VERSION=0.3.1
+VERSION=0.3.2
 P=${AEX_PREFIX:-}                    # tests only: a folder that stands for / (files), nothing else changes
 BK_ROOT=$P/data/mpc-vst-plugins/backups
 MOUNTINFO=${AEX_MOUNTINFO:-/proc/self/mountinfo}
@@ -60,12 +60,12 @@ mpc_service() {
     else echo acvs; fi
 }
 candidates() {   # drives mounted noexec directly under /media, one per line (internal storage left out)
-    awk '$5 ~ /^\/media\/[^\/]+$/ { n = split($6, o, ","); for (i = 1; i <= n; i++) if (o[i] == "noexec") print $5 }' "$MOUNTINFO" | mi_unescape | while IFS= read -r d; do
+    awk '$5 ~ "^/media/[^/]+$" { n = split($6, o, ","); for (i = 1; i <= n; i++) if (o[i] == "noexec") print $5 }' "$MOUNTINFO" | mi_unescape | while IFS= read -r d; do
         valid_root "$d" && printf '%s\n' "$d"
     done
 }
 media_mounts() {   # every mount directly under /media: "<mount point>  <fs>  <device>  <noexec|exec>" (what the drive really is, whatever its folder is called)
-    awk '$5 ~ /^\/media\/[^\/]+$/ { ex = "exec"; n = split($6, o, ","); for (i = 1; i <= n; i++) if (o[i] == "noexec") ex = "noexec"; for (i = 7; i <= NF && $i != "-"; i++) ; printf "%s  %s  %s  %s\n", $5, $(i+1), $(i+2), ex }' "$MOUNTINFO" | mi_unescape
+    awk '$5 ~ "^/media/[^/]+$" { ex = "exec"; n = split($6, o, ","); for (i = 1; i <= n; i++) if (o[i] == "noexec") ex = "noexec"; for (i = 7; i <= NF && $i != "-"; i++) ; printf "%s  %s  %s  %s\n", $5, $(i+1), $(i+2), ex }' "$MOUNTINFO" | mi_unescape
 }
 write_payload() {   # $1 = folder to write the patch's files into
     d=$1

@@ -296,6 +296,12 @@ class Generated(unittest.TestCase):
             r = subprocess.run([SH, "-n", f], capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, f + r.stderr)
 
+    def test_no_bracket_expression_holds_an_escaped_slash(self):
+        # BusyBox awk (the device's) reads `[^\/]` as "not a backslash or a slash", so a mount point with a space (\040 in
+        # mountinfo, "Force SSD") was skipped; gawk and mawk here do not, so the mount tests cannot see it (2026-10-22).
+        for f in [SCRIPT] + [os.path.join(DIR, "src", n) for n in os.listdir(os.path.join(DIR, "src"))]:
+            self.assertNotIn("[^\\/]", read(f), f)
+
 
 def main():
     if os.geteuid() == 0 and not IN_NS and shutil.which("unshare"):
