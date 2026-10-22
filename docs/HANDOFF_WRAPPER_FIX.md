@@ -1,6 +1,6 @@
 # Handoff: the "UpdateDisplay on every host write" wrapper fix and the port rollout
 
-Started 2026-10-21. **Last updated: 2026-10-21, release batch 1 in progress** (see "Status" below; the table is the source of truth).
+Started 2026-10-21. **Last updated: 2026-10-21, all wrapper-based ports released** (see "Status" below; the table is the source of truth).
 Update this file whenever a release, PR or finding changes. Dates and "device" or "offline" for every claim.
 
 ## 1. What this is about
@@ -56,18 +56,18 @@ release tag points at that branch's commit).
 |---|---|---|---|---|
 | JV-880 (Mini-JV) | sd88me/mpc-vst-jv880 | v1.0.8 (published) | #17 merged | also macro knobs smaller, rows spread (value text was clipped); device-checked |
 | Machinemodule (public Gen2) | sd88me/mpc-vst-machinedrum | v0.4.1 (published; v0.4.0 draft still exists, unpublished) | #16 merged | Gen2 only: the Force (armhf) build needs the user's own OS + flash files and is never published; not rebuilt |
-| Boris Granular | sd88me/mpc-vst-boris | v1.0.1 | #1 | |
-| Clementine-XT | sd88me/mpc-vst-clementineXT | clementine-xt-v0.9.6 | #5 | |
-| Model-72 | sd88me/mpc-vst-model72 | model72-v1.0.1 | #2 | `catalog_check` warns: network / process calls (check whether 1.0.0 had it) |
-| Dexed (DX7) | sd88me/mpc-vst-dx7 | dx7-v1.0.7 | #13 | host tests fail 11 checks, identical on the pre-change wrapper (needs bank data): not caused by this work |
-| Morpho-PE | sd88me/mpc-vst-morpho-PE | morpho-pe-v1.0.2 | #1 | host test: 1 failure (`osc1_freq` wheel clicks), also on the old wrapper |
-| Sturm-TP | sd88me/mpc-vst-sturm | sturm-tp-v0.1.2 | #1 | |
-| Profit-08 | sd88me/mpc-vst-profit8 | profit-08-v0.1.3 | #8 | |
-| Luckydip | sd88me/mpc-vst-luckydip | not released | #1 (re-vendor of the toolchain) | merge, then release |
-| Daemon + Daemon Listen | sd88me/mpc-vst-daemon | v1.0.1 (one release, 4 zips) | #1 | `catalog_check` warns on network/dlopen (expected, as in 1.0.0) |
-| Maze | sd88me/mpc-vst-maze | not started | | checkout is on branch `gen2-aarch64`, not main: ask before releasing from it |
-| OTT | sd88me/mpc-vst-OTT | not started | | checkout is on branch `claude/friendly-wozniak-m9ak1l`: ask first |
-| TR-MPC family | sd88me/mpc-vst-TR-MPC | 6w6/8w8/9w9/cw78-vst-v1.1.2, trmpc-vst-v1.0.1, trmpc-tap-fx-vst-v1.0.1 | #4 | six plugins, six tags; Gen2 target was missing and is added; TR-MPC host test: 3 fails, same on old wrapper; one transient g++ segfault on the aarch64 build, a retry passed |
+| Boris Granular | sd88me/mpc-vst-boris | v1.0.1 | #1 merged | |
+| Clementine-XT | sd88me/mpc-vst-clementineXT | clementine-xt-v0.9.6 | #5 merged | |
+| Model-72 | sd88me/mpc-vst-model72 | model72-v1.0.1 | #2 merged | `catalog_check` warns: network / process calls (check whether 1.0.0 had it) |
+| Dexed (DX7) | sd88me/mpc-vst-dx7 | dx7-v1.0.7 | #13 merged | host tests fail 11 checks, identical on the pre-change wrapper (needs bank data): not caused by this work |
+| Morpho-PE | sd88me/mpc-vst-morpho-PE | morpho-pe-v1.0.2 | #1 merged | host test: 1 failure (`osc1_freq` wheel clicks), also on the old wrapper |
+| Sturm-TP | sd88me/mpc-vst-sturm | sturm-tp-v0.1.2 | #1 merged | |
+| Profit-08 | sd88me/mpc-vst-profit8 | profit-08-v0.1.3 | #8 merged | |
+| Luckydip | sd88me/mpc-vst-luckydip | v0.9.2 | #1 (re-vendor) merged; #2 (Gen2 target, params.lock) open | first Gen2 build of Luckydip, offline only |
+| Daemon + Daemon Listen | sd88me/mpc-vst-daemon | v1.0.1 (one release, 4 zips) | #1 merged | `catalog_check` warns on network/dlopen (expected, as in 1.0.0) |
+| Maze Voice | sd88me/mpc-vst-maze | maze-voice-vst-v1.0.5 | #18 open | Maze Sequencer has its own wrapper (`maze_seq_vst.cpp`): not affected, not released. Checkout moved from the merged `gen2-aarch64` branch to main |
+| OTT | sd88me/mpc-vst-OTT | ottmpc-vst-v1.0.1 | #1 open | repo has no `main`: its default branch is `claude/friendly-wozniak-m9ak1l`; Gen2 target added |
+| TR-MPC family | sd88me/mpc-vst-TR-MPC | 6w6/8w8/9w9/cw78-vst-v1.1.2, trmpc-vst-v1.0.1, trmpc-tap-fx-vst-v1.0.1 | #4 merged | six plugins, six tags; Gen2 target was missing and is added; TR-MPC host test: 3 fails, same on old wrapper; one transient g++ segfault on the aarch64 build, a retry passed |
 | Cratedigger, monomodule, euclidier, acid | | not affected | | own wrapper |
 
 Local only, not for the repo: `params.lock` is committed on each release branch; builds were made against `mpc-vst-plugins` main at 8c7be1c or later.
@@ -101,7 +101,7 @@ The scripts used this session lived in the session scratchpad (`rel.sh`, `port.s
 ## 7. Open items, in order
 
 1. Finish batch 1 ((done), then Luckydip (after its PR); ask about Maze and OTT (non-main branches).
-2. Merge the per-port PRs (the user does the merging).
+2. Merge the open per-port PRs: Luckydip #2, Maze #18, OTT #1.
 3. Check the Model-72 catalog warning against its 1.0.0 release.
 4. Test one more port on the Force (an effect, since the report says effects show the problem too): track edit → automation with a Q-Link.
 5. Post the notice and issues to the other authors after the user approves the text; decide per-repo issues vs one per author.
