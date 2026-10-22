@@ -1455,7 +1455,7 @@ Gen2 autorun stick ourselves, and the Gen2 salt/offset (which stock `MPC` build,
 
 **Offline check against the Gen2 stock image (2026-10-20, us):** `tools/usb_stick/saltscan.py` run over `MPC-3.9.1-Gen2-update.img`
 finds the autorun salt in the Gen2 main rootfs (xz stream at offset 35289200), **identical to the Gen1/Force value**
-(`f7bed1c9-7e90-4731-9194-c996666b4331`, 36 bytes, two copies). So the autorun-check scheme and salt are the **same on Gen2** —
+(redacted here — Akai-derived, not stored in the repo — 36 bytes, two copies). So the autorun-check scheme and salt are the **same on Gen2** —
 offline corroboration of the Gen2 device report, and our generator's stick should be accepted on Gen2. This is still offline: no
 Gen2 device run by us. Caveat/tooling gap: `find_salt()` won't auto-pick on the Gen2 image — it reports "7 different salt
 candidates" because the aarch64 rootfs yields 6 coincidental 37-byte printable runs (max WIDTH, no reserved zero-padding) alongside
@@ -1463,7 +1463,7 @@ the real 36-byte salt.
 
 **Fixed (2026-10-20, us):** `saltscan.find_salt()` now drops any candidate whose length equals `WIDTH` (no zero padding) when a
 shorter, zero-padded candidate is also present, and only refuses if more than one *padded* value remains. Verified against all three
-stock images: Gen2, Gen1 and Force each resolve to the single value `f7bed1c9-7e90-4731-9194-c996666b4331` (36 bytes, 2 locations
+stock images: Gen2, Gen1 and Force each resolve to the same single value (redacted here — Akai-derived, not stored in the repo; 36 bytes, 2 locations
 each) with no manual override needed. `tools/test_usb_stick.py` gained `test_full_width_runs_are_noise`; its two-values test was
 adjusted so both artificial salts are genuinely padded (so the "refuse on real disagreement" case still holds). 11/11 tests pass.
 `tools/usb_stick/make_stick.py` can now build a Gen2 stick unattended from a stock Gen2 image; still no real Gen2 device run.
