@@ -14,9 +14,11 @@ one MPC stop and start around the whole batch when the installers allow it.
 1. **Connect:** SSH as root with your password, a key in `~/.ssh` (no passphrase), or neither on a device whose root has no password. It reads the device (32-bit ARM or Gen2 aarch64: Gen2 gets the catalog's aarch64 zips; `tar`?
    `systemctl`? where is `MPC.settings`?) and refuses one that is not an MPC OS device. The device's key fingerprint is shown; nothing
    about the device is saved.
-   The device scan lists every writable `Synths` location (the internal drive, and `/media/*/Synths` for cards and drives; read-only mounts such as
+   The device scan lists every writable `Synths` location (the internal drive — `/sdcard/Synths` on Gen1/Force, `/nvme/Synths` on Gen2 such as the Live III where `/sdcard` isn't mounted — and `/media/*/Synths` for cards and drives; read-only mounts such as
    MPC's own content folder are skipped, and the same storage reached by two paths is listed once; the internal drive's `Synths` folder is created at connect when it is missing, 2026-10-11). Step 3 lets you pick where to install, the
-   internal drive by default, and warns when MPC does not list the folder as a content location. A drive that cannot store symbolic links
+   internal drive by default, and warns when MPC does not list the folder as a content location. A writable drive under `/media` (its own
+   mount point, not MPC OS's `az01-*`/`acvs-*`) that has no `Synths` folder gets a **Create Synths folder** button in that box
+   (`/api/mkroot`; only a drive from the last scan is accepted, never a typed path), after which it is a plugin location (2026-10-14, offline). A drive that cannot store symbolic links
    (FAT, exFAT, NTFS) is refused for a package that needs them, and so is a drive without room. A drive mounted `noexec` (an MPC/Force's SSD is) is refused too: MPC cannot load a plugin from it, so the plugin would be listed but only show "Load Plugin".
 2. **Choose:** the catalog's newest stable release of every downloadable plugin, plus any zips you drop in. Tabs for Instruments, MIDI (generators and sequencers, from the catalog's `role: "midi"`), Effects, Addins and All (everything together) (2026-10-10, like the catalog page; the counts follow the search, so you can see which tab holds a match), a search box, a developer filter, a sort, and a "show" filter (not on the device, on the device, updates available, only the ones you ticked) keep a
    long list manageable; what you ticked stays ticked while you filter or change tab, and a bar at the bottom shows the count and an Install button.
@@ -26,6 +28,17 @@ one MPC stop and start around the whole batch when the installers allow it.
    (save your project: MPC restarts), it copies every package to a private folder in the device's `/tmp`, stops MPC once, runs each
    package's `install.sh -y -n`, starts MPC once and removes the copies. An installer that predates `-n` runs first with its own
    restart. MPC is started again even if something fails, and nothing after the failing plugin is installed.
+   If the SSH connection drops during a copy (a laptop waking from sleep, a Wi-Fi or VPN change), the app reconnects once, after
+   checking that the device presents the same key, and copies that package again; MPC is not stopped and nothing is installed
+   until every copy is done, so this is safe. A second drop stops with "Nothing was installed and MPC was not stopped"
+   (`TestACopyThatLosesTheConnectionIsRetriedOnce`, offline, 2026-10-14). A connection that silently stalls (a weak Wi-Fi
+   link, not a clean drop) is caught by SSH keepalives: the app pings the device every 15 s and, after a couple of missed
+   replies, closes the dead connection so a command returns an error you can retry instead of hanging (2026-10-23).
+   **Register every plugin folder** (ticked by default, under Install to; `InstallOpts.Register`): after the packages are in
+   place, and while MPC is still stopped for the batch, the app runs its own embedded `sync.sh` with every plugin location, so
+   folders you copied in by hand or that MPC forgot also get into MPC's plugin list, `MPC.settings` is backed up first, and MPC
+   restarts once. Nothing has to be on the device. If registering fails the job reports it and MPC is started again
+   (`TestInstallCanRegisterEveryPluginFolder`, `TestInstallWithoutRegisterLeavesHandCopiedFoldersAlone`, offline, 2026-10-14).
 
 4. **Remove** (step 4 on the page): lists the plugin folders on the device. A plugin the app can identify (from the catalog, or from a
    zip you dropped in this session) can be ticked and removed: MPC is stopped once, `MPC.settings` is backed up and the plugin's entry is
@@ -73,13 +86,13 @@ What was installed is written to `<Synths>/.mpc-store` on the device, so `mpc-st
 - The page is served on `127.0.0.1` only, behind a random token in the link the app prints. Every request must carry the token, the
   right `Host` and (for posts) the right `Origin`, and the page has a strict Content-Security-Policy, so other computers and other web
   pages cannot drive it.
-- The password is used for that one connection and never written down. There is no telemetry.
+- The password is used for that one connection and never written down. There is no telemetry. The one thing it fetches besides the catalog is the list of this repository's releases from `api.github.com` (an hourly check, 5 s timeout, nothing sent but the request) so the page can say when a newer `desktop-v*` release exists; it is silent when offline, skipped for a `dev` build, and `--no-update-check` turns it off.
 - Only https downloads are accepted, and only what the catalog lists.
 
 ## Run it
 
 Download the archive for your system from the releases, unpack it and start `mpc-installer` (double-click it, or run it in a
-terminal). It prints a link and opens it in your browser. `--no-browser` only prints the link; `--port`, `--catalog` and `--version`
+terminal). It prints a link and opens it in your browser. `--no-browser` only prints the link; `--port`, `--catalog`, `--no-update-check` and `--version`
 exist too.
 
 The first run is unsigned, so the system warns you once:

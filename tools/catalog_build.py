@@ -14,7 +14,7 @@ the user's own firmware) has no download: versions are the repo's vX.Y.Z git tag
 declared build script. A GitHub release that carries a *-mpc-armv7.zip asset is reported loudly (it would break the
 licence position). No zip is fetched or validated.
 
-GITHUB_TOKEN (optional) raises the API rate limit. --check-registry only validates the registry files (for PRs).
+GITHUB_TOKEN (optional) raises the API rate limit. --check-registry only validates the registry files, and that no stray *.json sits beside them in catalog/ (for PRs).
 Standard library only. See docs/CATALOG.md and docs/CATALOG_SPEC.md.
 """
 import argparse
@@ -41,6 +41,9 @@ BUILD_YOURSELF_FIELDS = ("requires_user_files", "build", "components")
 TAG_VERSION = re.compile(r"v?(\d+)\.(\d+)\.(\d+)")
 ZIP_PATTERN = "*-mpc-armv7.zip"
 # SPDX ids accepted as open source; anything else needs a human decision (edit this list in the PR that adds it).
+MAX_SUMMARY = 350   # characters; longer detail belongs in the repo README (docs/CATALOG.md)
+MAX_TAGS = 8
+CATALOG_FILES = {"apps.json", "patches.json", "yanked.json"}   # the only JSON directly in catalog/; plugin entries live in plugins/
 OPEN_LICENSES = {"MIT", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Apache-2.0", "GPL-2.0-only", "GPL-2.0-or-later",
                  "GPL-3.0-only", "GPL-3.0-or-later", "LGPL-2.1-only", "LGPL-2.1-or-later", "LGPL-3.0-only",
                  "LGPL-3.0-or-later", "AGPL-3.0-only", "AGPL-3.0-or-later", "MPL-2.0", "Unlicense", "CC0-1.0", "Zlib"}
@@ -56,6 +59,9 @@ def check_entry(e, fname=None):
         return p
     if not ID.fullmatch(e["id"]):
         p.append("bad id %r" % e["id"])
+    if len(e["summary"]) > MAX_SUMMARY:
+        p.append("summary is %d characters, the limit is %d: keep the card short and put the detail in the repo README"
+                 % (len(e["summary"]), MAX_SUMMARY))
     if fname and os.path.splitext(os.path.basename(fname))[0] != e["id"]:
         p.append("file name must be <id>.json")
     if not REPO.fullmatch(e["repo"]):
@@ -80,6 +86,8 @@ def check_entry(e, fname=None):
         p.append("featured must be true or false")
     if "tags" in e and not (isinstance(e["tags"], list) and all(isinstance(t, str) and ID.fullmatch(t) for t in e["tags"])):
         p.append("tags must be a list of lowercase slugs")
+    elif len(e.get("tags", [])) > MAX_TAGS:
+        p.append("%d tags, the limit is %d: keep the ones people would filter by" % (len(e["tags"]), MAX_TAGS))
     dist = e.get("distribution", "release")
     if dist not in DISTRIBUTIONS:
         p.append("distribution must be one of %s" % ", ".join(DISTRIBUTIONS))
@@ -241,6 +249,13 @@ def load_registry(path):
     return entries, problems
 
 
+def stray_files(catalog_dir):
+    """JSON files directly in catalog/ other than CATALOG_FILES: usually a plugin entry added one folder too high (GitHub's
+    "Create file" in catalog/), which the build never reads, so without this check CI passes an entry that is never listed."""
+    return [(f, "not read by the build: a plugin entry goes in plugins/<id>.json")
+            for f in sorted(glob.glob(os.path.join(catalog_dir, "*.json"))) if os.path.basename(f) not in CATALOG_FILES]
+
+
 class GitHub:
     """Release listing and asset download over the GitHub API. Tests substitute a fake with the same two methods."""
     def __init__(self, token=None):
@@ -365,9 +380,11 @@ def tag_versions(e, src, yanked, tested, keep, problems):
     return versions
 
 
-def build(entries, src, cache, yanked, keep=10, now=None):
+def build(entries, src, cache, yanked, keep=10, now=None, require_portable=()):
     """-> (catalog dict, problems list [{id, tag, error, unreadable?, superseded?}]). "unreadable" marks a repo or
-    release list that could not be read at all, as opposed to one that was read and found invalid."""
+    release list that could not be read at all, as opposed to one that was read and found invalid.
+    A plugin whose newest stable release is of the old layout (no "layout" field) gets a problem, so the catalog repo opens an
+    issue for it. require_portable (entry ids): such a release is invalid instead (the PR check for new listings)."""
     os.makedirs(cache, exist_ok=True)
     plugins, problems = [], []
     for e in entries:
@@ -413,7 +430,8 @@ def build(entries, src, cache, yanked, keep=10, now=None):
             try:
                 if not os.path.exists(zpath):
                     src.download(asset, zpath)
-                errors, warnings, rec = catalog_check.check(zpath, catalog=True, expect_id=e["id"], expect_repo=e["repo"])
+                errors, warnings, rec = catalog_check.check(zpath, catalog=True, expect_id=e["id"], expect_repo=e["repo"],
+                                                              require_portable=e["id"] in require_portable)
             except Exception as ex:
                 failed.append(({"id": e["id"], "tag": tag, "error": "download/validate failed: %s" % ex}, pub))
                 continue
@@ -494,6 +512,11 @@ def build(entries, src, cache, yanked, keep=10, now=None):
         item["bar_missing"] = bar_of(e, versions)
         item["featured"] = bool(e.get("featured")) and item["tier"] != "experimental"
         item["latest"] = next((v["version"] for v in versions if v["channel"] == "stable" and not v["yanked"]), None)
+        latest = next((v for v in versions if v["version"] == item["latest"]), None)
+        if latest and "manifest" in latest and latest["manifest"].get("layout") is None:
+            problems.append({"id": e["id"], "tag": "v" + latest["version"], "superseded": False,
+                             "error": "the newest release uses the old /sdcard/vst layout (no portable folder): MPC plugin managers "
+                                      "and Synths-folder scanners will not list it; re-release with the current tools/release.py"})
         item["latest_beta"] = next((v["version"] for v in versions if v["channel"] == "beta" and not v["yanked"]), None)
         item["downloads"] = all_time
         item["updated"] = max((v["date"] for v in versions if not v["yanked"]), default="")
@@ -533,14 +556,26 @@ def main():
     ap.add_argument("--yanked", default="catalog/yanked.json")
     ap.add_argument("--keep", type=int, default=10)
     ap.add_argument("--check-registry", action="store_true")
+    ap.add_argument("--require-portable", metavar="ID", nargs="+",
+                    help="validate only these entries' releases and fail when a newest release is of the old layout (PR check for new listings)")
     a = ap.parse_args()
     entries, reg_problems = load_registry(a.registry)
+    if a.check_registry:
+        reg_problems += stray_files(os.path.dirname(os.path.normpath(a.registry)))
     for f, m in reg_problems:
         print("error: %s: %s" % (f, m), file=sys.stderr)
     if a.check_registry:
         print("%d entries, %d problems" % (len(entries), len(reg_problems)))
         sys.exit(1 if reg_problems else 0)
     yanked = set(json.load(open(a.yanked))) if os.path.exists(a.yanked) else set()
+    if a.require_portable:
+        sel = [e for e in entries if e["id"] in a.require_portable]
+        catalog, problems = build(sel, GitHub(os.environ.get("GITHUB_TOKEN")), a.cache, yanked, a.keep, require_portable=set(a.require_portable))
+        bad = [p for p in problems if not p.get("superseded")]
+        for p in bad:
+            print("error: %(id)s %(tag)s: %(error)s" % p, file=sys.stderr)
+        print("%d entries checked for the portable layout, %d problems" % (len(sel), len(bad)))
+        sys.exit(1 if bad or reg_problems else 0)
     catalog, problems = build(entries, GitHub(os.environ.get("GITHUB_TOKEN")), a.cache, yanked, a.keep)
     os.makedirs(a.out, exist_ok=True)
     json.dump(catalog, open(os.path.join(a.out, "catalog.json"), "w"), indent=1)

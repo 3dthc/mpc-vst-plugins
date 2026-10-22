@@ -73,6 +73,12 @@ The catalog, its site and the installer app are live (see Done). Still open, in 
 ## Companion apps (catalog)
 - [ ] A custom domain for the site (the old `github.io` URL is hardcoded in `tools/mpc-store.sh`, the page template's `SITE` fallback, the desktop app and the README).
 
+- [x] **Installer app: version check** (built 2026-10-14, host tests only; in 0.5.5). Original ask: Tell the user when a newer `desktop-v*` release exists (asked for 2026-10-14). Ideas: compare the
+      app's `version` (skip a `dev` build) with the newest published release at startup, show a dismissible banner with the link
+      and the "which file do I need?" table, never block or auto-update, fail silently offline; say in the docs what is fetched
+      (the app already downloads the catalog, so it can read the version from the same site or the Releases API). The Android fork
+      (gmorb/mpc-installer-android) ships its own APK versions, so the check must be by release channel, not hard-coded to one repo.
+
 ## Patches (installer app)
 - [ ] **"Advanced" step for device patches** (`tools/mpc_patch`: the drum-pad layout and drive exec, from #150). Plan in
       `docs/PATCHES.md`: a manifest, the script stays the unit (`status` / `install` / `uninstall`), typed confirmation, staged rollout.

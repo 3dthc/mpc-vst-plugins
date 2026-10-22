@@ -6,7 +6,8 @@ Design: `docs/CATALOG.md`. Formats: `docs/CATALOG_SPEC.md`.
 ## Add your plugin
 1. Make a release zip with `tools/release.py` (or the `vst-release.yml` workflow) with `--repo owner/name --license <SPDX>`,
    and check it: `tools/catalog_check.py <zip> --catalog`. Publish it as a GitHub release on your repo.
-2. Open a PR adding `catalog/plugins/<id>.json` (the `<id>` in your manifest):
+2. Open a PR adding `catalog/plugins/<id>.json` (the `<id>` in your manifest; a file directly in `catalog/` is never read, and
+   `--check-registry` fails on it):
    ```json
    { "id": "my-synth", "name": "My Synth", "author": "Your name", "repo": "you/my-synth-vst",
      "kind": "instrument", "license": "MIT", "summary": "One line.",
@@ -86,7 +87,7 @@ the card: a plugin with no badge is simply in the catalog (the Listed tier), and
 - **Experimental**: no stable release yet (a beta alone counts), or a maintainer capped the entry with `"tier": "experimental"`
   (for example a bulk port nobody has run). Hidden from the default catalog view, shown by the Tier filter.
 
-The default sort ("Recommended") lists featured plugins, then Verified, then Listed, then by name. `"featured": true` in the
+The default sort ("Recommended") lists featured plugins, then Verified, then Listed. Within a tier, ties go to Verified on both generations, then the newest hardware-test date, then downloads, then name. `"featured": true` in the
 registry entry is a maintainer's pick and is ignored for Experimental plugins. A listing can be capped, never raised, by the
 registry: `"tier"` accepts only `"experimental"`.
 
@@ -108,7 +109,8 @@ Add `"<id>@<version>"` (or `"<id>@*"` for all versions) to `yanked.json`. It sta
 never offered as the latest.
 
 ## Build locally
-`python3 tools/catalog_build.py --check-registry` validates entries; without the flag it fetches releases (set
+`python3 tools/catalog_build.py --check-registry` validates entries (and fails on any `*.json` directly in `catalog/` other than
+`apps.json`, `patches.json` and `yanked.json`: an entry put one folder too high); without the flag it fetches releases (set
 `GITHUB_TOKEN` to avoid API limits) and writes `catalog/dist/catalog.json` and `problems.json`.
 In `problems.json`, `superseded: true` marks a failing release that a newer, unyanked release of the same plugin
 replaces. `python3 tools/catalog_issues.py --dry-run` shows the issues the nightly would open and close.

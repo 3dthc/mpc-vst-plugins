@@ -1,7 +1,7 @@
 {
   "id": "pulytek",
   "name": "PulyTek",
-  "author": "Alberto Barrera (ABSounds); Force/MPC port by MagicStino",
+  "author": "MagicStino",
   "repo": "MagicStino/pulytek",
   "kind": "effect",
   "license": "GPL-3.0-only",

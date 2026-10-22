@@ -43,16 +43,16 @@
   <div class="pagelist">/*GUIDES*/</div>
 
   <div class="tabs" role="tablist" aria-label="Catalog sections">
-    <button type="button" role="tab" id="tab-instrument" aria-controls="panel-plugins" aria-selected="true" data-tab="instrument">Instruments <span class="n" id="n-instrument"></span></button>
+    <button type="button" role="tab" id="tab-all" aria-controls="panel-plugins" aria-selected="true" data-tab="all">All <span class="n" id="n-all"></span></button>
+    <button type="button" role="tab" id="tab-instrument" aria-controls="panel-plugins" aria-selected="false" data-tab="instrument" tabindex="-1">Instruments <span class="n" id="n-instrument"></span></button>
     <button type="button" role="tab" id="tab-midi" aria-controls="panel-plugins" aria-selected="false" data-tab="midi" tabindex="-1">MIDI <span class="n" id="n-midi"></span></button>
     <button type="button" role="tab" id="tab-effect" aria-controls="panel-plugins" aria-selected="false" data-tab="effect" tabindex="-1">Effects <span class="n" id="n-effect"></span></button>
     <button type="button" role="tab" id="tab-addin" aria-controls="panel-plugins" aria-selected="false" data-tab="addin" tabindex="-1">Addins <span class="n" id="n-addin"></span></button>
-    <button type="button" role="tab" id="tab-all" aria-controls="panel-plugins" aria-selected="false" data-tab="all" tabindex="-1">All <span class="n" id="n-all"></span></button>
     <button type="button" role="tab" id="tab-patches" aria-controls="panel-patches" aria-selected="false" data-tab="patches" tabindex="-1">Device patches <span class="n">/*N_PATCHES*/</span></button>
     <button type="button" role="tab" id="tab-apps" aria-controls="panel-apps" aria-selected="false" data-tab="apps" tabindex="-1">Companion apps <span class="n">/*N_APPS*/</span></button>
   </div>
 
-  <div role="tabpanel" id="panel-plugins" aria-labelledby="tab-instrument">
+  <div role="tabpanel" id="panel-plugins" aria-labelledby="tab-all">
   <div class="tools">
     <label class="search">Search<input id="q" type="search" placeholder="Name, developer, style or tag"></label>
     <label>Style<select id="f-style"></select></label>
@@ -75,6 +75,13 @@
 
   <div class="grid" id="grid"></div>
   <p class="empty" id="empty" hidden>No plugins match these filters.</p>
+  <div class="modal" id="modal" hidden>
+    <div class="modal-in" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <button class="modal-share" type="button" id="modal-share">Copy link</button>
+      <button class="modal-x" type="button" id="modal-x" aria-label="Close">&times;</button>
+      <div id="modal-body"></div>
+    </div>
+  </div>
   <p class="line" id="exp" hidden><span id="exp-n"></span> experimental plugins are hidden. <button class="linkbtn" type="button" id="show-exp">Show them</button></p>
 
   <details class="install" id="inst" hidden>
@@ -127,7 +134,7 @@
 <script>
 var CAT = JSON.parse(document.getElementById("data").textContent);
 var P = CAT.plugins;
-var state = { tab: "instrument", q: "", style: "", dev: "", lic: "", dist: "", os: "", gen: "", tier: "", sort: "recommended", rev: false, beta: false, sel: [] };
+var state = { tab: "all", q: "", style: "", dev: "", lic: "", dist: "", os: "", gen: "", tier: "", sort: "recommended", rev: false, beta: false, sel: [], open: "" };
 var STORE = JSON.parse(document.getElementById("store").textContent);
 var BY_WARNING = "The result contains firmware-derived data: build it yourself, install it on your own devices only, never share it.";
 var ID_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -146,8 +153,16 @@ var GENS = { gen1: { label: "Verified Gen1", tip: "The newest release has a reco
              gen2: { label: "Verified Gen2", tip: "The newest release's Gen2 (aarch64) build has a recorded hardware test on a Gen2 MPC (see Tested on)." } };
 function verifiedOn(p) { return tierOf(p) !== "verified" ? [] : Array.isArray(p.verified_on) ? p.verified_on.filter(function (g) { return GENS[g]; }) : ["gen1"]; }
 var TIER_FILTERS = ["verified", "verified-gen1", "verified-gen2", "listed", "experimental", "all"];
+/* Recommended tiebreaker: the date of the newest hardware test on the newest stable release ("" when none). */
+function testedDate(p) {
+  var v = p.versions.filter(function (x) { return !x.yanked && x.channel === "stable"; })[0], d = "";
+  if (v) (v.tested || []).forEach(function (t) { if ((t.date || "") > d) d = t.date; });
+  return d;
+}
 var SORTS = {
-  recommended: { label: "Recommended",     cmp: function (a, b) { return (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || TIERS[tierOf(a)].rank - TIERS[tierOf(b)].rank || a.name.localeCompare(b.name); }, desc: false },
+  /* featured, tier, Verified generations (both before one), newest test date, downloads, then name */
+  recommended: { label: "Recommended",     cmp: function (a, b) { return (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || TIERS[tierOf(a)].rank - TIERS[tierOf(b)].rank ||
+    verifiedOn(b).length - verifiedOn(a).length || testedDate(b).localeCompare(testedDate(a)) || b.downloads - a.downloads || a.name.localeCompare(b.name); }, desc: false },
   name:      { label: "Name",              cmp: function (a, b) { return a.name.localeCompare(b.name); }, desc: false },
   updated:   { label: "Recently updated",  cmp: function (a, b) { return a.updated.localeCompare(b.updated); }, desc: true },
   downloads: { label: "Downloads",         cmp: function (a, b) { return a.downloads - b.downloads; }, desc: true },
@@ -160,7 +175,7 @@ function uniq(f) { var o = {}; P.forEach(function (p) { var v = f(p); if (v) o[v
 function fillSelect(id, all, values, label) {
   $(id).innerHTML = '<option value="">' + all + '</option>' + values.map(function (v) { return '<option value="' + esc(v) + '">' + esc(label ? label(v) : v) + '</option>'; }).join("");
 }
-var PLUGIN_TABS = ["instrument", "midi", "effect", "addin", "all"];
+var PLUGIN_TABS = ["all", "instrument", "midi", "effect", "addin"];
 var KINDS = { instrument: "Instruments", midi: "MIDI", effect: "Effects", addin: "Addins", all: "Plugins" };
 /* a plugin with role "midi" is listed under the MIDI tab, not Instruments */
 function inTabKind(p, k) { if (k === "all") return true; return kindsOf(p).some(function (c) { return (c === "instrument" && p.role === "midi" && c === p.kind ? "midi" : c) === k; }); }
@@ -239,7 +254,7 @@ function barLine(p) {
   if (!m.length) return "";
   return '<details class="how"><summary>To improve this listing (' + m.length + ')</summary><ul>' + m.map(function (k) { return '<li>' + esc(CAT.bar[k]) + '</li>'; }).join("") + '</ul></details>';
 }
-function card(p) {
+function card(p, big) {
   var by = isBY(p), v = shown(p), tags = [];
   if (by) tags.push('<span class="tag build" title="No download: you build it from your own files">Build it yourself</span>');
   if (tierOf(p) === "verified") verifiedOn(p).forEach(function (g) { tags.push('<span class="tag tier-verified" data-gen="' + g + '" title="' + esc(GENS[g].tip) + '">' + GENS[g].label + '</span>'); });
@@ -255,8 +270,12 @@ function card(p) {
     var cols = by ? '<td><a href="' + esc(safeUrl(x.source_url)) + '">tag ' + esc(x.tag) + '</a></td>' : '<td>' + size(x.size) + '</td><td title="sha256 ' + esc(x.sha256) + '">' + esc(x.sha256.slice(0, 10)) + '</td>';
     return '<tr class="' + (x.yanked ? "y" : "") + '"><td>v' + esc(x.version) + '</td><td>' + esc(x.date) + '</td><td>' + esc(x.channel) + (x.yanked ? ", yanked" : "") + '</td>' + cols + '</tr>';
   }).join("") + '</table></details>' : "";
-  var shot = p.screenshot && safeUrl(p.screenshot) !== "#" ? '<a class="shot" href="' + esc(p.screenshot) + '"><img src="' + esc(p.screenshot) + '" alt="' + esc(p.name) + ' screenshot" loading="lazy"></a>' : "";
-  var head = '<article class="card' + (by ? " by" : "") + '" data-tier="' + tierOf(p) + '">' + shot + '<header><div><h2>' + esc(p.name) + '</h2><div class="by">by ' + esc(p.author) + '</div></div>' +
+  /* a dead image link removes its frame instead of leaving an empty box */
+  var img = '<img src="' + esc(p.screenshot) + '" alt="' + esc(p.name) + ' screenshot" loading="' + (big ? "eager" : "lazy") + '" onerror="this.parentNode.remove()">';
+  var shot = !(p.screenshot && safeUrl(p.screenshot) !== "#") ? "" : big ? '<div class="shot">' + img + '</div>'
+    : '<a class="shot" href="p/' + encodeURIComponent(p.id) + '.html" data-open="' + esc(p.id) + '" title="Open ' + esc(p.name) + '">' + img + '</a>';
+  var head = '<article class="card' + (by ? " by" : "") + (big ? " big" : "") + '" data-tier="' + tierOf(p) + '">' + shot + '<header><div><h2' + (big ? ' id="modal-title">' + esc(p.name)
+    : '><a class="open" href="p/' + encodeURIComponent(p.id) + '.html" data-open="' + esc(p.id) + '">' + esc(p.name) + '</a>') + '</h2><div class="by">by ' + esc(p.author) + '</div></div>' +
     (v ? '<span class="ver" title="Latest ' + (by ? "tag" : esc(v.channel) + " release") + '">v' + esc(v.version) + (v.channel === "beta" ? " beta" : "") + '</span>' : '<span class="ver">' + (by ? "no tag" : "no release") + '</span>') + '</header>' +
     '<div class="tags">' + tags.join("") + '</div><p>' + esc(p.summary) + '</p>' + barLine(p);
   if (by) {
@@ -289,7 +308,7 @@ function card(p) {
 function render() {
   var out = P.filter(match), so = SORTS[state.sort];
   out.sort(function (a, b) { var r = so.cmp(a, b); return (so.desc ? -r : r) * (state.rev ? -1 : 1); });
-  $("grid").innerHTML = out.map(card).join("");
+  $("grid").innerHTML = out.map(function (p) { return card(p); }).join("");
   $("empty").hidden = out.length > 0;
   var hid = !state.tier ? P.filter(function (p) { return tierOf(p) === "experimental" && (PLUGIN_TABS.indexOf(state.tab) < 0 || inTabKind(p, state.tab)); }).length : 0;
   $("exp").hidden = !hid; $("exp-n").textContent = hid;
@@ -301,26 +320,35 @@ function render() {
   $("dir").title = "Sorted " + (down ? "descending" : "ascending");
   save();
 }
-function save() {
-  var d = { tab: state.tab === "instrument" ? "" : state.tab, q: state.q, style: state.style, dev: state.dev, lic: state.lic, dist: state.dist, os: state.os, gen: state.gen, tier: state.tier, sort: state.sort === "recommended" ? "" : state.sort, rev: state.rev ? "1" : "", beta: state.beta ? "1" : "", sel: state.sel.join(",") }, q = [];
+function url() {
+  var d = { tab: state.tab === "all" ? "" : state.tab, q: state.q, style: state.style, dev: state.dev, lic: state.lic, dist: state.dist, os: state.os, gen: state.gen, tier: state.tier, sort: state.sort === "recommended" ? "" : state.sort, rev: state.rev ? "1" : "", beta: state.beta ? "1" : "", sel: state.sel.join(","), p: state.open || "" }, q = [];
   Object.keys(d).forEach(function (k) { if (d[k]) q.push(k + "=" + encodeURIComponent(d[k])); });
-  try { history.replaceState(null, "", q.length ? "#" + q.join("&") : location.pathname + location.search); } catch (e) {}
+  return q.length ? "#" + q.join("&") : location.pathname + location.search;
+}
+function save() {
+  try { history.replaceState(null, "", url()); } catch (e) {}
 }
 function load() {
+  state.open = "";
   location.hash.replace(/^#/, "").split("&").forEach(function (kv) {
     var i = kv.indexOf("="); if (i < 0) return;
     var k = kv.slice(0, i), v = decodeURIComponent(kv.slice(i + 1));
     if (k === "rev" || k === "beta") state[k] = v === "1";
+    else if (k === "p") state.open = ID_RE.test(v) && P.some(function (p) { return p.id === v; }) ? v : "";
     else if (k === "sel") state.sel = v.split(",").filter(function (id) { return ID_RE.test(id) && P.some(function (p) { return p.id === id && !isBY(p); }); });
     else if (k in state) state[k] = v;
   });
   if (!SORTS[state.sort]) state.sort = "recommended";
   if (state.tier && TIER_FILTERS.indexOf(state.tier) < 0) state.tier = "";
   if (state.tab === "plugins") state.tab = "instrument";   // links from before the split
-  if (TABS.indexOf(state.tab) < 0) state.tab = "instrument";
+  if (TABS.indexOf(state.tab) < 0) state.tab = "all";
+  if (state.open && !/(^#|&)tab=/.test(location.hash)) {   /* a shared #p= link shows its plugin's own tab behind the popup */
+    var o = P.filter(function (p) { return p.id === state.open; })[0];
+    state.tab = PLUGIN_TABS.filter(function (k) { return inTabKind(o, k); })[0] || state.tab;
+  }
 }
 /* Tabs: Instruments, Effects and Addins share the filter bar and grid (the tab is the kind); Device patches and Companion apps are their own panels. The tab is part of the URL hash. */
-var TABS = ["instrument", "midi", "effect", "addin", "all", "patches", "apps"];
+var TABS = ["all", "instrument", "midi", "effect", "addin", "patches", "apps"];
 function showTab(t, focus) {
   state.tab = t;
   TABS.forEach(function (n) {
@@ -330,7 +358,7 @@ function showTab(t, focus) {
     if (on && focus) $("tab-" + n).focus();
   });
   $("panel-plugins").hidden = PLUGIN_TABS.indexOf(t) < 0;
-  $("panel-plugins").setAttribute("aria-labelledby", "tab-" + (PLUGIN_TABS.indexOf(t) < 0 ? "instrument" : t));
+  $("panel-plugins").setAttribute("aria-labelledby", "tab-" + (PLUGIN_TABS.indexOf(t) < 0 ? "all" : t));
   render();
 }
 document.querySelector(".tabs").addEventListener("click", function (e) { var b = e.target.closest("[data-tab]"); if (b) showTab(b.getAttribute("data-tab")); });
@@ -340,7 +368,48 @@ document.querySelector(".tabs").addEventListener("keydown", function (e) {
   if (d === undefined) return;
   e.preventDefault(); showTab(TABS[(i + d + TABS.length) % TABS.length], true);
 });
-addEventListener("hashchange", function () { load(); sync(); render(); showTab(state.tab); });
+addEventListener("hashchange", function () { load(); sync(); render(); showTab(state.tab); modal(); });
+/* Plugin popup: the screenshot opens the card over a dark backdrop. Its link is the page's hash plus p=<catalog id> (ids never
+   change), so it can be shared; Back, Escape, the backdrop and the close button all close it. */
+var pushed = false, returnTo = null;
+function modal() {
+  var p = state.open && P.filter(function (x) { return x.id === state.open; })[0];
+  $("modal-body").innerHTML = p ? card(p, true) : "";
+  $("modal").hidden = !p;
+  document.body.classList.toggle("modal-open", !!p);
+  if (p) $("modal-x").focus();
+  else if (returnTo) {   /* looked up by id because closing via Back redraws the grid */
+    var a = $("grid").querySelector(returnTo); if (a) a.focus({ preventScroll: true });
+    returnTo = null;
+  }
+}
+function openPlugin(id, from) {
+  state.open = id; returnTo = from ? '[data-open="' + id + '"].' + from.className.split(" ")[0] : null;
+  try { history.pushState(null, "", url()); pushed = true; } catch (e) {}
+  modal();
+}
+function closePlugin() {
+  if (!state.open) return;
+  if (pushed) { pushed = false; history.back(); return; }
+  state.open = ""; save(); modal();
+}
+addEventListener("popstate", function () { pushed = false; });   /* the hashchange that follows reloads the state */
+$("grid").addEventListener("click", function (e) {
+  var a = e.target.closest("[data-open]");
+  if (!a || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  e.preventDefault(); openPlugin(a.getAttribute("data-open"), a);
+});
+/* The link to share is p/<id>.html (catalog_site.py share_page): link previews read its Open Graph tags, which a #p= hash can't carry. */
+$("modal-share").addEventListener("click", function () {
+  var b = this, link = new URL("p/" + encodeURIComponent(state.open) + ".html", location.href).href;
+  var name = (P.filter(function (x) { return x.id === state.open; })[0] || {}).name;
+  var done = function () { b.textContent = "Link copied"; setTimeout(function () { b.textContent = "Copy link"; }, 2000); };
+  if (navigator.share && matchMedia("(pointer: coarse)").matches) navigator.share({ title: name, url: link }).catch(function () {});
+  else if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(done, function () { prompt("Copy this link", link); });
+  else prompt("Copy this link", link);
+});
+$("modal").addEventListener("click", function (e) { if (e.target === $("modal") || e.target.closest("#modal-x")) closePlugin(); });
+addEventListener("keydown", function (e) { if (e.key === "Escape" && state.open) closePlugin(); });
 function filterApps() {
   var q = $("a-q").value.trim().toLowerCase(), pl = $("a-plat").value, n = 0;
   Array.prototype.forEach.call($("apps").children, function (c) {
@@ -355,9 +424,9 @@ Object.keys(map).forEach(function (id) { $(id).addEventListener(id === "q" ? "in
 $("show-exp").addEventListener("click", function () { state.tier = "all"; sync(); render(); });
 $("beta").addEventListener("change", function () { state.beta = $("beta").checked; render(); });
 $("dir").addEventListener("click", function () { state.rev = !state.rev; render(); });
-$("clear").addEventListener("click", function () { state = { tab: state.tab, q: "", style: "", dev: "", lic: "", dist: "", os: "", gen: "", tier: "", sort: "recommended", rev: false, beta: false, sel: state.sel }; sync(); render(); });
+$("clear").addEventListener("click", function () { state = { tab: state.tab, q: "", style: "", dev: "", lic: "", dist: "", os: "", gen: "", tier: "", sort: "recommended", rev: false, beta: false, sel: state.sel, open: "" }; sync(); render(); });
 function sync() { Object.keys(map).forEach(function (id) { $(id).value = state[map[id]]; }); $("beta").checked = state.beta; }
-load(); sync(); render(); showTab(state.tab); filterApps();
+load(); sync(); render(); showTab(state.tab); filterApps(); modal();
 
 /* Install command: ssh into the device, download mpc-store.sh from this site, run it. The plugin ids are validated above and the
    address below, and everything is written with textContent, so nothing typed here can inject markup or shell syntax. */
@@ -382,12 +451,15 @@ function panel() {
   $("script-link").href = SITE + "mpc-store.sh";
   $("cmd-more").textContent = ["list", "update", "prune --keep 10", "sync"].map(function (a) { return withScript(a, a !== "list"); }).join("\n\n");
 }
-$("grid").addEventListener("change", function (e) {
+function pick(e) {
   var id = e.target.getAttribute && e.target.getAttribute("data-pick"); if (!id) return;
   var i = state.sel.indexOf(id);
   if (e.target.checked && i < 0) state.sel.push(id); else if (!e.target.checked && i >= 0) state.sel.splice(i, 1);
+  if (e.currentTarget.id === "modal-body") render();   /* keep the grid's checkbox in step */
   panel(); save();
-});
+}
+$("grid").addEventListener("change", pick);
+$("modal-body").addEventListener("change", pick);
 $("ip").addEventListener("input", panel);
 $("copy-main").addEventListener("click", function () {
   var text = $("cmd-main").textContent, done = function () { $("copied").textContent = "Copied"; setTimeout(function () { $("copied").textContent = ""; }, 2000); };

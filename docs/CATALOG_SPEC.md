@@ -66,7 +66,7 @@ a plugin folder (`portable/<skin>/`) that is missing `version.xml`, `Plugin Skin
 an extra; a `plugin-meta.xml` whose `file=` is not `%payload-path%/<skin>/<so>` or whose `uid`/`name` disagree with the manifest;
 an `os_compat` that is not `["2.x","3.x"]` or `["3.x"]`, or that claims 2.x when the check below does not confirm it;
 an unknown `layout`; with `--catalog`, no `source_repo` or `license`; with `--expect-id/--expect-repo`, a registry mismatch.
-Zips of the old layout (no `layout` field) are checked against their own rules (`payload/`, `plugin.xml`).
+Zips of the old layout (no `layout` field) are checked against their own rules (`payload/`, `plugin.xml`). `catalog_check.py` warns for each one ("old layout"); with `--require-portable` it is an error. The builder reports a problem (and `catalog_issues.py` opens an issue) when a plugin's **newest stable** release is of the old layout; older versions stay silent history. A PR that adds or changes a registry entry runs `catalog_build.py --require-portable <ids>`, so a new listing must already release the portable folder.
 
 **MPC OS compatibility (`tools/skin_compat.py`, docs/OS2_SKINS.md).** The checker works out `os_compat` itself, for every version, so releases
 made before the field existed are classified too. A version is `2.x` and `3.x` when the `.so` needs glibc 2.32 or less and every
@@ -162,6 +162,11 @@ zip uses `layout: "addin"`:
   a device that looks like MPC OS 2.x (glibc below 2.34); they warn and never block.
 - **`catalog.tsv`, addins:** `skin` and `uid` are `-`. `mpc-store.sh` installs an addin to `/data/mpc-addins/<id>` and reads the installed
   version from the folder's `addin.manifest` (`ADDIN_VERSION`), not from `.mpc-store`.
+
+- **Share pages, `p/<id>.html`:** `catalog_site.py` writes one small page per plugin id (ids that are lowercase words joined by hyphens) next to
+  `index.html`. It carries the card's Open Graph and Twitter tags (title, summary, https screenshot) because link previews read neither the
+  `#p=<id>` hash nor scripts, then sends a browser on to `index.html#p=<id>` by script (not a meta refresh: Facebook's crawler would follow it).
+  The catalog page's popup, "Copy link" button and card links point at these pages. Not part of `catalog.json`, `catalog.tsv` or any installer.
 
 ## Companion apps (`catalog/apps.json`)
 Desktop tools that work with a standalone MPC but are not plugins. Not part of `catalog.json`, `catalog.tsv` or any installer: the site

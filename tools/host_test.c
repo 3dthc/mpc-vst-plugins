@@ -195,6 +195,11 @@ static void step_of_option_tests(AEffect *a) {
     a->setP(a, prev, 1.0f); run(a, 1); a->setP(a, prev, 0.0f);
     CHECK(fabsf(a->getP(a, t) - (float)(n - 2) / (n - 1)) < 1e-3f, "step_of %s on %s: steps one option (%.3f)",
           PARAMS[prev].key, PARAMS[t].key, a->getP(a, t));
+    /* a stepper pressed every block asks for an UpdateDisplay each time; the wrapper sends at most one per 50 ms */
+    run(a, 40); updates = 0;
+    for (int k = 0; k < 32; k++) { a->setP(a, next, 1.0f); run(a, 1); a->setP(a, next, 0.0f); }
+    CHECK(updates >= 1 && updates <= 2, "step_of %s pressed every block for 4096 frames: %d UpdateDisplay(s) (want 1-2, one per 50 ms)",
+          PARAMS[next].key, updates);
 }
 
 /* MIDI control (gen_vst.py cc_lines()): CC 20 moves the first Q-Link's parameter, NRPN n sets parameter n, and the
@@ -389,6 +394,14 @@ int main(void) {
         a->setP(a, cont, 0.25f); a->d(a, 7, cont, 0, d, 0);
         CHECK(fabsf(a->getP(a, cont) - 0.25f) <= tol, "set %s 0.25 -> get %.3f (\"%s\")", PARAMS[cont].key, a->getP(a, cont), d);
         CHECK(fabsf(b->getP(b, cont) - 0.25f) > 1e-4f || PARAMS[cont].def == 0.25f, "instance b unaffected");
+        /* a host write (automation, a Q-Link) asks for no UpdateDisplay of its own: MPC rebuilds its parameter screen on
+         * each one (docs/NOTES.md, 2026-10-21). Polled readouts that show the value may still ask, at most every 100 ms. */
+        if (!PARAMS[cont].refresh_display) {
+            run(a, 40); updates = 0;
+            for (int k = 0; k < 32; k++) { a->setP(a, cont, (k & 1) ? 0.3f : 0.7f); run(a, 1); }
+            CHECK(updates <= 2, "32 host writes of %s over 4096 frames: %d UpdateDisplay(s) (want at most the 100 ms poll's)",
+                  PARAMS[cont].key, updates);
+        }
     }
     if (en >= 0) {
         int n = PARAMS[en].nopts;

@@ -21,12 +21,15 @@ var indexHTML []byte
 // App is the local web server. It listens on 127.0.0.1 only and every request must carry the random token the app printed, so
 // nothing else on the network, and no web page open in the browser, can drive it. Nothing about the device is written to disk.
 type App struct {
-	cfg        Config
-	token      string
-	hosts      map[string]bool // accepted Host headers
-	catalogURL string
-	patchesURL string
-	work       string
+	cfg         Config
+	token       string
+	hosts       map[string]bool // accepted Host headers
+	catalogURL  string
+	patchesURL  string
+	releasesURL string // where the version check looks; empty = no check
+	verAt       time.Time
+	verInfo     versionInfo
+	work        string
 
 	mu      sync.Mutex
 	dev     *Device
@@ -43,7 +46,7 @@ type App struct {
 
 func NewApp(cfg Config, token, hostport, catalogURL, work string) *App {
 	port := hostport[strings.LastIndex(hostport, ":")+1:]
-	return &App{cfg: cfg, token: token, catalogURL: catalogURL, patchesURL: patchesURLFor(catalogURL), work: work, uploads: map[string]*Package{}, patchCode: map[string][]byte{},
+	return &App{cfg: cfg, token: token, catalogURL: catalogURL, releasesURL: defaultReleasesURL, patchesURL: patchesURLFor(catalogURL), work: work, uploads: map[string]*Package{}, patchCode: map[string][]byte{},
 		hosts: map[string]bool{"127.0.0.1:" + port: true, "localhost:" + port: true}}
 }
 
@@ -51,12 +54,14 @@ func (a *App) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", a.index)
 	mux.HandleFunc("/api/state", a.state)
+	mux.HandleFunc("/api/version", a.versionAPI)
 	mux.HandleFunc("/api/connect", a.connect)
 	mux.HandleFunc("/api/disconnect", a.disconnect)
 	mux.HandleFunc("/api/catalog", a.catalog)
 	mux.HandleFunc("/api/upload", a.upload)
 	mux.HandleFunc("/api/discard", a.discard)
 	mux.HandleFunc("/api/plan", a.plan)
+	mux.HandleFunc("/api/mkroot", a.mkroot)
 	mux.HandleFunc("/api/install", a.install)
 	mux.HandleFunc("/api/device", a.devicePlugins)
 	mux.HandleFunc("/api/remove", a.remove)
@@ -310,10 +315,40 @@ func (a *App) discard(w http.ResponseWriter, r *http.Request) {
 }
 
 type selection struct {
-	Catalog []string `json:"catalog"`
-	Uploads []string `json:"uploads"`
-	Root    string   `json:"root"` // the Synths folder to install into ("" = the internal drive)
-	Confirm bool     `json:"confirm"`
+	Catalog  []string `json:"catalog"`
+	Uploads  []string `json:"uploads"`
+	Root     string   `json:"root"`     // the Synths folder to install into ("" = the internal drive)
+	Register bool     `json:"register"` // InstallOpts.Register
+	Confirm  bool     `json:"confirm"`
+}
+
+// mkroot creates a Synths folder on a drive under /media that has none (Device.MakeRoot), so plugins can be installed there.
+func (a *App) mkroot(w http.ResponseWriter, r *http.Request) {
+	if !postOnly(w, r) {
+		return
+	}
+	var in struct{ Drive string }
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<12)).Decode(&in); err != nil {
+		fail(w, 400, "bad request")
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.dev == nil {
+		fail(w, 400, "connect to the device first")
+		return
+	}
+	if a.job != nil {
+		if st, _, _, _ := a.job.snapshot(0); st == "running" {
+			fail(w, 409, "an install is running: wait for it to finish")
+			return
+		}
+	}
+	if err := a.dev.MakeRoot(in.Drive); err != nil {
+		fail(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]any{"device": a.dev.Info, "problems": a.dev.Info.problems()})
 }
 
 // resolve turns a selection into install items. Caller holds a.mu.
@@ -452,7 +487,7 @@ func (a *App) install(w http.ResponseWriter, r *http.Request) {
 		if a.dev == dev {
 			dev.readInfo(dev.Info.Host, dev.Info.Fingerprint)
 		}
-	})
+	}, InstallOpts{Register: s.Register})
 	writeJSON(w, 200, map[string]string{"job": j.ID})
 }
 

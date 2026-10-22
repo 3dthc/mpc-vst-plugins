@@ -279,6 +279,16 @@ class CatalogTest(Base):
         self.assertEqual(e, [])
         self.assertNotIn("layout", rec["manifest"])
 
+    def test_old_layout_warns_and_is_an_error_when_portable_is_required(self):
+        z = self.legacy_zip()
+        e, w, _ = catalog_check.check(z, catalog=True)
+        self.assertEqual(e, [])
+        self.assertTrue(any("old layout" in x for x in w), w)
+        e, _, _ = catalog_check.check(z, catalog=True, require_portable=True)
+        self.assertTrue(any("old layout" in x for x in e), e)
+        e, w, _ = catalog_check.check(self.build(), catalog=True, require_portable=True)
+        self.assertFalse(any("old layout" in x for x in e + w))
+
     def test_wrong_arch_and_glibc(self):
         e, _, _ = catalog_check.check(self.build(machine=62))
         self.assertTrue(any("armv7" in x for x in e))
@@ -685,6 +695,21 @@ class BuildTest(Base):
         gh = FakeGitHub({"acme/test-synth": [renamed, old]}, {1: good})
         self.assertEqual(catalog_build.build([entry, other], gh, os.path.join(self.tmp, "c3"), set())[1], [])
 
+    def test_an_old_layout_newest_release_is_a_problem_and_fails_the_portable_check(self):
+        old = CatalogTest.legacy_zip(self)   # 1.0.0, no "layout" field
+        gh = FakeGitHub({"acme/test-synth": [self.rel("v1.0.0", 1)]}, {1: old})
+        cat, problems = catalog_build.build([self.ENTRY], gh, os.path.join(self.tmp, "c"), set())
+        self.assertEqual(len(cat["plugins"][0]["versions"]), 1, problems)   # still listed
+        self.assertEqual([p["tag"] for p in problems], ["v1.0.0"])
+        self.assertIn("old /sdcard/vst layout", problems[0]["error"])
+        # required: the release is invalid, so nothing is listed and the problem says why
+        cat, problems = catalog_build.build([self.ENTRY], gh, os.path.join(self.tmp, "c2"), set(), require_portable={"test-synth"})
+        self.assertEqual(cat["plugins"][0]["versions"], [])
+        self.assertTrue(any("old layout" in p["error"] for p in problems), problems)
+        # a portable release raises nothing
+        gh = FakeGitHub({"acme/test-synth": [self.rel("v1.0.0", 1)]}, {1: self.build("1.0.0")})
+        self.assertEqual(catalog_build.build([self.ENTRY], gh, os.path.join(self.tmp, "c3"), set(), require_portable={"test-synth"})[1], [])
+
     def test_each_version_carries_its_os_compat(self):
         import json
         from test_skin_compat import tui_2x
@@ -787,6 +812,12 @@ class BuildTest(Base):
         self.assertIn("cannot list", problems[0]["error"])
         self.assertTrue(problems[0]["unreadable"])
 
+    def test_registry_length_limits(self):
+        e = dict(self.ENTRY)
+        self.assertEqual(catalog_build.check_entry(dict(e, summary="x" * 350, tags=["t%d" % i for i in range(8)]), "x/test-synth.json"), [])
+        self.assertTrue(any("summary" in m for m in catalog_build.check_entry(dict(e, summary="x" * 351), "x/test-synth.json")))
+        self.assertTrue(any("tags" in m for m in catalog_build.check_entry(dict(e, tags=["t%d" % i for i in range(9)]), "x/test-synth.json")))
+
     def test_registry_rules(self):
         self.assertEqual(catalog_build.check_entry(self.ENTRY, "x/test-synth.json"), [])
         self.assertTrue(catalog_build.check_entry({**self.ENTRY, "license": "Proprietary"}))
@@ -795,6 +826,12 @@ class BuildTest(Base):
         self.assertEqual(catalog_build.check_entry({**self.ENTRY, "tier": "experimental", "featured": True}, "x/test-synth.json"), [])
         self.assertTrue(catalog_build.check_entry({**self.ENTRY, "tier": "verified"}))
         self.assertTrue(catalog_build.check_entry({**self.ENTRY, "featured": "yes"}))
+
+    def test_stray_json_beside_the_registry(self):
+        os.makedirs(os.path.join(self.tmp, "plugins"))
+        for n in ("apps.json", "patches.json", "yanked.json", "plugins/test-synth.json", "test-synth.json", "README.md"):
+            open(os.path.join(self.tmp, n), "w").write("{}")
+        self.assertEqual([os.path.basename(f) for f, _ in catalog_build.stray_files(self.tmp)], ["test-synth.json"])
 
 
 import catalog_issues  # noqa: E402

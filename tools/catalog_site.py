@@ -13,6 +13,7 @@ import glob
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 from html import escape as html_escape
@@ -203,6 +204,28 @@ def redirect_page(target):
             '<body><p>This page moved to <a href="%s">%s</a>.</p></body></html>\n' % (t, t, t, t))
 
 
+SHARE_ID = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+
+
+def share_page(p):
+    """p/<id>.html: the plugin's link for sharing. Link previews (Telegram, Slack, X, Facebook) read only the HTML at a URL, never
+    the #p=<id> hash and never JS, so this page carries the card's title, summary and screenshot as Open Graph tags; a browser is
+    sent on to the popup by script. Not a meta refresh: Facebook's crawler follows that and would read the catalog page instead."""
+    e = lambda x: html_escape(str(x), quote=True)
+    target = "../index.html#p=" + p["id"]
+    title = "%s by %s" % (p["name"], p["author"])
+    shot = p.get("screenshot", "") if str(p.get("screenshot", "")).startswith("https://") else ""
+    meta = [("og:type", "website"), ("og:site_name", "Open MPC - Plugin Catalog"), ("og:title", title), ("og:description", p.get("summary", ""))]
+    meta += [("og:image", shot), ("og:image:alt", p["name"] + " screenshot")] if shot else []
+    tw = [("twitter:card", "summary_large_image" if shot else "summary"), ("twitter:title", title), ("twitter:description", p.get("summary", ""))]
+    tw += [("twitter:image", shot)] if shot else []
+    return ('<!doctype html>\n<html lang="en"><head><meta charset="utf-8"><title>%s - Open MPC Plugin Catalog</title>'
+            '<meta name="description" content="%s">%s%s<script>location.replace(%s)</script></head>'
+            '<body><p><a href="%s">%s in the Open MPC Plugin Catalog</a></p></body></html>\n'
+            % (e(title), e(p.get("summary", "")), "".join('<meta property="%s" content="%s">' % (k, e(v)) for k, v in meta),
+               "".join('<meta name="%s" content="%s">' % (k, e(v)) for k, v in tw), json.dumps(target), e(target), e(p["name"])))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--catalog", default="catalog/dist/catalog.json")
@@ -254,6 +277,10 @@ def main():
     open(os.path.join(a.out, "catalog.tsv"), "w", encoding="utf-8", newline="\n").write(tsv(catalog, helpers))
     for old, new in MOVED_PAGES.items():   # links to pages that were merged into another still work
         open(os.path.join(a.out, old), "w", encoding="utf-8").write(redirect_page(new))
+    os.makedirs(os.path.join(a.out, "p"), exist_ok=True)
+    for p in catalog["plugins"]:
+        if SHARE_ID.match(p.get("id", "")):
+            open(os.path.join(a.out, "p", p["id"] + ".html"), "w", encoding="utf-8").write(share_page(p))
     open(os.path.join(a.out, ".nojekyll"), "w").close()
     print("%s (%d plugins, %d guide pages)" % (os.path.join(a.out, "index.html"), len(catalog["plugins"]), len([p for p in pages if not p.get("hidden")])))
 

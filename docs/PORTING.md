@@ -76,6 +76,16 @@ for the pattern). This applies to every future port, not just ones that hit the 
       chosen file by NAME in the plugin state, not by position (positions shift when files are added), and re-find it by name
       if it moved; a missing file shows as not found and the audio keeps running. Users keep collections on cards, so an engine
       may also look for its data folder under `/media` (the plugin's own folder first), not only next to the `.so`.
+- [ ] No I/O in `set_param()`/`get_param()`: one lock (`w->lock`, `wrapper/vst2_wrap.c`) covers set, get, MIDI and render,
+      so a slow call on the host's thread delays audio. A port author's 50-130 ms SQLite query inside `set_param` clicked on every
+      press, and no de-click fade can hide a late audio callback. Post the work to a worker thread (`nice(10)` is fine), publish the
+      result under a short mutex of its own, and pick it up in `render()` with `pthread_mutex_trylock`.
+- [ ] Every report to the host (`audioMasterAutomate`, `UpdateDisplay`, momentary buttons springing back, readout polls) is
+      sent from `processReplacing()`. When MPC stops calling it, nothing goes out, so don't treat render as a heartbeat. A
+      status light that must move while idle needs its own timer (MM-303 runs a 50 ms ticker per instance).
+- [ ] Polled readouts cost one `get_param()` each on the audio thread (every 10 ms for `<key>_on`, every 100 ms for text).
+      With hundreds of params, set `"poll": false` on readouts that only change on a tap, and keep anything costly out of a
+      polled key (docs/BENCH.md).
 - [ ] State saved via chunks (`effGetChunk`/`effSetChunk`).
 - [ ] Offline x86 test: `tools/test_port.sh <port>/vst.json` prints PASSED (instances, parameter round-trip,
       options, popups, MIDI → audio, chunk restore, under ASan).
@@ -88,7 +98,14 @@ for the pattern). This applies to every future port, not just ones that hit the 
 
 ## 2. Parameters
 - [ ] Stable order (the VST index is what skins and projects bind to). Append only; never reorder a shipped plugin.
+      `gen_vst.py` writes `params.lock` next to `vst.json` on the first build: commit it. A build fails when an existing key
+      changes index; `GEN_VST_RELOCK=1` accepts the break (before a first release only). Rebuild the skin after any change.
 - [ ] Options: an index; nudges step one option (the wrapper does this). Triggers: `"momentary": true`, which springs back.
+- [ ] A control can't be disabled from the host side: the wrapper has no `effGetParameterProperties`, and JUCE's VST2
+      host has no "disabled" flag anyway. Hide it in the skin (`when=`). A control with nothing to do (a pager with one
+      page, "next" at the end of a list) must do nothing in the engine: clamp and ignore it there. `setParameter` still
+      arrives for a param that isn't automatable. A button with an empty on/off image draws MPC's generic "Button"
+      caption: give it real artwork.
 - [ ] Display strings are the only dynamic text channel into the skin (see NOTES on refresh behaviour).
       A param whose `get_param()` returns real text (a name, a status message), not a number, needs
       `"display": "string"` in its parameter entry -- otherwise the wrapper's default numeric
@@ -116,6 +133,10 @@ for the pattern). This applies to every future port, not just ones that hit the 
       draws it wrongly (misaligned half-frames); reduce the frame count or size. (Reported by another port author; not yet
       reproduced on our device. `catalog_check.py` warns about such images.)
 - [ ] Q-Links: 1–8 = knob bank 1, 9–16 = bank 2; nested pages via several `qlinks` lines.
+- [ ] Labels or unpolled text that follow another param (`dynamic_name` / `dynamic_display` reading a selector, a
+      `"poll": false` readout bound with `get=`): put `"refresh_display": true` on that selector. A plain host write
+      no longer asks MPC for an UpdateDisplay (NOTES.md 2026-10-21). Test Q-Links on track edit → automation, not only
+      on the plugin screen: that screen takes a different host path.
 - [ ] Option lists and `"display": "int"` params step one option or whole number per Q-Link event and per data wheel
       click (`settle()`). If a short one races by under a Q-Link, `"qlink_ticks": N` on that param (opt-in, off by default)
       counts N events per step: 6 suited a 9-option list on a Key 37. It costs N wheel clicks per step too, and on a Force

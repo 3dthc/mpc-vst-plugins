@@ -1339,7 +1339,7 @@ Eleven `mmcblk0pN` dumps, read read-only with `debugfs`. Layout: p1-p6 raw/boot 
 - Independently confirmed (second real device, matches the 2026-10-06 Discord report from different hardware): `strings` over the raw `spl1`/`spl2`/`uboot1`/`uboot2` partitions find **no `inmusic-unlock-magic` string**; fastboot plumbing is present but not the OEM unlock command (see `docs/FIRMWARE_BUILDER.md`).
 
 ### 2026-10-10: Gen2 (MPC Live III) `probe_device.sh` output, live device (tester-run, settles the `/synths` question above)
-Two probe runs on the same unit (root via two different unofficial boot methods, both unrelated to this project; irrelevant to the result, both gave the same facts): `aarch64`, `MPC OS 5.0.18 (scarthgap)`, 8 cores (`0xd05`/`0xd0b`, i.e. Cortex-A55/A76, matches RK3588), VST2 compiled in (no VST3/LV2), `/data/Settings/MPC/MPC.settings` confirmed again.
+Two probe runs on the same unit (root via two different unofficial boot methods, both unrelated to this project; irrelevant to the result, both gave the same facts): `aarch64`, OS base `5.0.18 (scarthgap)` (the az01/buildroot base; the official user-facing version is MPC OS 3.9.1, as the info screen shows — same as other Gen1/Force units here that run a 5.0.x base), 8 cores (`0xd05`/`0xd0b`, i.e. Cortex-A55/A76, matches RK3588), VST2 compiled in (no VST3/LV2), `/data/Settings/MPC/MPC.settings` confirmed again.
 - `mount` shows **`/synths` is mounted** from `/dev/nvme0n1p1`, **exfat, `ro`** (`fmask=0022,dmask=0022`) — so `/synths/Synths` exists and (per `ls -ld`, 131072-byte dir, dated Jan 5 2026) is populated, but **nothing can be installed there: it's read-only on this unit.** This settles the open question above: `/synths/Synths` being listed in `MPC.settings` doesn't mean it's writable; whether it's writable depends on what's on the device's NVMe drive and how it got formatted/mounted.
 - `/storage` and `/content` are **not mounted at all** (no line in `mount`) — confirms the eMMC-dump finding that `/data/user-storage-image` / the `acvs-user-partition` loopback has never been provisioned on a real unit we've seen, on two separate devices now.
 - The only **writable** Synths locations on this device are removable media: `/media/9A5E-BA8A/Synths` and `/media/CARD/Synths` (both exfat, `rw`) — i.e. exactly the existing generic `/media/*/Synths` fallback our installers already scan. **No special Gen2 default is needed for install**; a Gen2 user installs with `-t "/media/<label>/Synths"` for whatever SD card or USB drive they have inserted, same as Gen1/Force with removable media. `/sdcard` and `/synths` are both unusable as install targets on this unit (`/sdcard` isn't mounted at all here; `/synths` is read-only).
@@ -1411,6 +1411,10 @@ path dates from 2026-10-02. Fix: the addin installer's `mpc-addins-reload.servic
 process. About 1 s is added to boot. Not tested: the uninstall path on a device, MPC OS 2.x (no overlay, so no unit) and
 a firmware update.
 
+## 2026-10-13: the real cause of "only the first preloaded MIDI shim works" is the commander addin's `dlsym` (device, offline-verified fix)
+The 2026-10-12 entry above blamed the remote addin shadowing hwremap; the preload order was a workaround. `LD_DEBUG=bindings` on the Force (MPC 3.9.1) showed every preloaded library's `dlsym` binding to `mpc_commander_addin.so`, which exports `dlsym`. libc resolves `dlsym(RTLD_NEXT, …)` relative to the library that called libc, which was commander (last in the list), so hwremap, the remote addin and skipback each got libasound's `snd_rawmidi_open` instead of the next shim's: only the first of them ever saw MPC open the controller's Private port. With remote first, hwremap logged nothing; with hwremap first, the remote addin said "MPC's button input wasn't found". Without commander both orders chain (fake MPC with the device's own libraries and libasound, on the Force). Fixes, offline: commander `hook.c` now walks the objects after the caller (test: two preloaded shims ahead of it, 21 expected, 1 before); hwremap 0.2.1, the remote addin and skipback find the next symbol through libc's `dlsym` fetched with `dlvsym` (not interposed), which works with the old commander in any order (x86 host test, preloads remote/hwremap/skipback/commander, both commander builds). Not yet rebuilt or run on the Force. `dlvsym(RTLD_NEXT, name, version)` on the symbol itself does not work: a versioned lookup never matches another shim's unversioned definition.
+- **Device-verified (Force, MPC 3.9.1.2, 2026-10-13):** with hwremap 0.2.1 and the fixed remote and skipback shims in front of the old commander, the hardware remaps fire and the remote addin's `/button` presses (SHIFT, CLIP) reach MPC, also after a power cycle. Then with the fixed commander (`dlsym_next` walks the link map after the caller) swapped in, hwremap, remote `press_button` and commander's own features all still work. The shims no longer depend on the preload order.
+
 ## 2026-10-12: MIDI channels through a plugin's own port; engine-made changes reach the screen (Live II, MPC OS 3.9.1; device)
 From saustin2010's Percolator 2.0.0 (four drum voices, a MIDI channel each, like the Erica Synths Pērkons;
 [mpc-vst-percolator](https://github.com/saustin2010/mpc-vst-percolator), `src/midiin.h`):
@@ -1467,3 +1471,114 @@ stock images: Gen2, Gen1 and Force each resolve to the same single value (redact
 each) with no manual override needed. `tools/test_usb_stick.py` gained `test_full_width_runs_are_noise`; its two-values test was
 adjusted so both artificial salts are genuinely padded (so the "refuse on real disagreement" case still holds). 11/11 tests pass.
 `tools/usb_stick/make_stick.py` can now build a Gen2 stick unattended from a stock Gen2 image; still no real Gen2 device run.
+
+## 2026-10-13: users cannot install to external drives (noexec) and the drive exec patch "does not work" (user reports, offline changes only)
+- Reports (MPC One / Hakai 3.9.1, a Force, a Crate Digger user): the SD card and a USB stick both "mounted noexec", the app's Install to destination "not selectable", the patch applied but the plugin still did not load. Same cause as 2026-10-03: noexec drives; the app's wording left no way forward.
+- Changed (offline: `go test ./...`, `tools/test_drive_exec.py`, no device): the app picks an exec location by default, shows the Install to chooser even with one noexec location, labels it "cannot run plugins: noexec", and links to step 7; its refusal and `install.sh`'s warning name both fixes (internal drive, or the drive exec patch). The patch has a `verify` command (also run after install) that reads MPC's own `/proc/<pid>/mountinfo` to tell "installed" from "MPC sees it". Not known yet whether MPC runs in a separate mount namespace; `verify` will say (`mpc-blind`). Ask the next reporter for the `verify` output. A real bug found by the new test: `awk -v` expands the `\040` in a mountinfo path, so a drive name with a space never matched; use `ENVIRON`.
+- Patch limits stated in the docs: `/media/<name>` only, one drive, 32-bit ARM only (a Gen2 device is refused). Multi-drive and `/sdcard`-style mounts are not done.
+
+## 2026-10-14: installer app reconnects and copies again when the SSH connection drops during a copy (offline only)
+- Ported from the Android installer fork (gmorb/mpc-installer-android, user-reported on a phone: "software caused connection abort" when the app lost the network mid-copy). Applies to the desktop app too (sleep, Wi-Fi or VPN change).
+- `Device.reconnect` dials again with the password kept in memory for the connection and refuses a device whose host key changed; `RunInstall` retries a package copy once (removing the half-copied folder first) and gives up with "Nothing was installed and MPC was not stopped" on a second drop. `connectionLost` treats a closed channel with no exit status (`ssh.ExitMissingError`) as a drop. Safe because MPC is only stopped after every copy has finished.
+- Tested offline with the fake SSH device cutting the connection when `tar -xf` starts (`TestACopyThatLosesTheConnectionIsRetriedOnce`); NOT run on a real device or a flaky network.
+
+## 2026-10-14: installer app can create a Synths folder on a drive that has none (offline only)
+- Ported from the Android installer fork. The scan (`readInfo`) also lists writable drives under `/media` (`Config.DriveGlob`, their own mount point only, not `az01-*`/`acvs-*`, not read-only) that have no `Synths` folder; the page shows a **Create Synths folder** button per drive; `Device.MakeRoot` runs `mkdir <drive>/Synths && sync` for a drive from the last scan only (a typed path is refused) and scans again, so the folder is a plugin location like any other.
+- Our difference: after creating the folder the page selects it only if it is not `noexec` (the existing noexec guidance still applies; nothing here remounts a drive).
+- Tested offline: `TestADriveWithoutSynthsGetsOne` (fake device), `tools/desktop/ui_test/ui_drives.py` (stubbed API). NOT run on a real device.
+
+## 2026-10-14: installer app registers every plugin folder as part of an install (offline only)
+- Ported from the Android installer fork. A tick box under Install to (on by default) sends `register: true`; `RunInstall` copies the embedded `sync.sh` and `plugin_list.awk` to the device's private temp folder and the generated install script runs `sync.sh -y -n -t <each location>` after the packages, while MPC is stopped for the batch, so MPC restarts once. A failure (exit 5) is reported and MPC is started again. The separate "Register plugin folders" step (step 5) stays for repairs.
+- Tested offline with the fake device (`TestInstallCanRegisterEveryPluginFolder`, `TestInstallWithoutRegisterLeavesHandCopiedFoldersAlone`); NOT run on a real device. The user-reported value: plugin folders on a drive that was out when MPC started are dropped from the list and had to be registered again by hand.
+
+
+## 2026-10-14: working out a "drives always mount executable" patch: remount mechanism and a probe (offline only)
+- Known: a user's SSD mount line carries `uhelper=edisksd`, so a helper daemon mounts drives and applies `noexec` (see 2026-10-03). Unknown: whether it has a config option, hard-codes the option, or re-applies `noexec` later (sleep, rescan).
+- Offline (x86 container, private mount namespace, tmpfs `noexec,nosuid,nodev` named `SSD - Force`): `dlopen` of a `.so` on it fails with "failed to map segment from shared object"; after `mount -o remount,exec` on the mount it loads. Mechanism only; nothing run on a device.
+- New read-only probe `tools/probe_mounts.sh` (`ssh root@<device-ip> sh -s < tools/probe_mounts.sh`) reports the mount options, the disk daemon and its units, config and udev rules mentioning `noexec`, strings in the daemon binary, and whether MPC's process shares the shell's mount namespace. Output from a Gen1 with a drive plugged in decides between a config edit, an automatic mode of drive-exec (bind mount of each drive's `Synths` folder, no choices), or a whole-drive remount.
+
+## 2026-10-14: mount probe on a Force Gen1 (device-verified, read-only; OS base 5.0.17 image (MPC OS 3.9.1), kernel 6.18.26-az01-2026-04-30-rt4, armv7l)
+- Run with `tools/probe_mounts.sh` plus read-only `busctl`/`strings`/`cat`; nothing changed. Drive plugged in: the Force's SD slot (an exFAT card via the "Akai MPC SD Card Reader", `/dev/sda1`, label-less, mounted at `/media/662522`).
+- **That card was mounted WITHOUT `noexec`** (`rw,relatime,fmask=0022,dmask=0022,iocharset=utf8,errors=remount-ro`, no `nosuid`/`nodev`, no `uhelper=`). So noexec is not applied to every drive by the daemon: it depends on the caller or the drive. The 2026-10-03 SSD line (`nosuid,nodev,noexec,...,uhelper=edisksd`) was not reproduced here (no SSD plugged in).
+- The mounter is `edisksd` 0.19 (`/usr/libexec/edisksd`, systemd `edisksd.service`, D-Bus `io.github.inmusicdev.edisksd`, objects `/io/github/inmusicdev/edisksd/dev/<name>`, `Filesystem.Mount(a{sv}) -> s`). No config file for it (no `/etc` file mentions noexec/mount options); udev rules (`80-edisksd.rules`, `90-edisks-az01.rules`, `90-edisks-smex.rules`) only set `EDISKSD_IGNORE` / `EDISKSD_REMOVABLE`, never mount options. The binary holds the strings `nosuid`, `nodev`, `noexec`, `showexec`, `DefaultMountOptions`, `options`: so the option set is built in the program and/or passed in the D-Bus `Mount` options by the caller. **No config switch exists** (approach 1 is out). Whether the D-Bus caller (MPC) or edisksd chooses `noexec` was not determined.
+- MPC (pid 860) shares the shell's mount namespace (`mnt:[4026531832]`), so a mount or remount made from SSH is visible to MPC.
+- `/` is read-only (stock fstab, root `ro`); `/media` is a tmpfs.
+- Not seen: an internal SATA SSD mount, a `noexec` mount of any kind on this device, `drive-exec` installed.
+- Second probe, same device, a USB stick added (device-verified, read-only): `/dev/sdb2` FAT32 at `/media/E6CA-9201` is mounted `rw,nosuid,nodev,noexec,relatime,nosymfollow,...,showexec,...` (edisksd's default set; `showexec` is its vfat option so files look executable though the mount is not). MPC sees it with the same options (`/proc/<MPC>/mountinfo`, same mount namespace). So edisksd does mount `noexec` by default; the exFAT card at `/media/662522` in the same listing had none of those options, so something other than the default path mounted it (cause not found; not by a patch, `/etc/drive-exec` does not exist). Both facts favour a per-mount fix that does not assume every drive is `noexec`: bind-mount each `noexec` drive's `Synths` folder with `exec`.
+
+## 2026-10-14: auto exec patch, an executable Synths folder on every noexec drive (offline only; not run on a device)
+- Why: the probe above found no config switch for `noexec` in `edisksd`, so the fix is per mount. New `tools/mpc_patch/auto_exec` (version 0.3.0, separate from drive exec, which stays until this is device-verified): a timer bind-mounts `Synths` with `exec` on every `noexec` mount directly under `/media` (internal storage, executable drives, drives without a `Synths` folder, symlinked or already-mounted folders are skipped; nothing is created). Same contract as drive exec: `status` / `install` (type PATCH) / `uninstall` (type REMOVE) / `verify` (+ `release`), a backup, a `STATE` line.
+- New problem it has to handle, offline-reproduced: with a child mount on `Synths` the drive itself cannot be unmounted (EBUSY). `release` removes our mounts before an eject; the timer drops mounts of drives that are gone. Whether `edisksd` copes on a real eject is unknown (device test needed).
+- Tests (`tools/test_auto_exec.py`, 13 tests, real tmpfs mounts, `unshare`): `dlopen` of a probe library blocked, loads from `Synths` of two drives at once, outside stays blocked, executable drive untouched, late plug-in and unplug, busy release, hostile drive names, foreign mount, other installs, failed install rolls back. Mutations (drop `exec` from the remount; drop the name check) each fail tests. Not covered: exFAT/vfat specifics, systemd, reboot, MPC itself.
+- **Device-verified 2026-10-14 (Force Gen1, USB stick FAT32 mounted `noexec` by edisksd, auto exec 0.3.0):** `install` found the stick without choices; the `Synths` bind mount is `rw,nosuid,nodev,relatime,nosymfollow` (no `noexec`), the stick stays `noexec`; before the patch a copied binary failed with "failed to map segment", after it ran from `Synths` (via `ld.so`) while a copy outside `Synths` still failed; `verify` says MPC (shared mount namespace) sees it; applying again does not stack mounts; `release` removed the mount and the timer re-applied it within 8 s. With the desktop installer 0.5.5 draft (Create Synths folder and register ticked, per the user) MonkSynth was installed to the stick and **loaded and played in MPC** (user report; `verify` result=ok plugins=1, two MonkSynth entries in MPC.settings). Not yet tried: unplug without `release`, a reboot, the SSD, the SD card (already executable), the dropped-network copy, `uninstall`.
+
+## 2026-10-14: installer app waits for auto exec; auto exec replaces drive exec (user test on a Force; host tests)
+- Device (user + read-only checks): a second empty USB stick (`/media/10B9-5261`) was power-cycle-proof: auto exec survived the reboot, and the first stick's plugin still loaded. On the second stick the app offered Create Synths folder, then refused the install as "noexec" and pointed to step 7; applying drive exec there said `/media/.../Synths is already a mount point: refusing`. Cause: the app checked the mount before auto exec's timer (up to 5 s) had bind-mounted the new folder; drive exec's refusal was correct. The `Synths` mount was in fact executable (`rw,nosuid,nodev,relatime,nosymfollow`, drive still `noexec`).
+- Fix (host tests only, `go test ./...`, `TestInstallWaitsForAnExecMountToAppearOnANoexecDrive`): after Create Synths folder on a noexec drive, and before refusing an install on a noexec location, the app rescans for up to 8 s (`execWait`); the noexec note and refusal name the auto exec patch and say to wait five seconds if it is installed.
+- Decision (user): auto exec replaces drive exec. Both stay in `catalog/patches.json` (drive exec's summary says it is replaced, so installs can still be removed); the patches refuse each other. Release 0.5.5; the internal drive is not hidden behind a warning.
+
+## 2026-10-14: installer app version check (host tests only)
+- The page asks `/api/version`; the app reads `api.github.com/repos/sd88me/mpc-vst-plugins/releases` (hourly, 5 s timeout), takes the highest published `desktop-v<x>.<y>.<z>` tag (drafts, prereleases and other tags ignored; numeric compare, so 0.5.10 > 0.5.4), and the page shows a dismissible banner with the link when it is newer than the app. Silent on a `dev` build, offline, a non-200 or a bad answer; `--no-update-check` disables it. Tests: `versioncheck_test.go`. Not tried on a real network yet.
+
+## 2026-10-15: SurgeXXL yanked from the catalog (user reports of crashes; not reproduced by us)
+- Users reported SurgeXXL (`sunskiefer/SurgeXXL`) from the catalog crashing their system. Device, MPC OS and plugin versions were not
+  collected; not reproduced by us.
+- All versions are yanked (`"surgexxl@*"` in `catalog/yanked.json`): no version is in `catalog.tsv`, so the device store cannot install
+  it, and with no stable, unyanked release the build makes it Experimental, hidden from the default site view. The desktop app skips yanked versions too. Devices that already have
+  it installed are not touched.
+- A `"tier": "experimental"` cap alone was not enough: it only hides the card on the site; `catalog.tsv` lists every stable,
+  unyanked version whatever the tier.
+- To undo: once a fixed release is out, replace `"surgexxl@*"` with the bad versions (`"surgexxl@<version>"`) or remove it.
+
+## 2026-10-21: a port author's review of the wrapper (source review, plus production reports)
+A port author who built a Dexed+ port on this wrapper sent a list of six flaws. Two are fixed in code: the UpdateDisplay on every
+host write (above, plus a 50 ms cap) and index-bound params (params.lock, above). The other four are design limits and are now
+in docs/PORTING.md:
+- every report waits for `processReplacing()`, so nothing reaches the host while MPC isn't rendering;
+- readout polls run on the audio thread, and their cost grows with the number of polled params;
+- one lock covers set, get, MIDI and render; their SQLite query in `set_param` clicked on every press (production);
+- there is no `effGetParameterProperties`, so a control can't be disabled from the host side; make it do nothing in the engine.
+Still open: whether MPC's host reads opcode 56's switch and whole-step flags, which could let Q-Links step option and
+integer params natively. That needs a probe plugin on the device.
+
+## 2026-10-21: params.lock, a build check on parameter order (offline only)
+A port author reports from production: inserting one parameter mid-list renumbered everything after it, and the RANDOM
+button then wrote a different parameter. Our skins resolve keys to indices when they are built, so a rebuilt skin follows the
+new order. A hand-edited or stale TUI.json does not, and neither do saved MPC projects, automation lanes or Q-Link maps, which
+store indices. `gen_vst.py` now writes `<port>/params.lock` (the keys in order) and fails the build when an existing key
+changes index. Tested offline on a copy of poc/steptest with a param inserted.
+
+## 2026-10-21: at most one UpdateDisplay per 50 ms (offline only)
+Follow-up to "no UpdateDisplay on a host write" above: `housekeeping()` now sends at most one `audioMasterUpdateDisplay`
+every 2205 frames. A request inside that window waits for the next block after it rather than being dropped, so a held
+stepper or readouts that change on every poll can no longer trigger a screen rebuild on every block. host_test checks a
+stepper pressed every block for 4096 frames (2 UpdateDisplays). Not yet tried on a device.
+
+## 2026-10-21: no UpdateDisplay on a host write (a port author's device report; verified on our Force)
+Reported by another port author (a Dexed+ port built on this wrapper), checked on their Force: on track edit →
+automation the physical Q-Links did not move a plugin parameter, or it snapped straight back, while the on-screen knobs
+worked. Instruments for sure; effects reported too. Cause: `set_param_now()` set `need_update_display` on every host write,
+so each Q-Link event and automation step was followed by an `audioMasterUpdateDisplay`, which MPC answers by rebuilding its
+parameter screen (the same rebuild that closed the PRESET popup, `DISPLAY_REV_NO_UPDATE`). They confirmed that removing it fixes
+the problem on the device. Our version (`wrapper/vst2_wrap.c`) drops it for plain writes and keeps it for
+`step_of` buttons and for params with the new `"refresh_display": true` (gen_vst.py). The 100 ms readout poll (2026-10-01)
+already covers what the jv880 fix of 2026-09-24 needed it for. The host test checks that 32 writes cause no UpdateDisplay.
+Ports that need the opt-in: `dynamic_name` labels following a selector (Machinedrum's `trackN_machine` → `syn1..8`) and
+`"poll": false` readouts that depend on a written param. Every port must be rebuilt to get the fix. Checked on our Force (2026-10-21,
+JV-880 rebuilt with this and the 50 ms cap): Q-Links on track edit → automation work, and the bank and patch readouts still follow
+the stepper arrows and a direct Q-Link turn.
+
+## 2026-10-22: JN-106 (ultramaster_kr106 DSP) on a Force (device)
+JN-106 0.1.0 (sd88me/mpc-vst-jn106, catalog id `j106`) loads from Sounds > Instruments, plays and loads its 256 presets on our
+Force (MPC OS 3.9.1, armv7). CPU with `tools/bench.sh`, six held notes, by VCF oversampling: 1x 20%, 2x 31%, 4x 53% of a block,
+so the port offers 1x/2x only (2x default) and fixes the voice count at six. The Q-Link sweep stays at p99 47% (FAIL) at 2x;
+not yet profiled. Open: the PRESET dropdown in the plugin header does not open for this plugin (the Sounds browser works).
+The aarch64 zip has not been run on a Gen2 device.
+
+## 2026-10-22: auto exec does not start at boot under a `/usr` overlay; 0.3.1 draft (device read-only checks + host tests)
+- Tester report (SSD-less Force, USB stick, 0.3.0): after a reboot the bootstrap unit is loaded and listed under `multi-user.target`, but it was never queued (`Job=` and `ConditionTimestamp=` empty, no journal lines). `/` is `ro`, `/etc` is an overlay, and **`/usr` is an overlay** (`lowerdir=/tmp/usr:/usr`, upper under `/media/az01-internal/system/usr/overlay`) that something mounts after systemd starts. Which add-on mounts it is still unknown.
+- 0.3.0's `root-bootstrap.sh` wrote the unit and its wants link to `/usr/lib/systemd/system` while that overlay was mounted, so they went into the overlay's upper layer. systemd builds the boot transaction before the overlay exists, so it never saw them. A later daemon-reload makes them look installed. **Confirmed on the tester's Force (2026-10-22, read-only):** through a bind mount of `/` the root filesystem has no `auto-exec-bootstrap.service`; the overlay's upper dir holds the unit and the link (dated the 0.3.0 install). Only `/etc/mtab` mentions `/tmp/usr`, so what mounts the overlay is still unknown.
+- Control (user's Force, 2026-10-22, read-only): no `/usr` overlay, the unit and link are in the root filesystem (seen through a bind mount of `/`), and the bootstrap started at boot.
+- 0.3.1 (host tests only): the unit is written through a bind mount of `/` (under any overlay); `status` reports `partial reason=bootstrap-missing` when the root filesystem lacks it. Tests: `test_the_bootstrap_lands_in_the_root_filesystem_under_a_usr_overlay` (fails on 0.3.0), `test_status_reports_a_bootstrap_that_only_an_overlay_holds`. **Device-verified 2026-10-22 (tester's Force, USB flash drive as the exec drive):** 0.3.0 removed with its uninstaller, 0.3.1 installed from the installer app (0.5.5 with a test catalog via `--catalog`), two reboots without manual starts: the exec mount came up and plugins loaded from the drive both times.
+- **0.3.2 (2026-10-22, offline):** the tester then found the internal-bay SSD (`/media/Force SSD`, exFAT, `noexec`) was never picked up: `noexec_drives()` only printed the USB stick. Cause: BusyBox awk treats the backslash in `[^\/]` as a literal, so `/media/Force\040SSD` failed `^\/media\/[^\/]+$`. gawk and mawk accept it, which is why the host tests (with a "SSD - Force" drive) passed. Reproduced and fixed with `busybox:1.36` in Docker (the pattern is now the string `"^/media/[^/]+$"`); a test rejects `[^\/]` in the script. `drive_exec` (replaced, kept for uninstalls) still has the old pattern.
+- **In-place update (2026-10-22, offline):** the installer app only runs the current script, which refused an installed 0.3.0/0.3.1 (`unsupported reason=other-version`), so users had to uninstall over SSH. 0.3.2 now reports those as `state=old-patch supported=1` (the app shows "Older version applied" with Apply and Undo), and `install`/`uninstall` remove them with their own `/etc/auto-exec/uninstall.sh` first. Unknown versions are still refused. Test: `test_an_older_version_is_updated_in_place` installs the real 0.3.0 and 0.3.1 scripts from git history (CI now checks out with `fetch-depth: 0`). Not yet run on a device.
