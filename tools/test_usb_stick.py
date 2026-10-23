@@ -128,6 +128,23 @@ class Stick(unittest.TestCase):
             self.assertFalse((runtime / "authorized_key.pub").exists())
             self.assertNotIn("SSH is also enabled", (out / "README-USB.txt").read_text())
 
+    def test_ssh_password_bundles_enable_ssh_and_a_password_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = make_stick.build(Path(d) / "stick", SALT, ROOT / "mpc-store.sh", [], ssh_password="hunter2")
+            runtime = out / "autorun" / "runtime"
+            self.assertTrue((runtime / "enable_ssh.sh").exists())
+            self.assertEqual((runtime / "ssh_password.txt").read_text(), "hunter2\n")
+            self.assertFalse((runtime / "authorized_key.pub").exists())
+            self.assertIn("password login is also turned on", (out / "README-USB.txt").read_text())
+
+    def test_ssh_key_and_password_together_is_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            pub = d / "id_ed25519.pub"
+            pub.write_text("ssh-ed25519 AAAAfake sam@test\n")
+            with self.assertRaises(ValueError):
+                make_stick.build(d / "stick", SALT, ROOT / "mpc-store.sh", [], ssh_key=pub, ssh_password="hunter2")
+
 
 class RunScript(unittest.TestCase):
     """run.sh against a stub mpc-store.sh: which ids it passes, the settings copy, the result file, the exit status."""
@@ -248,9 +265,25 @@ class RunScript(unittest.TestCase):
             r = subprocess.run(["sh", str(ROOT / "usb_stick" / "run.sh"), str(usb), str(work)], env=env, capture_output=True)
             res = (usb / "mpc-install-result.txt").read_text()
             self.assertEqual(r.returncode, 0)
-            self.assertIn("enable_ssh args: " + str(work / "authorized_key.pub"), (d / "ssh.log").read_text())
+            self.assertIn("enable_ssh args: --key " + str(work / "authorized_key.pub"), (d / "ssh.log").read_text())
             self.assertIn("Enabling SSH", res)
             self.assertLess(res.index("Enabling SSH"), res.index("Reapplying addin: remote"))
+
+    def test_ssh_password_is_used_when_no_key_is_on_the_stick(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            usb, work, addins = d / "usb", d / "work", d / "addins"
+            usb.mkdir(); work.mkdir(); addins.mkdir()
+            (work / "mpc-store.sh").write_text('echo "store args: $*"\n')
+            (work / "enable_ssh.sh").write_text(f'echo "enable_ssh args: $*" >> "{d}/ssh.log"\n')
+            (work / "ssh_password.txt").write_text("hunter2\n")
+            (d / "MPC.settings").write_text("<settings/>\n")
+            env = dict(os.environ, MPC_USB_TEST="1", MPC_SETTINGS=str(d / "MPC.settings"), MPC_ADDINS_DIR=str(addins))
+            r = subprocess.run(["sh", str(ROOT / "usb_stick" / "run.sh"), str(usb), str(work)], env=env, capture_output=True)
+            res = (usb / "mpc-install-result.txt").read_text()
+            self.assertEqual(r.returncode, 0)
+            self.assertIn("enable_ssh args: --password hunter2", (d / "ssh.log").read_text())
+            self.assertIn("Enabling SSH (password", res)
 
     def test_no_ssh_key_on_the_stick_skips_enabling_it(self):
         with tempfile.TemporaryDirectory() as d:

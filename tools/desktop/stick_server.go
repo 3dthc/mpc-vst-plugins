@@ -51,8 +51,14 @@ func (a *App) stickScanStart(w http.ResponseWriter, r *http.Request) {
 	a.stickJob = j
 	a.mu.Unlock()
 	go func() {
-		j.log("Scanning %s for the autorun salt (this reads the whole file; it can take a minute)", in.Firmware)
-		salt, hits, err := FindSalt(in.Firmware)
+		j.log("Scanning %s for the autorun salt (this reads the whole file; a Gen2 image can take a few minutes)", in.Firmware)
+		salt, hits, err := findSalt(in.Firmware, func(label string, done, total int64) {
+			pct := 0
+			if total > 0 {
+				pct = int(done * 100 / total)
+			}
+			j.log("%s: %d / %d MB (%d%%)", label, done>>20, total>>20, pct)
+		})
 		if err != nil {
 			j.finish(fmt.Errorf("%w (is this a stock Akai update image, or the MPC executable from one?)", err))
 			return
@@ -118,10 +124,11 @@ func (a *App) stickBuild(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		ScanHandle string
-		Out        string
-		Install    []string
-		SSHPubKey  string // pasted or generated; empty = no SSH
+		ScanHandle  string
+		Out         string
+		Install     []string
+		SSHPubKey   string // pasted or generated; empty = no SSH
+		SSHPassword string // advanced, less secure alternative; empty = no password login. At most one of these two.
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
 		fail(w, 400, "bad request")
@@ -143,7 +150,7 @@ func (a *App) stickBuild(w http.ResponseWriter, r *http.Request) {
 	if in.SSHPubKey != "" {
 		pub = []byte(in.SSHPubKey)
 	}
-	if err := BuildStick(out, scan.Salt, in.Install, pub); err != nil {
+	if err := BuildStick(out, scan.Salt, in.Install, pub, in.SSHPassword); err != nil {
 		fail(w, 400, err.Error())
 		return
 	}

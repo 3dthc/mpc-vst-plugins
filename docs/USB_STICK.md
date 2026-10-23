@@ -35,18 +35,22 @@ its position differs, and it appears twice. The scheme is gone in MPC OS 3.10.0 
   padding); a candidate that fills the whole field with printable bytes is dropped as noise if a padded one is also found (needed
   on the Gen2 aarch64 rootfs, which has several such false positives — 2026-10-20). Refuses when there is no candidate or two
   different *padded* values. Refuses outright (no candidate at all) on a 3.10+ image.
-- `tools/usb_stick/make_stick.py`: `--firmware <update.img | MPC> --out <folder> [--install id,id] [--ssh-key <path to a .pub file>]`.
-  Writes the stick folder. `--ssh-key` is optional and separate from the autorun mechanism itself (below): it bundles
-  `enable_ssh.sh` and a copy of that one public key file (never the private key, which never goes near this tool) so the stick
-  also sets up an ordinary SSH login, not just the one-shot root shell the autorun prompt itself grants.
-- `tools/usb_stick/enable_ssh.sh <authorized_key.pub>` (2026-10-23): lets root in over SSH with that key, without weakening
-  authentication (stock `sshd_config` already allows key-based root login and forbids passwords/empty passwords). Detects the
+- `tools/usb_stick/make_stick.py`: `--firmware <update.img | MPC> --out <folder> [--install id,id]
+  [--ssh-key <path to a .pub file> | --ssh-password <password>]`. Writes the stick folder. `--ssh-key`/`--ssh-password` are
+  advanced, optional, and separate from the autorun mechanism itself (below): they bundle `enable_ssh.sh` and either a copy of
+  that one public key file (never the private key, which never goes near this tool) or a password file, so the stick also sets
+  up an ordinary SSH login, not just the one-shot root shell the autorun prompt itself grants. Most people don't need either.
+- `tools/usb_stick/enable_ssh.sh --key <authorized_key.pub> | --password <password>` (2026-10-23, password mode added
+  2026-10-23): lets root in over SSH. `--key` doesn't weaken authentication (stock `sshd_config` already allows key-based root
+  login and forbids passwords/empty passwords). `--password` does -- it sets root's password and turns password login on, so
+  anyone who learns it gets a root shell; it needs a writable root to persist the password in, and is **refused outright** on a
+  true read-only (dm-verity) root (most Gen2 units), rather than leaving the device half-changed. Detects writable-vs-not the
   same way `resolve_dropin_root()` in mpc-vst-plugins' addin installer does: a writable root (or one that can be remounted rw,
-  Gen1/Force) gets the key installed in `/root/.ssh/authorized_keys` and `sshd` enabled at boot, persistently; a true read-only
-  root (dm-verity, e.g. Gen2's Live III -- remount refused outright) gets the key on `/run` (tmpfs) and `sshd` started directly
-  with it, for that boot only. Re-run (reinsert the stick) after every reboot on the second kind of device.
+  Gen1/Force) gets the key/password installed persistently, `sshd` enabled at boot; a true read-only root (dm-verity, e.g.
+  Gen2's Live III -- remount refused outright) gets a key on `/run` (tmpfs) and `sshd` started directly with it, for that boot
+  only (re-run, i.e. reinsert the stick, after every reboot) -- or, for `--password`, is refused as above.
 - `tools/usb_stick/open.sh` + `run.sh`: on the device. `open.sh` copies the runtime to RAM and starts `run.sh` as a systemd unit;
-  `run.sh` first runs `enable_ssh.sh` if the stick carries a key, then reapplies every already-installed addin's
+  `run.sh` first runs `enable_ssh.sh` if the stick carries a key or a password file, then reapplies every already-installed addin's
   `install.sh -y -n` (2026-10-23: a no-op where its LD_PRELOAD entry persisted; on a device with no persistent `/etc` at all,
   e.g. Gen2's Live III, the entry lives on `/run` and a reboot wiped it, while `/data/mpc-addins/<id>/` itself -- including its
   own copy of `install.sh` -- survived; mpc-vst-plugins `docs/ADDINS.md`, "A device with no persistent /etc"), then copies
@@ -58,12 +62,15 @@ its position differs, and it appears twice. The scheme is gone in MPC OS 3.10.0 
   one step, on a device like the Live III where none of it survives a reboot on its own.
 - `tools/test_usb_stick.py`, CI in `.github/workflows/usb-stick.yml`: made-up salt; the real one is never stored.
 - `tools/desktop/stick.go` (2026-10-23): a Go port of `saltscan.py` and `make_stick.py` into the downloadable installer app, so a
-  user who would rather not use Python/the CLI can build a stick from a web page -- a new top-level mode there ("Set up a USB
-  stick"), independent of the SSH-based install steps. Same algorithm (`tools/desktop/stick_test.go` mirrors
-  `tools/test_usb_stick.py`'s cases), same output, plus a UI for the optional SSH key (paste one, or the app generates an ed25519
-  keypair and shows the private half once). The firmware path and output folder each have a **Browse…** button (`tools/desktop/browse.go`,
-  a server-side picker, since a browser's file input can't hand back a real path) and the output folder also lists mounted drives
-  (`tools/desktop/drives_*.go`) so picking a USB stick there writes the build straight onto it. See `tools/desktop/README.md`.
+  user who would rather not use Python/the CLI can build a stick from a web page -- a new top-level mode there ("Plugin install
+  (no SSH or connection needed)"), independent of the SSH-based install steps, with an explanation of what it does and what it's
+  compatible with up front. Same algorithm (`tools/desktop/stick_test.go` mirrors `tools/test_usb_stick.py`'s cases), same
+  output. The firmware path and output folder each have a **Browse…** button (`tools/desktop/browse.go`, a server-side picker,
+  since a browser's file input can't hand back a real path) and the output folder also lists mounted drives
+  (`tools/desktop/drives_*.go`) so picking a USB stick there writes the build straight onto it. The salt scan (slow on a Gen2
+  image, which needs the pure-Go xz decompressor) reports periodic progress so it doesn't look stuck. SSH access is its own
+  collapsed, closed-by-default "Advanced" section: a key (paste one, or the app generates an ed25519 keypair and shows the
+  private half once) or, with heavier warnings, a password -- most people leave this on "None". See `tools/desktop/README.md`.
 
 ## Rules
 

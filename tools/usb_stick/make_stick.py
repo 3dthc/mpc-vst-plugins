@@ -2,12 +2,14 @@
 """Write a USB stick folder that installs catalog plugins on an MPC/Force with no SSH, using MPC OS's own USB-script prompt.
 
   python3 tools/usb_stick/make_stick.py --firmware <update.img | MPC executable> --out <folder> [--install plugin-manager,...]
-                                         [--ssh-key <path to a .pub file>]
+                                         [--ssh-key <path to a .pub file> | --ssh-password <password>]
 
 Copy the folder's contents to the root of a FAT32/exFAT USB stick (hidden files too), insert it, confirm the prompt on the device.
 --firmware is the user's own Akai update image (or the usr/bin/MPC from it): its salt is read here and never stored in this repo.
---ssh-key, if given, also enables SSH for that public key (tools/usb_stick/enable_ssh.sh: persistently where root is writable,
-on demand until the next reboot on a verity rootfs). The private key never goes near this tool.
+--ssh-key or --ssh-password, advanced and optional, also enable SSH (tools/usb_stick/enable_ssh.sh): --ssh-key persistently
+where root is writable, on demand until the next reboot on a verity rootfs; the private key never goes near this tool.
+--ssh-password sets root's password and turns password login on instead -- a real reduction in login security, and refused
+outright on a verity rootfs (most Gen2 units) since there is nowhere writable to put the password.
 Background and limits: docs/USB_STICK.md.
 """
 import argparse
@@ -31,7 +33,9 @@ def autorun_check(autorun, files, salt):
     return hashlib.sha256(data + salt).hexdigest().encode()
 
 
-def build(out, salt, store, install, ssh_key=None):
+def build(out, salt, store, install, ssh_key=None, ssh_password=None):
+    if ssh_key and ssh_password:
+        raise ValueError("use --ssh-key or --ssh-password, not both")
     out = Path(out)
     if out.exists():
         raise FileExistsError(f"{out} already exists")
@@ -44,6 +48,9 @@ def build(out, salt, store, install, ssh_key=None):
     if ssh_key:
         shutil.copyfile(HERE / "enable_ssh.sh", runtime / "enable_ssh.sh")
         shutil.copyfile(ssh_key, runtime / "authorized_key.pub")
+    elif ssh_password:
+        shutil.copyfile(HERE / "enable_ssh.sh", runtime / "enable_ssh.sh")
+        (runtime / "ssh_password.txt").write_text(ssh_password + "\n")
     files = sorted(str(p.relative_to(autorun)) for p in runtime.rglob("*") if p.is_file())
     manifest = {"value0": {"files": files, "scripts": [{
         "path": "open.sh", "askQuestion": True, "message": PROMPT,
@@ -52,8 +59,14 @@ def build(out, salt, store, install, ssh_key=None):
     (autorun / "autorun.check").write_bytes(autorun_check(autorun, files, salt))
     ids = [i for i in (install or ["plugin-manager"])]
     (out / "install.txt").write_text("# one catalog plugin id per line; edit before inserting the stick\n" + "\n".join(ids) + "\n")
-    ssh_note = ("\nSSH is also enabled for the public key you gave: persistently if the device's root can be made writable, "
-                "otherwise (a verity rootfs) until the next reboot -- reinsert the stick to redo it.\n") if ssh_key else ""
+    if ssh_key:
+        ssh_note = ("\nSSH is also enabled for the public key you gave: persistently if the device's root can be made writable, "
+                     "otherwise (a verity rootfs) until the next reboot -- reinsert the stick to redo it.\n")
+    elif ssh_password:
+        ssh_note = ("\nSSH password login is also turned on (advanced, less secure than a key) -- only on a device whose root "
+                     "can be made writable; refused on a verity rootfs (most Gen2 units).\n")
+    else:
+        ssh_note = ""
     (out / "README-USB.txt").write_text(
         "Copy everything in this folder (hidden files too) to the root of a USB stick, insert it into the MPC/Force, and confirm\n"
         "the prompt. Needs internet on the device. The result is written to mpc-install-result.txt on the stick, and a copy of\n"
@@ -68,6 +81,7 @@ def main(argv=None):
     ap.add_argument("--install", default="plugin-manager", help="comma-separated catalog ids")
     ap.add_argument("--store", default=str(HERE.parent / "mpc-store.sh"))
     ap.add_argument("--ssh-key", help="a public key file (e.g. ~/.ssh/id_ed25519.pub) to also enable SSH for")
+    ap.add_argument("--ssh-password", help="set root's password and enable SSH password login instead of a key (advanced, less secure)")
     a = ap.parse_args(argv)
     try:
         salt, hits = saltscan.find_salt(a.firmware)
@@ -75,7 +89,11 @@ def main(argv=None):
         print(f"error: {e}", file=sys.stderr)
         return 1
     ids = [i.strip() for i in a.install.split(",") if i.strip()]
-    build(a.out, salt, a.store, ids, a.ssh_key)
+    try:
+        build(a.out, salt, a.store, ids, a.ssh_key, a.ssh_password)
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
     print(f"Wrote {a.out} (salt found {len(hits)}x in {a.firmware}). Copy its contents, hidden files included, to the stick's root.")
     return 0
 

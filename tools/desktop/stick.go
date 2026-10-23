@@ -181,16 +181,68 @@ func xzOffsets(path string) ([]int64, error) {
 	return found, nil
 }
 
+// countingReader counts bytes read through it, for progress reporting.
+type countingReader struct {
+	r io.Reader
+	n int64
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += int64(n)
+	return n, err
+}
+
+// progressReader wraps whatever scanSalt actually reads (src) and periodically reports how far "progress" has
+// gotten against total, where progress is measured by a separate counter: for the raw-file scan that is src's own
+// byte count; for an xz stream it is the compressed bytes consumed from the underlying file, which scanSalt never
+// sees directly (it reads the decompressed stream).
+type progressReader struct {
+	src      io.Reader
+	progress func() int64
+	total    int64
+	label    string
+	cb       func(label string, done, total int64)
+	last     int64
+}
+
+func (p *progressReader) Read(b []byte) (int, error) {
+	n, err := p.src.Read(b)
+	if p.cb != nil {
+		d := p.progress()
+		if d-p.last >= 16<<20 || err != nil {
+			p.cb(p.label, d, p.total)
+			p.last = d
+		}
+	}
+	return n, err
+}
+
 // FindSalt is the salt in a firmware file: a raw MPC executable, or an update image whose root filesystems are xz streams.
 // Returns an error when there is no candidate or the candidates disagree (the scheme changed, or the file is not stock
 // firmware): it never guesses.
 func FindSalt(path string) (salt []byte, hits int, err error) {
+	return findSalt(path, nil)
+}
+
+// findSalt is FindSalt with an optional progress callback (label, bytes done, bytes total), called periodically
+// during a scan that can take minutes on a large Gen2 image -- so a caller like the installer app's job log can
+// show that it is still working, not stuck.
+func findSalt(path string, progress func(label string, done, total int64)) (salt []byte, hits int, err error) {
 	var all []saltHit
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, 0, err
 	}
-	serr := scanSalt(f, func(at int64, s []byte) { all = append(all, saltHit{"file", at, append([]byte(nil), s...)}) })
+	fi, serr := f.Stat()
+	if serr != nil {
+		f.Close()
+		return nil, 0, serr
+	}
+	total := fi.Size()
+	cr := &countingReader{r: f}
+	pr := &progressReader{src: cr, progress: func() int64 { return cr.n }, total: total, label: "scanning the file", cb: progress}
+	serr = scanSalt(pr, func(at int64, s []byte) { all = append(all, saltHit{"file", at, append([]byte(nil), s...)}) })
 	f.Close()
 	if serr != nil {
 		return nil, 0, serr
@@ -200,7 +252,7 @@ func FindSalt(path string) (salt []byte, hits int, err error) {
 		if oerr != nil {
 			return nil, 0, oerr
 		}
-		for _, off := range offs {
+		for i, off := range offs {
 			f, err := os.Open(path)
 			if err != nil {
 				return nil, 0, err
@@ -209,13 +261,16 @@ func FindSalt(path string) (salt []byte, hits int, err error) {
 				f.Close()
 				continue
 			}
-			zr, zerr := xz.NewReader(f)
+			cr := &countingReader{r: f}
+			zr, zerr := xz.NewReader(cr)
 			if zerr != nil {
 				f.Close()
 				continue
 			}
 			where := fmt.Sprintf("xz@%d", off)
-			_ = scanSalt(zr, func(at int64, s []byte) { all = append(all, saltHit{where, at, append([]byte(nil), s...)}) })
+			label := fmt.Sprintf("decompressing stream %d/%d", i+1, len(offs))
+			pr := &progressReader{src: zr, progress: func() int64 { return cr.n }, total: total - off, label: label, cb: progress}
+			_ = scanSalt(pr, func(at int64, s []byte) { all = append(all, saltHit{where, at, append([]byte(nil), s...)}) })
 			f.Close()
 		}
 	}
@@ -296,10 +351,14 @@ func autorunCheck(autorunDir string, files []string, salt []byte) ([]byte, error
 // runtime/{run.sh,mpc-store.sh}}, install.txt (one catalog id per line, default plugin-manager) and README-USB.txt.
 // sshPubKey, when non-empty, must be one line starting "ssh-...": BuildStick also bundles enable_ssh.sh and a copy of that
 // key (never a private key, which this function never sees) so the stick sets up an ordinary SSH login too, not just the
-// one-shot root shell the autorun prompt itself grants.
-func BuildStick(out string, salt []byte, installIDs []string, sshPubKey []byte) error {
+// one-shot root shell the autorun prompt itself grants. sshPassword is the advanced, less secure alternative (sets root's
+// password and turns password login on instead); at most one of sshPubKey/sshPassword may be given.
+func BuildStick(out string, salt []byte, installIDs []string, sshPubKey []byte, sshPassword string) error {
 	if _, err := os.Stat(out); err == nil {
 		return fmt.Errorf("%s already exists", out)
+	}
+	if len(sshPubKey) > 0 && sshPassword != "" {
+		return errors.New("use an SSH key or a password, not both")
 	}
 	if len(sshPubKey) > 0 && !bytes.HasPrefix(bytes.TrimSpace(sshPubKey), []byte("ssh-")) {
 		return errors.New("that doesn't look like an SSH public key (it should start with ssh-)")
@@ -324,6 +383,13 @@ func BuildStick(out string, salt []byte, installIDs []string, sshPubKey []byte) 
 		}
 		key := append(bytes.TrimSpace(sshPubKey), '\n')
 		if err := os.WriteFile(filepath.Join(runtime, "authorized_key.pub"), key, 0644); err != nil {
+			return err
+		}
+	} else if sshPassword != "" {
+		if err := os.WriteFile(filepath.Join(runtime, "enable_ssh.sh"), stickEnableSSHSH, 0644); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(runtime, "ssh_password.txt"), []byte(sshPassword+"\n"), 0644); err != nil {
 			return err
 		}
 	}
@@ -379,6 +445,9 @@ func BuildStick(out string, salt []byte, installIDs []string, sshPubKey []byte) 
 	if len(sshPubKey) > 0 {
 		readme += "\nSSH is also enabled for the public key you gave: persistently if the device's root can be made writable, otherwise\n" +
 			"(a verity rootfs) until the next reboot -- reinsert the stick to redo it.\n"
+	} else if sshPassword != "" {
+		readme += "\nSSH password login is also turned on (advanced, less secure than a key) -- only on a device whose root can be\n" +
+			"made writable; refused on a verity rootfs (most Gen2 units).\n"
 	}
 	return os.WriteFile(filepath.Join(out, "README-USB.txt"), []byte(readme), 0644)
 }

@@ -1,9 +1,10 @@
 #!/bin/sh
-# usb_stick/run.sh <stick> <work>: optionally enables SSH (enable_ssh.sh, if the stick carries authorized_key.pub),
-# reapplies every already-installed addin's LD_PRELOAD entry (needed on a device with no persistent /etc, where it
-# lives on /run and a reboot wipes it; docs/ADDINS.md, "A device with no persistent /etc"), then installs the
-# catalog plugins named in <stick>/install.txt (default: plugin-manager) with mpc-store.sh, which stops MPC once,
-# starts it once, and starts it again if anything fails. Leaves <stick>/mpc-install-result.txt.
+# usb_stick/run.sh <stick> <work>: optionally enables SSH (enable_ssh.sh, if the stick carries authorized_key.pub
+# and/or ssh_password.txt -- advanced, optional; see docs/USB_STICK.md), reapplies every already-installed addin's
+# LD_PRELOAD entry (needed on a device with no persistent /etc, where it lives on /run and a reboot wipes it;
+# docs/ADDINS.md, "A device with no persistent /etc"), then installs the catalog plugins named in <stick>/install.txt
+# (default: plugin-manager) with mpc-store.sh, which stops MPC once, starts it once, and starts it again if
+# anything fails. Leaves <stick>/mpc-install-result.txt.
 usb=$1; work=$2
 log="$work/result.txt"
 finish() {
@@ -17,9 +18,14 @@ exec > "$log" 2>&1
 echo "MPC USB install: $(date '+%Y-%m-%d %H:%M:%S')"
 if [ -z "${MPC_USB_TEST:-}" ]; then [ "$(id -u)" = 0 ] || { echo "error: not root"; exit 1; }; fi
 
-if [ -f "$work/authorized_key.pub" ] && [ -f "$work/enable_ssh.sh" ]; then
-    echo "Enabling SSH"
-    sh "$work/enable_ssh.sh" "$work/authorized_key.pub" || echo "warning: enabling SSH failed (status $?)"
+if [ -f "$work/enable_ssh.sh" ]; then
+    if [ -f "$work/authorized_key.pub" ]; then
+        echo "Enabling SSH (key)"
+        sh "$work/enable_ssh.sh" --key "$work/authorized_key.pub" || echo "warning: enabling SSH failed (status $?)"
+    elif [ -f "$work/ssh_password.txt" ]; then
+        echo "Enabling SSH (password -- advanced, less secure than a key)"
+        sh "$work/enable_ssh.sh" --password "$(cat "$work/ssh_password.txt")" || echo "warning: enabling SSH failed (status $?)"
+    fi
 fi
 
 # Redo every already-installed addin's LD_PRELOAD entry. A no-op where it persisted (it just rewrites the same

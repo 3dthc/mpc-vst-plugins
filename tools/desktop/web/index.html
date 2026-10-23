@@ -42,6 +42,8 @@ ul.list .t .d { display:block; color:var(--muted); font-size:13px; }
 .log { background:var(--lcd); color:var(--lcd-fg); border-radius:6px; padding:12px; font:500 12.5px/1.5 ui-monospace,Menlo,Consolas,monospace; white-space:pre-wrap; overflow-wrap:anywhere; max-height:340px; overflow:auto; margin:12px 0 0; }
 dialog { border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--fg); max-width:520px; width:calc(100% - 32px); padding:20px; }
 dialog::backdrop { background:rgb(0 0 0/.45); }
+.spinner { display:inline-block; width:13px; height:13px; border:2px solid var(--line); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; vertical-align:-2px; margin-right:6px; }
+@keyframes spin { to { transform:rotate(360deg); } }
 dialog h3 { font:700 20px var(--display); text-transform:uppercase; letter-spacing:.06em; margin:0 0 8px; }
 dialog .actions { display:flex; gap:10px; justify-content:flex-end; margin-top:16px; }
 .tools[hidden] { display:none; }
@@ -96,7 +98,7 @@ footer { color:var(--muted); font-size:12.5px; margin-top:24px; }
 
 <div class="ktabs" id="modetabs" role="tablist" aria-label="Mode">
   <button type="button" id="mode-install" role="tab" aria-selected="true">Install over SSH</button>
-  <button type="button" id="mode-stick" role="tab" aria-selected="false">Set up a USB stick (no SSH yet)</button>
+  <button type="button" id="mode-stick" role="tab" aria-selected="false">Plugin install (no SSH or connection needed)</button>
 </div>
 
 <div id="install-mode">
@@ -188,6 +190,21 @@ footer { color:var(--muted); font-size:12.5px; margin-top:24px; }
 </div>
 
 <div id="stick-mode" hidden>
+<section id="st-intro">
+  <p class="sub"><b>What this is for:</b> installing the plugin manager (and other catalog plugins) on a device you have no SSH
+  access to at all -- no connecting, no password, no setup. You build a small USB stick here; it does the rest on the device
+  itself.</p>
+  <p class="sub"><b>How it works:</b> MPC OS has its own stock "USB script" reader, built in by Akai (not a security hole): a
+  stick with the right files on it makes MPC ask one on-screen question, then run a script as root. This builds that stick.
+  Nothing is installed until you confirm the prompt on the device's own screen.</p>
+  <p class="sub"><b>Works on:</b> Gen1 MPC (Live/One/X/Key), Force, and Gen2 (Live III, One G2, Key(s) G2) -- but only on
+  <b>MPC OS up to 3.9.1</b>. Akai closed this route in <b>MPC OS 3.10</b> and later; a stick built here will not work on a
+  device already updated past that.</p>
+  <p class="sub"><b>Gen2 devices specifically:</b> their storage can't be made to remember changes the way Gen1/Force can. The
+  plugin manager itself, once installed, stays. But anything else this does -- putting back addins you'd already installed,
+  or the optional SSH access below -- is undone by every reboot, so you'd reinsert the stick and confirm the prompt again
+  each time the device restarts.</p>
+</section>
 <section id="st1">
   <h2><span class="n">1</span>Firmware</h2>
   <p class="sub">This reads your device's own stock Akai update image to work out a one-time check it needs (nothing from this image is kept or sent anywhere). Use the exact image for your device: Gen1 MPC, Force, or Gen2 (Live III, One G2, Key(s) G2). <a href="https://www.akaipro.com/downloads-and-support/downloads/firmware/mpc/" target="_blank" rel="noopener">Get it from Akai</a> if you don't have it already, then point this at the downloaded file.</p>
@@ -196,28 +213,41 @@ footer { color:var(--muted); font-size:12.5px; margin-top:24px; }
     <button id="st-fw-browse" type="button">Browse…</button>
     <button class="primary" id="st-scan" type="button">Scan…</button>
   </div>
-  <p class="msg" id="st-scanmsg" role="status" aria-live="polite"></p>
+  <p class="msg" id="st-scanmsg" role="status" aria-live="polite"><span class="spinner" id="st-scanspin" hidden></span><span id="st-scanmsgtext"></span></p>
   <pre class="log" id="st-scanlog" hidden></pre>
 </section>
 
 <section id="st2" class="off">
-  <h2><span class="n">2</span>SSH access (optional)</h2>
-  <p class="sub">Also lets you in over SSH, not just the one-time install below. Doesn't weaken your device's login: it only adds a key. On a device whose root filesystem can't be made writable (most Gen2 units), this lasts until the next reboot — reinsert the stick to redo it.</p>
+<details id="dst2" class="collapse">
+  <summary><h2><span class="n">2</span>Advanced: SSH access (optional)</h2><span class="hint">Show</span></summary>
+  <p class="sub"><b>Most people can skip this.</b> It only matters if you also want an ordinary SSH login on this device, separate
+  from the one-time install below (which happens either way). Leave it on "None" unless you know you want this.</p>
   <div class="row">
     <label class="f">
-      <span style="display:flex;gap:16px;text-transform:none;letter-spacing:0;font:400 15px var(--text);color:var(--fg)">
-        <label><input type="radio" name="st-sshmode" id="st-ssh-none" checked> None</label>
+      <span style="display:flex;flex-wrap:wrap;gap:16px;text-transform:none;letter-spacing:0;font:400 15px var(--text);color:var(--fg)">
+        <label><input type="radio" name="st-sshmode" id="st-ssh-none" checked> None (recommended)</label>
         <label><input type="radio" name="st-sshmode" id="st-ssh-paste"> Use my public key</label>
         <label><input type="radio" name="st-sshmode" id="st-ssh-gen"> Generate a new key</label>
+        <label><input type="radio" name="st-sshmode" id="st-ssh-pw"> Set a password instead</label>
       </span>
     </label>
   </div>
+  <p class="small">A key doesn't weaken your device's login: it only adds a key, on top of what's already there. On a device whose
+  root filesystem can't be made writable (most Gen2 units), it lasts until the next reboot — reinsert the stick to redo it.</p>
   <label class="f" id="st-sshpaste-wrap" hidden>Public key (the line from your id_ed25519.pub or similar)<input id="st-sshpaste" type="text" placeholder="ssh-ed25519 AAAA... you@host" spellcheck="false"></label>
   <div id="st-sshgen-wrap" hidden>
     <p class="msg ok" id="st-sshgen-warn"><b>Shown once.</b> Save this private key now (e.g. as <code>~/.ssh/id_mpc</code>, <code>chmod 600</code>); the app does not keep a copy.</p>
     <pre class="log" id="st-sshgen-priv"></pre>
     <p class="small">Public key (goes on the stick): <code id="st-sshgen-pub" style="user-select:all"></code></p>
   </div>
+  <div id="st-sshpw-wrap" hidden>
+    <p class="msg err"><b>Not recommended.</b> A password can be guessed or intercepted; a key can't. This also turns on
+    password login for root over SSH, where before only a key would have worked — anyone who learns this password gets a
+    root shell on your device. Only works on a device whose root can be made writable (most Gen1/Force units); refused
+    outright on most Gen2 units, which have no writable place to keep it.</p>
+    <label class="f">Password<input id="st-sshpw" type="password" autocomplete="new-password" spellcheck="false"></label>
+  </div>
+</details>
 </section>
 
 <section id="st3" class="off">
@@ -690,7 +720,7 @@ function poll(since, log, resultEl, doneText) {
 }
 
 /* --- USB stick mode: independent of the device connection above. --- */
-var ST = { scanHandle: "", running: false };
+var ST = { scanHandle: "", running: false, drives: [] };
 function setMode(m) {
   S.mode2 = m;
   $("install-mode").hidden = m !== "install"; $("stick-mode").hidden = m !== "stick";
@@ -733,7 +763,7 @@ $("bdlgpick").addEventListener("click", function () { BR.target.value = BR.dir; 
 $("st-fw-browse").addEventListener("click", function () { openBrowse("file", $("st-fw"), $("st-fw").value.trim()); });
 $("st-out-browse").addEventListener("click", function () { openBrowse("dir", $("st-out"), $("st-out").value.trim()); });
 api("/api/drives").then(function (r) {
-  var ds = r.drives || []; if (!ds.length) return;
+  var ds = r.drives || []; ST.drives = ds; if (!ds.length) return;
   var box = $("st-drives"); box.innerHTML = '<p class="small">Mounted drives: </p>';
   var ul = el("ul", "list"); box.appendChild(ul);
   ds.forEach(function (d) {
@@ -743,31 +773,39 @@ api("/api/drives").then(function (r) {
   });
 }).catch(function () {});
 
+function scanMsg(s, cls, spin) {
+  text($("st-scanmsgtext"), s || ""); $("st-scanmsg").className = "msg" + (cls ? " " + cls : "");
+  $("st-scanspin").hidden = !spin;
+}
 $("st-scan").addEventListener("click", function () {
   var fw = $("st-fw").value.trim();
-  if (!fw) { msg($("st-scanmsg"), "Enter the path to a firmware file first.", "err"); return; }
+  if (!fw) { scanMsg("Enter the path to a firmware file first.", "err"); return; }
   ST.running = true; ST.scanHandle = ""; $("st2").classList.add("off"); $("st3").classList.add("off"); $("st4").classList.add("off");
-  msg($("st-scanmsg"), "Scanning…"); var log = $("st-scanlog"); log.hidden = false; log.textContent = "";
+  scanMsg("Scanning…", null, true); var log = $("st-scanlog"); log.hidden = false; log.textContent = "";
   api("/api/stick/scan", { Firmware: fw }).then(function () { stickPoll(0, log); })
-    .catch(function (e) { ST.running = false; msg($("st-scanmsg"), e.message, "err"); });
+    .catch(function (e) { ST.running = false; scanMsg(e.message, "err"); });
 });
 function stickPoll(since, log) {
   api("/api/stick/job?since=" + since).then(function (j) {
-    if (j.lines.length) { log.textContent += j.lines.join("\n") + "\n"; log.scrollTop = log.scrollHeight; }
+    if (j.lines.length) {
+      log.textContent += j.lines.join("\n") + "\n"; log.scrollTop = log.scrollHeight;
+      scanMsg(j.lines[j.lines.length - 1], null, true); // the latest progress line, so it reads as still working, not stuck
+    }
     if (j.state === "running") { setTimeout(function () { stickPoll(j.next, log); }, 600); return; }
     ST.running = false;
     if (j.state === "done") {
       ST.scanHandle = j.result;
-      msg($("st-scanmsg"), "Found the salt. Set up SSH if you want it, then build the stick below.", "ok");
+      scanMsg("Found the salt. Set up SSH if you want it (most people don't need to), then build the stick below.", "ok");
       $("st2").classList.remove("off"); $("st3").classList.remove("off"); $("st4").classList.remove("off");
     } else {
-      msg($("st-scanmsg"), j.result, "err");
+      scanMsg(j.result, "err");
     }
   }).catch(function (e) { setTimeout(function () { stickPoll(since, log); }, 1500); });
 }
-["st-ssh-none", "st-ssh-paste", "st-ssh-gen"].forEach(function (id) {
+["st-ssh-none", "st-ssh-paste", "st-ssh-gen", "st-ssh-pw"].forEach(function (id) {
   $(id).addEventListener("change", function () {
     $("st-sshpaste-wrap").hidden = !$("st-ssh-paste").checked;
+    $("st-sshpw-wrap").hidden = !$("st-ssh-pw").checked;
     $("st-sshgen-wrap").hidden = true;
     if ($("st-ssh-gen").checked) {
       api("/api/stick/keygen", {}).then(function (k) {
@@ -784,15 +822,24 @@ function stickSSHKey() {
   if ($("st-ssh-gen").checked) return ST.genPub || "";
   return "";
 }
+function stickSSHPassword() {
+  return $("st-ssh-pw").checked ? $("st-sshpw").value : "";
+}
+function stickOutIsAMountedDrive(out) {
+  return ST.drives.some(function (d) { return out === d.path || out.indexOf(d.path.replace(/[\\/]+$/, "") + "/") === 0; });
+}
 $("st-build").addEventListener("click", function () {
   if (!ST.scanHandle) { msg($("st-buildmsg"), "Scan the firmware first.", "err"); return; }
   var out = $("st-out").value.trim();
   if (!out) { msg($("st-buildmsg"), "Enter a folder to write the stick to.", "err"); return; }
   var ids = $("st-install").value.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
   msg($("st-buildmsg"), "Building…");
-  api("/api/stick/build", { ScanHandle: ST.scanHandle, Out: out, Install: ids, SSHPubKey: stickSSHKey() })
+  api("/api/stick/build", { ScanHandle: ST.scanHandle, Out: out, Install: ids, SSHPubKey: stickSSHKey(), SSHPassword: stickSSHPassword() })
     .then(function (r) {
-      msg($("st-buildmsg"), "Wrote " + r.out + ". Copy everything in that folder (hidden files too) to the root of a USB stick, insert it, and confirm the prompt on the device.", "ok");
+      var where = stickOutIsAMountedDrive(out)
+        ? "That's a mounted drive, so it's already on the stick -- just"
+        : "Copy everything in " + r.out + " (hidden files too) to the root of a USB stick, then";
+      msg($("st-buildmsg"), "Wrote " + r.out + ". " + where + " insert it into the MPC/Force and confirm the prompt on the device.", "ok");
     }).catch(function (e) { msg($("st-buildmsg"), e.message, "err"); });
 });
 

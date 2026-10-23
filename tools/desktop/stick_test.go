@@ -136,7 +136,7 @@ func TestFindSaltFullWidthRunsAreNoise(t *testing.T) {
 
 func TestBuildStickLayoutAndCheck(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "stick")
-	if err := BuildStick(out, stickSalt, []string{"plugin-manager", "acid"}, nil); err != nil {
+	if err := BuildStick(out, stickSalt, []string{"plugin-manager", "acid"}, nil, ""); err != nil {
 		t.Fatal(err)
 	}
 	a := filepath.Join(out, "autorun")
@@ -176,7 +176,7 @@ func TestBuildStickLayoutAndCheck(t *testing.T) {
 	if !bytes.Contains(ids, []byte("plugin-manager\nacid\n")) {
 		t.Fatalf("install.txt: %q", ids)
 	}
-	if err := BuildStick(out, stickSalt, nil, nil); err == nil {
+	if err := BuildStick(out, stickSalt, nil, nil, ""); err == nil {
 		t.Error("building into an existing folder: want an error")
 	}
 }
@@ -184,7 +184,7 @@ func TestBuildStickLayoutAndCheck(t *testing.T) {
 func TestBuildStickWithSSHKeyBundlesEnableSSHAndTheKey(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "stick")
 	pub := []byte("ssh-ed25519 AAAAfake sam@test")
-	if err := BuildStick(out, stickSalt, nil, pub); err != nil {
+	if err := BuildStick(out, stickSalt, nil, pub, ""); err != nil {
 		t.Fatal(err)
 	}
 	runtime := filepath.Join(out, "autorun", "runtime")
@@ -203,7 +203,7 @@ func TestBuildStickWithSSHKeyBundlesEnableSSHAndTheKey(t *testing.T) {
 
 func TestBuildStickWithoutSSHKeyBundlesNoSSHFiles(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "stick")
-	if err := BuildStick(out, stickSalt, nil, nil); err != nil {
+	if err := BuildStick(out, stickSalt, nil, nil, ""); err != nil {
 		t.Fatal(err)
 	}
 	runtime := filepath.Join(out, "autorun", "runtime")
@@ -217,8 +217,38 @@ func TestBuildStickWithoutSSHKeyBundlesNoSSHFiles(t *testing.T) {
 
 func TestBuildStickRefusesSomethingThatIsNotAPublicKey(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "stick")
-	if err := BuildStick(out, stickSalt, nil, []byte("-----BEGIN OPENSSH PRIVATE KEY-----")); err == nil {
+	if err := BuildStick(out, stickSalt, nil, []byte("-----BEGIN OPENSSH PRIVATE KEY-----"), ""); err == nil {
 		t.Error("a private key marker: want an error")
+	}
+}
+
+func TestBuildStickWithPasswordBundlesEnableSSHAndTheFile(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "stick")
+	if err := BuildStick(out, stickSalt, nil, nil, "hunter2"); err != nil {
+		t.Fatal(err)
+	}
+	runtime := filepath.Join(out, "autorun", "runtime")
+	if _, err := os.Stat(filepath.Join(runtime, "enable_ssh.sh")); err != nil {
+		t.Error("enable_ssh.sh not bundled")
+	}
+	got, err := os.ReadFile(filepath.Join(runtime, "ssh_password.txt"))
+	if err != nil || string(got) != "hunter2\n" {
+		t.Fatalf("ssh_password.txt = %q, err %v", got, err)
+	}
+	if _, err := os.Stat(filepath.Join(runtime, "authorized_key.pub")); err == nil {
+		t.Error("authorized_key.pub written with no key given")
+	}
+	readme, _ := os.ReadFile(filepath.Join(out, "README-USB.txt"))
+	if !bytes.Contains(readme, []byte("password login is also turned on")) {
+		t.Error("README doesn't mention the password")
+	}
+}
+
+func TestBuildStickRefusesKeyAndPasswordTogether(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "stick")
+	pub := []byte("ssh-ed25519 AAAAfake sam@test")
+	if err := BuildStick(out, stickSalt, nil, pub, "hunter2"); err == nil {
+		t.Error("key and password together: want an error")
 	}
 }
 
