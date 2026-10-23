@@ -456,8 +456,10 @@ def build(entries, src, cache, yanked, keep=10, now=None, require_portable=()):
                     if not os.path.exists(z64):
                         src.download(a64[0], z64)
                     err64, warn64, rec64 = catalog_check.check(z64, catalog=True, expect_id=e["id"], expect_repo=e["repo"])
+                    # an addin's manifest has no "uid" (that's a VST plugin's concept, for save-file compatibility
+                    # across generations); expect_id above already ties both zips to the same catalog entry
                     if not err64 and (rec64["manifest"]["arch"] != "aarch64" or rec64["version"] != rec["version"]
-                                      or rec64["manifest"]["uid"] != rec["manifest"]["uid"]):
+                                      or rec64["manifest"].get("uid") != rec["manifest"].get("uid")):
                         err64 = ["aarch64 zip is not arch aarch64 with the same version and uid as the armv7 zip"]
                 except Exception as ex:
                     err64 = ["download/validate failed: %s" % ex]

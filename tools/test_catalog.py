@@ -517,6 +517,24 @@ class AddinTest(Base):
         self.assertEqual(errors, [])
         self.assertEqual(rec["manifest"]["arch"], "aarch64")
 
+    def test_catalog_build_attaches_an_aarch64_sibling_to_an_addin(self):
+        """catalog_build.py's aarch64-sibling check compared manifest["uid"] unconditionally, which only a VST
+        plugin's manifest has -- an addin's aarch64 sibling always failed with 'download/validate failed: uid'
+        (found 2026-10-23, mpc-addin-commander's real release, catalog issue #515)."""
+        z32 = self.build_addin()
+        z64 = self.build_addin(machine=183, elf_class=2)
+        entry = {"id": "test-addin", "name": "Test addin", "author": "A", "repo": "acme/mpc-addin-test",
+                  "kind": "addin", "license": "MIT", "summary": "s"}
+        rel = {"tag_name": "v1.2.3", "prerelease": False, "draft": False, "published_at": "2026-10-23T00:00:00Z", "body": "",
+               "assets": [{"id": 1, "name": os.path.basename(z32), "browser_download_url": "https://x/" + os.path.basename(z32), "download_count": 1},
+                          {"id": 2, "name": os.path.basename(z64), "browser_download_url": "https://x/" + os.path.basename(z64), "download_count": 1}]}
+        gh = FakeGitHub({"acme/mpc-addin-test": [rel]}, {1: z32, 2: z64})
+        cat, problems = catalog_build.build([entry], gh, os.path.join(self.tmp, "cache"), set())
+        self.assertEqual(problems, [])
+        v = cat["plugins"][0]["versions"][0]
+        self.assertTrue(v["gen2"])
+        self.assertEqual(set(v["assets"]), {"armv7", "aarch64"})
+
     def test_release_refuses_bad_input(self):
         for bad in ("ADDIN_ID=Test_Addin\nADDIN_SO=libtest.so\n", "ADDIN_ID=t\nADDIN_SO=libtest.so\nADDIN_FILES=missing\n",
                     "ADDIN_ID=t\nADDIN_SO=$(reboot)\n", "ADDIN_ID=t\nADDIN_SO=libtest.so\nADDIN_CONF=install.sh\n"):
