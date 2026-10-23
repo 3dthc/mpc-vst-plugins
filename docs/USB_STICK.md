@@ -70,7 +70,10 @@ its position differs, and it appears twice. The scheme is gone in MPC OS 3.10.0 
   (`tools/desktop/drives_*.go`) so picking a USB stick there writes the build straight onto it -- `BuildStick`/`make_stick.py`'s
   `build()` accept an output folder that already exists, as long as it's empty, since a mounted drive's own root directory
   always "already exists" (it's the mount point); a non-empty folder is still refused (2026-10-23 fix: picking a drive from the
-  list used to always fail with "already exists", since the first version only accepted a brand-new folder). The salt scan (slow on a Gen2
+  list used to always fail with "already exists", since the first version only accepted a brand-new folder). "Empty" ignores a
+  drive's own housekeeping (`System Volume Information`, `$RECYCLE.BIN`, dotfiles like `.Trashes`/`.DS_Store`/`.Spotlight-V100`)
+  since a freshly formatted Windows drive always has `System Volume Information` on it on its own (2026-10-23 fix: a user's real
+  freshly formatted stick was refused as "not empty" for exactly this). The salt scan (slow on a Gen2
   image, which needs the pure-Go xz decompressor) reports periodic progress so it doesn't look stuck. SSH access is its own
   collapsed, closed-by-default "Advanced" section: a key (paste one, or the app generates an ed25519 keypair and shows the
   private half once) or, with heavier warnings, a password -- most people leave this on "None". See `tools/desktop/README.md`.

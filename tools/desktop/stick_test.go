@@ -209,6 +209,27 @@ func TestBuildStickIntoANonEmptyFolderIsRefused(t *testing.T) {
 	}
 }
 
+// TestBuildStickIgnoresADriveSOwnHousekeepingFolders covers the bug the user hit testing a real freshly formatted
+// USB stick, 2026-10-23: Windows always creates "System Volume Information" on a fresh format, which isn't
+// something the user put there and must not block building straight onto the drive's root.
+func TestBuildStickIgnoresADriveSOwnHousekeepingFolders(t *testing.T) {
+	mounted := filepath.Join(t.TempDir(), "stick")
+	if err := os.Mkdir(mounted, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"System Volume Information", ".Trashes", "$RECYCLE.BIN"} {
+		if err := os.Mkdir(filepath.Join(mounted, name), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := BuildStick(mounted, stickSalt, nil, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(mounted, "autorun", "open.sh")); err != nil {
+		t.Error("open.sh not written: housekeeping folders should not have been treated as user content")
+	}
+}
+
 func TestBuildStickWithSSHKeyBundlesEnableSSHAndTheKey(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "stick")
 	pub := []byte("ssh-ed25519 AAAAfake sam@test")

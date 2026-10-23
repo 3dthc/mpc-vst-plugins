@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 
 	"github.com/ulikunitz/xz"
 )
@@ -357,6 +358,26 @@ func autorunCheck(autorunDir string, files []string, salt []byte) ([]byte, error
 // key (never a private key, which this function never sees) so the stick sets up an ordinary SSH login too, not just the
 // one-shot root shell the autorun prompt itself grants. sshPassword is the advanced, less secure alternative (sets root's
 // password and turns password login on instead); at most one of sshPubKey/sshPassword may be given.
+// housekeeping names an OS or file manager creates on its own, on a drive nobody has put anything on yet: not
+// something a user put there, so they don't make a folder count as "not empty" (a freshly formatted Windows drive
+// always has System Volume Information; macOS Finder adds its own after browsing a drive).
+var housekeepingNames = map[string]bool{
+	"system volume information": true,
+	"$recycle.bin":              true,
+	".trashes":                  true,
+	".spotlight-v100":           true,
+	".fseventsd":                true,
+	".ds_store":                 true,
+	"thumbs.db":                 true,
+}
+
+func isHousekeeping(name string) bool {
+	if strings.HasPrefix(name, ".") {
+		return true
+	}
+	return housekeepingNames[strings.ToLower(name)]
+}
+
 func BuildStick(out string, salt []byte, installIDs []string, sshPubKey []byte, sshPassword string) error {
 	if st, err := os.Stat(out); err == nil {
 		if !st.IsDir() {
@@ -366,8 +387,10 @@ func BuildStick(out string, salt []byte, installIDs []string, sshPubKey []byte, 
 		if err != nil {
 			return err
 		}
-		if len(des) > 0 {
-			return fmt.Errorf("%s is not empty; pick an empty folder (or an empty, freshly formatted USB stick)", out)
+		for _, d := range des {
+			if !isHousekeeping(d.Name()) {
+				return fmt.Errorf("%s is not empty; pick an empty folder (or an empty, freshly formatted USB stick)", out)
+			}
 		}
 	}
 	if len(sshPubKey) > 0 && sshPassword != "" {

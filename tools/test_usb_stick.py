@@ -115,6 +115,17 @@ class Stick(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 make_stick.build(occupied, SALT, ROOT / "mpc-store.sh", [])
 
+    def test_a_freshly_formatted_drives_own_housekeeping_folders_dont_count_as_not_empty(self):
+        # a freshly formatted Windows drive always has "System Volume Information"; this must not block building
+        # straight onto the drive's root (the bug the user hit testing a real freshly formatted stick, 2026-10-23).
+        with tempfile.TemporaryDirectory() as d:
+            mounted = Path(d) / "stick"
+            mounted.mkdir()
+            (mounted / "System Volume Information").mkdir()
+            (mounted / ".Trashes").mkdir()
+            out = make_stick.build(mounted, SALT, ROOT / "mpc-store.sh", [])
+            self.assertTrue((out / "autorun" / "open.sh").exists())
+
     def test_changing_a_file_changes_the_check(self):
         with tempfile.TemporaryDirectory() as d:
             a = make_stick.build(Path(d) / "s", SALT, ROOT / "mpc-store.sh", []) / "autorun"
