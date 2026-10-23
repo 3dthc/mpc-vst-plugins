@@ -177,7 +177,35 @@ func TestBuildStickLayoutAndCheck(t *testing.T) {
 		t.Fatalf("install.txt: %q", ids)
 	}
 	if err := BuildStick(out, stickSalt, nil, nil, ""); err == nil {
-		t.Error("building into an existing folder: want an error")
+		t.Error("building into an existing (now non-empty) folder: want an error")
+	}
+}
+
+// TestBuildStickIntoAnAlreadyExistingEmptyFolder covers the common case where out is a mounted USB stick's own
+// root directory: the mount point always already exists, so BuildStick must not refuse it just for existing.
+func TestBuildStickIntoAnAlreadyExistingEmptyFolder(t *testing.T) {
+	mounted := filepath.Join(t.TempDir(), "stick")
+	if err := os.Mkdir(mounted, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := BuildStick(mounted, stickSalt, nil, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(mounted, "autorun", "open.sh")); err != nil {
+		t.Error("open.sh not written into the already-existing folder")
+	}
+}
+
+func TestBuildStickIntoANonEmptyFolderIsRefused(t *testing.T) {
+	occupied := filepath.Join(t.TempDir(), "stick")
+	if err := os.Mkdir(occupied, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(occupied, "something.txt"), []byte("not ours\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := BuildStick(occupied, stickSalt, nil, nil, ""); err == nil {
+		t.Error("a non-empty existing folder: want an error")
 	}
 }
 

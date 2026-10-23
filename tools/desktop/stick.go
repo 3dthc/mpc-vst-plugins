@@ -347,15 +347,28 @@ func autorunCheck(autorunDir string, files []string, salt []byte) ([]byte, error
 	return out, nil
 }
 
-// BuildStick writes a stick folder at out (must not already exist): autorun/{open.sh,autorun.json,autorun.check,
+// BuildStick writes a stick's files directly into out: autorun/{open.sh,autorun.json,autorun.check,
 // runtime/{run.sh,mpc-store.sh}}, install.txt (one catalog id per line, default plugin-manager) and README-USB.txt.
+// out may be a folder that doesn't exist yet, or one that already exists and is empty -- the usual case when out is
+// a mounted USB stick's own root directory (the mount point always "already exists"), so picking one directly from
+// the drive list writes straight onto it instead of needing a fresh folder first. A non-empty out is refused: this
+// never merges into or overwrites something already there.
 // sshPubKey, when non-empty, must be one line starting "ssh-...": BuildStick also bundles enable_ssh.sh and a copy of that
 // key (never a private key, which this function never sees) so the stick sets up an ordinary SSH login too, not just the
 // one-shot root shell the autorun prompt itself grants. sshPassword is the advanced, less secure alternative (sets root's
 // password and turns password login on instead); at most one of sshPubKey/sshPassword may be given.
 func BuildStick(out string, salt []byte, installIDs []string, sshPubKey []byte, sshPassword string) error {
-	if _, err := os.Stat(out); err == nil {
-		return fmt.Errorf("%s already exists", out)
+	if st, err := os.Stat(out); err == nil {
+		if !st.IsDir() {
+			return fmt.Errorf("%s already exists and is not a folder", out)
+		}
+		des, err := os.ReadDir(out)
+		if err != nil {
+			return err
+		}
+		if len(des) > 0 {
+			return fmt.Errorf("%s is not empty; pick an empty folder (or an empty, freshly formatted USB stick)", out)
+		}
 	}
 	if len(sshPubKey) > 0 && sshPassword != "" {
 		return errors.New("use an SSH key or a password, not both")
