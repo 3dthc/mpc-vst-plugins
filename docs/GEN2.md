@@ -23,9 +23,16 @@ feature on our side). Both plugins' `tested.json` carry the device. This settles
   (Profit-08: no custom build script, just the generic path) — any future port can follow the same checklist (docs/PORTING.md).
 
 Not yet working: Crate Digger's Discogs search returned an error on-device (not yet diagnosed; could be network, DNS, TLS/cert, or
-something arch-specific in the bundled yt-dlp/Python). Not claiming full functional parity for it until that's resolved. There is
-still no SSH/root route on Gen2 *that this project provides or documents* — the Gen2 tester reached root via unofficial third-party
-boot methods unrelated to this repo, so Gen2 plugin support remains usable only by people who already have root some other way.
+something arch-specific in the bundled yt-dlp/Python). Not claiming full functional parity for it until that's resolved.
+
+**Root/SSH on Gen2 (2026-10-22/23).** The autorun-stick mechanism (KikGen's write-up, see NOTES.md) works the same way on a real
+Gen2 unit's stock MPC OS 3.9.1 as on Gen1/Force: inserting a stick with a signed `autorun.json`/`autorun.check` gets a root shell
+on demand (not persistent across reboot; see `docs/USB_STICK.md` for the generator, offline-tested, not yet run by us on Gen2
+hardware). **MPC OS 3.10.0 removes this mechanism** — confirmed by a static diff of the stock update images: the `.check`/`open.sh`
+strings and the salt bytes are gone from 3.10.0's `MPC` binary, replaced by a `*.scriptpkg`/`az01-signed-fs` signed-package scheme.
+A device already updated to 3.10+ has no documented root route from this project. (One unverified community report says a live
+OTA update to "3.10.0" left a device's rootfs still reporting "3.9.1" underneath — if real, that specific device might still take
+an old-scheme stick; not something to rely on.)
 
 ## One plugin, two zips
 - `release.py` names the zip from the `.so`'s ELF machine: `<Name>-<ver>-mpc-armv7.zip` (Gen1, unchanged) or
@@ -52,7 +59,8 @@ boot methods unrelated to this repo, so Gen2 plugin support remains usable only 
   `/sdcard/Synths`; see `docs/NOTES.md` 2026-10-10 for why that mount is still unconfirmed on a live device).
 - `mpc-store.sh` (the command the site gives) takes the aarch64 zip on an `aarch64` device and the armv7 one otherwise (`catalog.tsv` columns
   17-19: size64, sha256_64, url64; `-` when there is none). On Gen2 a plugin with no Gen2 build is refused before anything is downloaded,
-  and `list` marks it `[no Gen2 build]`. `MPC_STORE_ARCH` overrides `uname -m` (tests). Addins are armv7 only, so they are refused on Gen2.
+  and `list` marks it `[no Gen2 build]`. `MPC_STORE_ARCH` overrides `uname -m` (tests). Addins can have an aarch64 build like any
+  plugin (2026-10-23: catalog_check.py, release_addin.py and the shared addin installer no longer refuse one); none has shipped one yet.
   Because the extra columns follow `max_glibc`, an old `mpc-store.sh` reading the new `catalog.tsv` would take them as part of `max_glibc`;
   the script is fetched from the site on every run, so it and the table always match.
 - The desktop installer app (`tools/desktop`) reads `versions[].assets.aarch64` from `catalog.json`, installs the zip that fits the connected

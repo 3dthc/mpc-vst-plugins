@@ -156,7 +156,7 @@ do_list() {
         [ "$kind" != addin ] || name="$name (addin)"
         mark=""; if [ "$inst" != "-" ] && [ "$inst" != "manual" ] && [ "$inst" != "$ver" ]; then mark="  (update available)"; fi
         if [ "$os" = "3.x" ]; then mark="$mark  [MPC OS 3.x only]"; fi
-        if [ "$ARCH" = aarch64 ] && [ "$kind" != addin ] && { [ -z "$url64" ] || [ "$url64" = "-" ]; }; then mark="$mark  [no Gen2 build]"; fi
+        if [ "$ARCH" = aarch64 ] && { [ -z "$url64" ] || [ "$url64" = "-" ]; }; then mark="$mark  [no Gen2 build]"; fi
         printf '%-18s %-9s %-10s %s%s\n' "$id" "$ver" "$inst" "$name" "$mark"
     done
 }

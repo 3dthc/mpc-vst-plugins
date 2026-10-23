@@ -223,8 +223,6 @@ def check(zpath, catalog=False, expect_id=None, expect_repo=None, require_portab
         err("kind must be instrument or effect")
     if m["arch"] not in ARCHES:
         err("arch is %s, catalog takes %s" % (m["arch"], " or ".join(ARCHES)))
-    if addin and m["arch"] != "armv7":
-        err("addins are armv7 only for now")
     if m.get("max_glibc"):
         need = tuple(int(x) for x in m["max_glibc"].split(".")[:2])
         limit = MAX_GLIBC_GEN2 if m["arch"] == "aarch64" else MAX_GLIBC
@@ -311,8 +309,8 @@ def check(zpath, catalog=False, expect_id=None, expect_repo=None, require_portab
                 err("missing " + f)
         if files.get(m["so"], b"\x7fELF")[:4] != b"\x7fELF":
             err(m["so"] + " is not an ELF file")
-        elif m["so"] in files and not arm32(files[m["so"]]):
-            err(m["so"] + " is not a 32-bit ARM library")
+        elif m["so"] in files and not arch_ok(files[m["so"]], m["arch"]):
+            err(m["so"] + " is not a %s library (manifest arch %s)" % ("64-bit ARM" if m["arch"] == "aarch64" else "32-bit ARM", m["arch"]))
         if not m["so"].endswith(".so"):
             err("so must be a .so")
         for f in sorted(set(files) - set(needs) - set(own) - {"mpc-plugin.json"}):

@@ -458,18 +458,19 @@ class AddinTest(Base):
     MANIFEST = ('# a test addin\nADDIN_ID=test-addin\nADDIN_NAME="Test addin"   # shown\nADDIN_SO=libtest.so\n'
                 'ADDIN_CONF=test.conf\nADDIN_FILES="helper"\nADDIN_DONE="Open it."\n')
 
-    def build_addin(self, manifest=None, machine=40, version="1.2.0", repo="acme/mpc-addin-test"):
+    def build_addin(self, manifest=None, machine=40, version="1.2.0", repo="acme/mpc-addin-test", elf_class=1, glibc=b"GLIBC_2.30"):
         d = os.path.join(self.tmp, "pkg")
         os.makedirs(d, exist_ok=True)
         open(os.path.join(d, "addin.manifest"), "w").write(manifest or self.MANIFEST)
-        fake_so(os.path.join(d, "libtest.so"), machine)
+        fake_so(os.path.join(d, "libtest.so"), machine, glibc=glibc, elf_class=elf_class)
         open(os.path.join(d, "test.conf"), "w").write("x=1\n")
         open(os.path.join(d, "helper"), "w").write("data\n")
         out = os.path.join(self.tmp, "dist")
         r = subprocess.run([sys.executable, os.path.join(HERE, "release_addin.py"), "--dir", d, "--version", version,
                             "--repo", repo, "--license", "MIT", "-o", out], capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stderr)
-        return os.path.join(out, "Test-addin-%s-mpc-armv7.zip" % version)
+        arch = "aarch64" if machine == 183 else "armv7"
+        return os.path.join(out, "Test-addin-%s-mpc-%s.zip" % (version, arch))
 
     def rezip(self, zpath, fn):
         """Rewrite the package through fn({relative name: bytes}) and fix SHA256SUMS."""
@@ -506,7 +507,15 @@ class AddinTest(Base):
 
     def test_a_64_bit_class_arm_library_is_refused(self):
         z = self.rezip(self.build_addin(), lambda f: f.update({"libtest.so": f["libtest.so"][:4] + b"\x02" + f["libtest.so"][5:]}))
-        self.assertIn("libtest.so is not a 32-bit ARM library", self.errors(z))
+        self.assertIn("libtest.so is not a 32-bit ARM library (manifest arch armv7)", self.errors(z))
+
+    def test_an_aarch64_addin_is_accepted(self):
+        """Gen2 (aarch64) addins are allowed, same as plugins (2026-10-23: addins were armv7-only before)."""
+        z = self.build_addin(machine=183, elf_class=2)
+        self.assertTrue(z.endswith("-mpc-aarch64.zip"), z)
+        errors, _, rec = catalog_check.check(z, catalog=True, expect_id="test-addin", expect_repo="acme/mpc-addin-test")
+        self.assertEqual(errors, [])
+        self.assertEqual(rec["manifest"]["arch"], "aarch64")
 
     def test_release_refuses_bad_input(self):
         for bad in ("ADDIN_ID=Test_Addin\nADDIN_SO=libtest.so\n", "ADDIN_ID=t\nADDIN_SO=libtest.so\nADDIN_FILES=missing\n",

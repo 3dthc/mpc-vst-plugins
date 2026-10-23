@@ -1540,3 +1540,51 @@ The aarch64 zip has not been run on a Gen2 device.
 - 0.3.1 (host tests only): the unit is written through a bind mount of `/` (under any overlay); `status` reports `partial reason=bootstrap-missing` when the root filesystem lacks it. Tests: `test_the_bootstrap_lands_in_the_root_filesystem_under_a_usr_overlay` (fails on 0.3.0), `test_status_reports_a_bootstrap_that_only_an_overlay_holds`. **Device-verified 2026-10-22 (tester's Force, USB flash drive as the exec drive):** 0.3.0 removed with its uninstaller, 0.3.1 installed from the installer app (0.5.5 with a test catalog via `--catalog`), two reboots without manual starts: the exec mount came up and plugins loaded from the drive both times.
 - **0.3.2 (2026-10-22, offline):** the tester then found the internal-bay SSD (`/media/Force SSD`, exFAT, `noexec`) was never picked up: `noexec_drives()` only printed the USB stick. Cause: BusyBox awk treats the backslash in `[^\/]` as a literal, so `/media/Force\040SSD` failed `^\/media\/[^\/]+$`. gawk and mawk accept it, which is why the host tests (with a "SSD - Force" drive) passed. Reproduced and fixed with `busybox:1.36` in Docker (the pattern is now the string `"^/media/[^/]+$"`); a test rejects `[^\/]` in the script. `drive_exec` (replaced, kept for uninstalls) still has the old pattern.
 - **In-place update (2026-10-22, offline):** the installer app only runs the current script, which refused an installed 0.3.0/0.3.1 (`unsupported reason=other-version`), so users had to uninstall over SSH. 0.3.2 now reports those as `state=old-patch supported=1` (the app shows "Older version applied" with Apply and Undo), and `install`/`uninstall` remove them with their own `/etc/auto-exec/uninstall.sh` first. Unknown versions are still refused. Test: `test_an_older_version_is_updated_in_place` installs the real 0.3.0 and 0.3.1 scripts from git history (CI now checks out with `fetch-depth: 0`). Not yet run on a device.
+
+## 2026-10-22: MPC Live III (Gen2) network reachability from a brand-new unit, stock MPC OS 3.9.1
+
+A fresh Live III (no MockbaMod, no SSH setup) was brought onto the network for the first time, alongside the existing Force
+path above (which already has SSH; see `docs/FIRMWARE_BUILDER.md` and the device-specific access note kept out of this repo).
+
+- **USB-C is audio/MIDI only.** Plugged into a PC, it enumerates purely as a USB class-compliant audio interface and MIDI
+  device (confirmed from the host OS's device list: one MIDI endpoint, one audio in/out pair, no network adapter, no mass
+  storage, no serial/debug interface). USB-C is not a path to the device's filesystem or network stack on this hardware;
+  don't plan on it for install/SSH/debug access.
+- **Wi-Fi gotcha: router "Smart Connect" / tri-band auto-steering breaks the connect with no useful error.** On a tri-band
+  router merging 2.4/5/5GHz under one SSID with band-steering, the Live III's embedded Wi-Fi stack associated then failed
+  with a bare "Failure" (no detail) — WPA2-Personal/PMF-off were already correct, so this wasn't a security-settings issue.
+  A temporary guest 2.4GHz-only SSID connected fine, confirming it. Fix: disable Smart Connect's auto band selection and
+  give 2.4GHz its own dedicated SSID (same WPA2-Personal credentials, mode b+g+n, channel width 20/40MHz, AP isolation off,
+  PMF disabled) rather than letting the router steer it. The Live III joined that split SSID and got a normal DHCP lease.
+- **Stock device has no SSH.** Once on the LAN with a real IP: ICMP ping succeeds; TCP port 22 actively refuses the
+  connection (no sshd running, not just filtered); port 80 answers HTTP with a 404 (likely Akai's `az0x-webserver`, see
+  `docs/FIRMWARE_BUILDER.md` "Why"). So a stock, unmodified unit is reachable on the LAN for read-only network probing but
+  has no root/SSH access — that still needs the firmware-builder route (Force-only, unflashed so far) or the autorun-stick
+  route (`docs/USB_STICK.md`, Gen1/Force-verified only; Gen2 is offline-corroborated, not run by us; see `docs/GEN2.md`).
+
+## 2026-10-23: MPC OS 3.10.0 removes the autorun-stick root route (offline, static analysis of the stock update image)
+
+Compared the stock `MPC-3.9.1-Gen2-update.img` and the just-released `MPC-3.10.0-Gen2-update.img`: extracted each image's main
+xz rootfs with `debugfs`/`xz`, diffed the `MPC` executable. 3.9.1's `MPC` has the `autorun`, `.json`, `.check`, `open.sh` literal
+strings that the autorun-stick mechanism depends on, and `tools/usb_stick/saltscan.py` finds the salt at two offsets as before.
+**3.10.0's `MPC` has none of those strings or the salt bytes** — they are gone outright. In their place, immediately next to the
+same "Script detected... Do you want to run it?" prompt code, 3.10.0 adds `*.scriptpkg` and `/usr/bin/az01-signed-fs`: a signed-
+package scheme replacing the salted-hash check. This matches TheKikGen's prediction (NOTES.md 2026-10-20) that Akai would patch
+autorun at firmware v3.10+ — now confirmed, not speculative. `docs/USB_STICK.md` and `docs/GEN2.md` updated. Not flashed to any
+device; purely a binary diff of the two stock images. (See also a single unverified community report, relayed, that a live
+3.10.0 OTA update left one device's rootfs still reporting "3.9.1" underneath — if real, the live update path and a full image
+reflash may not behave the same way; not something to rely on without a direct device check.)
+
+## 2026-10-23: poloq's Plugin Manager had no Gen2 (aarch64) build; Gen2-compat PR opened upstream
+
+`tools/usb_stick`'s stick defaults to installing `plugin-manager` (poloq-instruments/mpc-vst-manager) via `mpc-store.sh`, which
+already refuses an install with no Gen2 build — and that plugin had none, so the stick's default install did nothing on a real
+Gen2 device. Forked the repo, branch `gen2-compat`: `vst.json` now lists `aarch64` in `targets`; the device probe's `bad_fs()`
+now accepts `exfat` (Gen2's `/nvme` is exFAT, not ext4); the `MPC.settings` glob now also checks `/data/Settings` (Gen2 has no
+`/media/az01-internal`); the installed-plugin scan reads `pluginList-arm-64bit` on aarch64 instead of `pluginList-arm`; the
+internal-storage preference and defaults list include `/nvme/Synths`; and `do_launch()`'s restart path was `#ifdef __arm__`
+(32-bit ARM only — on a real aarch64 build it silently took the dry-run branch and never actually restarted MPC), now
+`#if defined(__arm__) || defined(__aarch64__)`. Tested offline only: a new fake device `tests/devices/gen2.sh` (modelled on the
+confirmed Live III layout) resolves to `/nvme/Synths` under the existing x86 `tests/run.sh`, and the same build re-run under real
+aarch64 emulation (QEMU, `arm64v8/gcc:12-bookworm`) confirms the `uname()`-gated branches actually take the Gen2 path for real.
+PR: <https://github.com/poloq-instruments/mpc-vst-manager/pull/12>. Not run on real Gen2 hardware; not merged.

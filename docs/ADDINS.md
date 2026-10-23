@@ -38,8 +38,10 @@ addin). So every addin installs the same way, with the installer in `tools/relea
 MPC keeps the old `.so` mapped), installs the settings file only when the folder has none (the user's edits survive
 an upgrade), adds the `.so` to `LD_PRELOAD` and restarts MPC. `-n` leaves MPC alone: the caller stops and starts it
 once for a batch (`DEFER=1` in the script tells batch installers so). The folder also gets `uninstall.sh`,
-`addin-lib.sh` and `addin.manifest`, so `sh /data/mpc-addins/<id>/uninstall.sh` removes the addin later without the
-release; that is what `mpc-store.sh remove` and the desktop app run.
+`install.sh`, `addin-lib.sh`, `mpc-plugin.json` and `addin.manifest`, so `sh /data/mpc-addins/<id>/uninstall.sh`
+removes the addin later, and `sh /data/mpc-addins/<id>/install.sh -y -n -t /data/mpc-addins/<id>` reinstalls it
+in place, both without the release zip; `mpc-store.sh remove`/the desktop app use the former, and a device with no
+persistent `/etc` (below) needs the latter after every reboot.
 
 Before anything changes, `install.sh` checks the `.so` on the device: it must be an ELF 32-bit little-endian ARM shared
 object, since anything else in `LD_PRELOAD` stops MPC from starting. The folder (`-t`, default
@@ -83,6 +85,26 @@ root filesystem, so the unit goes with it: re-run an addin's installer afterward
 
 A side effect: an addin that crashes MPC now does so after a reboot too. Before, a reboot happened to start MPC without
 the addins. The steps below still apply.
+
+### A device with no persistent `/etc` at all (Gen2, verity rootfs)
+
+Every device above still has *some* way to make the shared drop-in's folder persist: a plain writable root, or an
+`/etc` overlay on `/data`. Gen2's Live III (2026-10-23) has neither -- `/` is `dm-verity` (`/dev/dm-0`), and `mount
+-o remount,rw /` is refused outright ("cannot remount /dev/root read-write, is write-protected"), not just denied by
+permissions. There is no way to write under `/etc` on this device, ever.
+
+The installer falls back to `/run/systemd/system/<service>.service.d/90-mpc-addins.conf` instead (`resolve_dropin_root()`
+in `addin-lib.sh`, tried only after a plain root and an `/etc` overlay have both been ruled out). systemd merges `/run`
+drop-ins with the same priority as `/etc`'s, so this works exactly the same way once written -- but `/run` is tmpfs: it
+does not survive a reboot, and `install.sh` says so ("not persistent, reinstall after a reboot"). `/data/mpc-addins/<id>/`
+itself is unaffected (it is on `/data`, which does persist), so the fix is cheap: `sh /data/mpc-addins/<id>/install.sh -y
+-n -t /data/mpc-addins/<id>` from the folder itself, no release zip needed (the folder keeps its own copy of `install.sh`
+and `mpc-plugin.json` for exactly this). The USB stick (`docs/USB_STICK.md`) does this for every installed addin on each
+boot it is inserted for, so reinserting it restores both root/SSH access and every addin in one step.
+
+Tests: case 15 (remount succeeds, so `/etc` is used) and case 16 (remount refused, so `/run` is used) in
+`tools/test_addin.sh`; case 3c there covers the folder's own `install.sh` redoing the `/run` entry after a simulated
+reboot, without the original release.
 
 ## When an addin stops MPC from starting
 

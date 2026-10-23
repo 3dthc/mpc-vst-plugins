@@ -55,7 +55,7 @@ func (c CatPlugin) ForArch(arch string) (CatPlugin, error) {
 	if arch != "aarch64" {
 		return c, nil
 	}
-	if c.Kind == "addin" || c.Aarch64 == nil {
+	if c.Aarch64 == nil {
 		return c, fmt.Errorf("%s %s has no Gen2 (aarch64) build yet", c.Name, c.Version)
 	}
 	c.Size, c.SHA256, c.URL = c.Aarch64.Size, c.Aarch64.SHA256, c.Aarch64.URL
