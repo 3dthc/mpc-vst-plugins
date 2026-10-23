@@ -142,6 +142,76 @@ class RunScript(unittest.TestCase):
         self.assertEqual(rc, 3)
         self.assertIn("Install failed (status 3)", res)
 
+    def run_with_addins(self, addin_ids, install_txt=None):
+        """Like run_it, but with MPC_ADDINS_DIR pointing at <id>/install.sh stubs that log their own args, instead
+        of the real /data/mpc-addins (docs/ADDINS.md, "A device with no persistent /etc")."""
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            usb, work, addins = d / "usb", d / "work", d / "addins"
+            usb.mkdir(); work.mkdir(); addins.mkdir()
+            (work / "mpc-store.sh").write_text('echo "store args: $*"\n')
+            (d / "MPC.settings").write_text("<settings/>\n")
+            if install_txt is not None:
+                (usb / "install.txt").write_text(install_txt)
+            for aid in addin_ids:
+                p = addins / aid
+                p.mkdir()
+                (p / "install.sh").write_text(f'echo "addin {aid} install args: $*" >> "{d}/addin.log"\n')
+            env = dict(os.environ, MPC_USB_TEST="1", MPC_SETTINGS=str(d / "MPC.settings"), MPC_ADDINS_DIR=str(addins))
+            r = subprocess.run(["sh", str(ROOT / "usb_stick" / "run.sh"), str(usb), str(work)], env=env, capture_output=True)
+            log = (d / "addin.log").read_text() if (d / "addin.log").exists() else ""
+            res = (usb / "mpc-install-result.txt").read_text()
+            return r.returncode, res, log
+
+    def test_every_installed_addin_is_reapplied_before_the_catalog_install(self):
+        rc, res, log = self.run_with_addins(["remote", "skipback"])
+        self.assertEqual(rc, 0)
+        self.assertRegex(log, r"addin remote install args: -y -n -t \S*/addins/remote\n")
+        self.assertRegex(log, r"addin skipback install args: -y -n -t \S*/addins/skipback\n")
+        self.assertLess(log.index("remote"), log.index("skipback"))   # directory order
+        self.assertIn("Reapplying addin: remote", res)
+        self.assertIn("Reapplying addin: skipback", res)
+        self.assertLess(res.index("Reapplying addin: remote"), res.index("store args"))   # both before the catalog install
+
+    def test_no_addins_installed_is_a_quiet_no_op(self):
+        rc, res, log = self.run_with_addins([])
+        self.assertEqual(rc, 0)
+        self.assertEqual(log, "")
+        self.assertNotIn("Reapplying", res)
+
+    def test_a_folder_without_install_sh_is_skipped(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            usb, work, addins = d / "usb", d / "work", d / "addins"
+            usb.mkdir(); work.mkdir(); addins.mkdir()
+            (work / "mpc-store.sh").write_text('echo "store args: $*"\n')
+            (d / "MPC.settings").write_text("<settings/>\n")
+            (addins / "empty").mkdir()   # a leftover folder with no install.sh in it (e.g. mid-uninstall)
+            p = addins / "remote"; p.mkdir()
+            (p / "install.sh").write_text(f'echo "addin remote install args: $*" >> "{d}/addin.log"\n')
+            env = dict(os.environ, MPC_USB_TEST="1", MPC_SETTINGS=str(d / "MPC.settings"), MPC_ADDINS_DIR=str(addins))
+            r = subprocess.run(["sh", str(ROOT / "usb_stick" / "run.sh"), str(usb), str(work)], env=env, capture_output=True)
+            res = (usb / "mpc-install-result.txt").read_text()
+            self.assertEqual(r.returncode, 0)
+            self.assertIn("Reapplying addin: remote", res)
+            self.assertNotIn("empty", res)
+
+    def test_a_failing_addin_reapply_is_warned_and_does_not_stop_the_catalog_install(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            usb, work, addins = d / "usb", d / "work", d / "addins"
+            usb.mkdir(); work.mkdir(); addins.mkdir()
+            (work / "mpc-store.sh").write_text('echo "store args: $*"\n')
+            (d / "MPC.settings").write_text("<settings/>\n")
+            p = addins / "broken"; p.mkdir()
+            (p / "install.sh").write_text("exit 1\n")
+            env = dict(os.environ, MPC_USB_TEST="1", MPC_SETTINGS=str(d / "MPC.settings"), MPC_ADDINS_DIR=str(addins))
+            r = subprocess.run(["sh", str(ROOT / "usb_stick" / "run.sh"), str(usb), str(work)], env=env, capture_output=True)
+            res = (usb / "mpc-install-result.txt").read_text()
+            self.assertEqual(r.returncode, 0)
+            self.assertIn("warning: reapplying addin broken failed (status 1)", res)
+            self.assertIn("store args: -y install plugin-manager", res)
+
 
 if __name__ == "__main__":
     unittest.main()
