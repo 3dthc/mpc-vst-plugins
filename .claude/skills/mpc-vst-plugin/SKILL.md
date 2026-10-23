@@ -175,7 +175,7 @@ Parameter entries feeding `gen_vst.py` (`tools/params.py` format) can carry:
 - A host write (a Q-Link, automation, a touch) sends no `audioMasterUpdateDisplay`: MPC rebuilds its parameter screen
   on each one, which broke Q-Links on the automation screen (NOTES 2026-10-21). Polled readouts catch up within 100 ms.
   A param that other unpolled text depends on (a machine selector behind `dynamic_name` labels, a `"poll": false`
-  readout bound with `get=`) takes `"refresh_display": true` to ask for one on its writes. `step_of` buttons always ask.
+  readout bound with `get=`, or a `when=` panel that follows a param the engine derives from this one) takes `"refresh_display": true` to ask for one on its writes. `step_of` buttons always ask.
 - `vst.json`'s `"tile"` (a 270x110 PNG) becomes `Plugin Skins/browser_images/soundsmode.png` plus
   `Presets/0000-Default.xpl` in the skin folder (`tools/xpl.py`): the Sounds > INSTRUMENTS browser draws the
   artwork and a tap opens the plugin. MPC indexes `Presets/` at startup, so a new preset file needs a restart.

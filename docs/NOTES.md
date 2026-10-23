@@ -1576,6 +1576,8 @@ parameter screen (the same rebuild that closed the PRESET popup, `DISPLAY_REV_NO
 the problem on the device. Our version (`wrapper/vst2_wrap.c`) drops it for plain writes and keeps it for
 `step_of` buttons and for params with the new `"refresh_display": true` (gen_vst.py). The 100 ms readout poll (2026-10-01)
 already covers what the jv880 fix of 2026-09-24 needed it for. The host test checks that 32 writes cause no UpdateDisplay.
+2026-10-23 (device, Force): TR-MPC's slot panels stopped reskinning on a voice change, because `sNN_fam` (the kit, derived from `sNN_src` in the engine) drives
+the skin's `when=` panels and MPC no longer re-read it. `"refresh_display": true` on `sNN_src` fixed it (trmpc-vst-v1.0.2, checked on the Force).
 Ports that need the opt-in: `dynamic_name` labels following a selector (Machinedrum's `trackN_machine` → `syn1..8`) and
 `"poll": false` readouts that depend on a written param. Every port must be rebuilt to get the fix. Checked on our Force (2026-10-21,
 JV-880 rebuilt with this and the 50 ms cap): Q-Links on track edit → automation work, and the bank and patch readouts still follow

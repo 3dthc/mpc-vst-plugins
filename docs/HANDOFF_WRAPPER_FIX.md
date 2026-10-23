@@ -38,7 +38,11 @@ at most 2 per 4096 frames; `params.lock` fails on an inserted param).
     `dynamic_display`). Done (mpc-vst-machinedrum #16).
   - Profit-8, Morpho-PE, Sturm: no (`_display` is formatted from the param's own value; they use `HAS_DISPLAY_REV`, which bumps on patch changes).
   - Daemon / Daemon Listen: no (all `poll: false` readouts are driven by `d->rev`, buttons bump it).
-  - JV-880, Luckydip, Boris, Clementine, Model-72, dx7, OTT, Maze: no dynamic labels found.
+  - TR-MPC: **yes, found on the device 2026-10-23** (missed in the first review, which only looked at labels): `sNN_fam` is derived from the voice
+    `sNN_src` and drives the skin's `when=` panels, so slots stopped reskinning when the voice changed. Fixed with `refresh_display` on the 16 `sNN_src`
+    (mpc-vst-TR-MPC #5, released as trmpc-vst-v1.0.2, device-verified). Lesson: grep every layout for `when=` and check what writes the param it reads.
+  - JV-880 (`env_view_N`, set by the user's own tap), Daemon (`kb`, `runok`, `mic`; `d->rev`): `when=` panels work on the device.
+  - Luckydip, Boris, Clementine, Model-72, dx7, OTT, Maze: no dynamic labels or `when=` found.
 - **Not affected** (own hand-written wrapper, no `mpc_engine`): Acid, Euclidier, Monomodule, Cratedigger (no vst.json), force-link-audio,
   the four gmorb dragonfly ports (checked by file listing only, 2026-10-21: worth a look).
 - **Vendored copies of `vst2_wrap.c`** (need the copy updated, not just a rebuild): Luckydip (done, PR below), Lewinator56/mpc-vst-helm,

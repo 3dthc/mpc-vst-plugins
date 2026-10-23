@@ -135,7 +135,8 @@ for the pattern). This applies to every future port, not just ones that hit the 
       reproduced on our device. `catalog_check.py` warns about such images.)
 - [ ] Q-Links: 1–8 = knob bank 1, 9–16 = bank 2; nested pages via several `qlinks` lines.
 - [ ] Labels or unpolled text that follow another param (`dynamic_name` / `dynamic_display` reading a selector, a
-      `"poll": false` readout bound with `get=`): put `"refresh_display": true` on that selector. A plain host write
+      `"poll": false` readout bound with `get=`), or a skin `when=` panel that follows a param the engine derives from another
+      (TR-MPC's `sNN_fam`, set by the voice `sNN_src`): put `"refresh_display": true` on the param that is written. A plain host write
       no longer asks MPC for an UpdateDisplay (NOTES.md 2026-10-21). Test Q-Links on track edit → automation, not only
       on the plugin screen: that screen takes a different host path.
 - [ ] Option lists and `"display": "int"` params step one option or whole number per Q-Link event and per data wheel
