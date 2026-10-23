@@ -26,6 +26,16 @@ import saltscan  # noqa: E402
 PROMPT = ("MPC PLUGIN INSTALLER\n\nThis installs the plugins listed in install.txt "
           "(the plugin manager by default) and restarts MPC.\n\nHave you saved your project?")
 
+# Names an OS or file manager creates on its own, on a drive nobody has put anything on yet: not something a user
+# put there, so they don't make a folder count as "not empty" (a freshly formatted Windows drive always has System
+# Volume Information; macOS Finder adds its own after browsing a drive).
+HOUSEKEEPING_NAMES = {"system volume information", "$recycle.bin", ".trashes", ".spotlight-v100", ".fseventsd",
+                      ".ds_store", "thumbs.db"}
+
+
+def is_housekeeping(name):
+    return name.startswith(".") or name.lower() in HOUSEKEEPING_NAMES
+
 
 def autorun_check(autorun, files, salt):
     """What the stock reader recomputes: sha256 of autorun.json, open.sh, then each listed file in order, then the salt."""
@@ -40,7 +50,7 @@ def build(out, salt, store, install, ssh_key=None, ssh_password=None):
     if out.exists():
         if not out.is_dir():
             raise FileExistsError(f"{out} already exists and is not a folder")
-        if any(out.iterdir()):
+        if any(not is_housekeeping(p.name) for p in out.iterdir()):
             raise FileExistsError(f"{out} is not empty; pick an empty folder (or an empty, freshly formatted USB stick)")
     autorun = out / "autorun"
     runtime = autorun / "runtime"
