@@ -107,6 +107,27 @@ class Stick(unittest.TestCase):
             (a / "runtime" / "run.sh").write_text("# changed\n")
             self.assertNotEqual(before, make_stick.autorun_check(a, files, SALT))
 
+    def test_ssh_key_bundles_enable_ssh_and_the_key_itself(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            pub = d / "id_ed25519.pub"
+            pub.write_text("ssh-ed25519 AAAAfake sam@test\n")
+            out = make_stick.build(d / "stick", SALT, ROOT / "mpc-store.sh", [], ssh_key=pub)
+            runtime = out / "autorun" / "runtime"
+            self.assertTrue((runtime / "enable_ssh.sh").exists())
+            self.assertEqual((runtime / "authorized_key.pub").read_text(), pub.read_text())
+            m = json.loads((out / "autorun" / "autorun.json").read_text())["value0"]
+            self.assertEqual(sorted(m["files"]), ["runtime/authorized_key.pub", "runtime/enable_ssh.sh", "runtime/mpc-store.sh", "runtime/run.sh"])
+            self.assertIn("SSH is also enabled", (out / "README-USB.txt").read_text())
+
+    def test_no_ssh_key_means_no_ssh_files(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = make_stick.build(Path(d) / "stick", SALT, ROOT / "mpc-store.sh", [])
+            runtime = out / "autorun" / "runtime"
+            self.assertFalse((runtime / "enable_ssh.sh").exists())
+            self.assertFalse((runtime / "authorized_key.pub").exists())
+            self.assertNotIn("SSH is also enabled", (out / "README-USB.txt").read_text())
+
 
 class RunScript(unittest.TestCase):
     """run.sh against a stub mpc-store.sh: which ids it passes, the settings copy, the result file, the exit status."""
@@ -211,6 +232,38 @@ class RunScript(unittest.TestCase):
             self.assertEqual(r.returncode, 0)
             self.assertIn("warning: reapplying addin broken failed (status 1)", res)
             self.assertIn("store args: -y install plugin-manager", res)
+
+    def test_ssh_is_enabled_before_the_addin_reapply_and_catalog_install(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            usb, work, addins = d / "usb", d / "work", d / "addins"
+            usb.mkdir(); work.mkdir(); addins.mkdir()
+            (work / "mpc-store.sh").write_text('echo "store args: $*"\n')
+            (work / "enable_ssh.sh").write_text(f'echo "enable_ssh args: $*" >> "{d}/ssh.log"\n')
+            (work / "authorized_key.pub").write_text("ssh-ed25519 AAAAfake sam@test\n")
+            (d / "MPC.settings").write_text("<settings/>\n")
+            p = addins / "remote"; p.mkdir()
+            (p / "install.sh").write_text(f'echo "addin remote install args: $*" >> "{d}/addin.log"\n')
+            env = dict(os.environ, MPC_USB_TEST="1", MPC_SETTINGS=str(d / "MPC.settings"), MPC_ADDINS_DIR=str(addins))
+            r = subprocess.run(["sh", str(ROOT / "usb_stick" / "run.sh"), str(usb), str(work)], env=env, capture_output=True)
+            res = (usb / "mpc-install-result.txt").read_text()
+            self.assertEqual(r.returncode, 0)
+            self.assertIn("enable_ssh args: " + str(work / "authorized_key.pub"), (d / "ssh.log").read_text())
+            self.assertIn("Enabling SSH", res)
+            self.assertLess(res.index("Enabling SSH"), res.index("Reapplying addin: remote"))
+
+    def test_no_ssh_key_on_the_stick_skips_enabling_it(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            usb, work = d / "usb", d / "work"
+            usb.mkdir(); work.mkdir()
+            (work / "mpc-store.sh").write_text('echo "store args: $*"\n')
+            (d / "MPC.settings").write_text("<settings/>\n")
+            env = dict(os.environ, MPC_USB_TEST="1", MPC_SETTINGS=str(d / "MPC.settings"), MPC_ADDINS_DIR=str(d / "noaddins"))
+            r = subprocess.run(["sh", str(ROOT / "usb_stick" / "run.sh"), str(usb), str(work)], env=env, capture_output=True)
+            res = (usb / "mpc-install-result.txt").read_text()
+            self.assertEqual(r.returncode, 0)
+            self.assertNotIn("Enabling SSH", res)
 
 
 if __name__ == "__main__":

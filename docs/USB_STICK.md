@@ -35,18 +35,27 @@ its position differs, and it appears twice. The scheme is gone in MPC OS 3.10.0 
   padding); a candidate that fills the whole field with printable bytes is dropped as noise if a padded one is also found (needed
   on the Gen2 aarch64 rootfs, which has several such false positives — 2026-10-20). Refuses when there is no candidate or two
   different *padded* values. Refuses outright (no candidate at all) on a 3.10+ image.
-- `tools/usb_stick/make_stick.py`: `--firmware <update.img | MPC> --out <folder> [--install id,id]`. Writes the stick folder.
+- `tools/usb_stick/make_stick.py`: `--firmware <update.img | MPC> --out <folder> [--install id,id] [--ssh-key <path to a .pub file>]`.
+  Writes the stick folder. `--ssh-key` is optional and separate from the autorun mechanism itself (below): it bundles
+  `enable_ssh.sh` and a copy of that one public key file (never the private key, which never goes near this tool) so the stick
+  also sets up an ordinary SSH login, not just the one-shot root shell the autorun prompt itself grants.
+- `tools/usb_stick/enable_ssh.sh <authorized_key.pub>` (2026-10-23): lets root in over SSH with that key, without weakening
+  authentication (stock `sshd_config` already allows key-based root login and forbids passwords/empty passwords). Detects the
+  same way `resolve_dropin_root()` in mpc-vst-plugins' addin installer does: a writable root (or one that can be remounted rw,
+  Gen1/Force) gets the key installed in `/root/.ssh/authorized_keys` and `sshd` enabled at boot, persistently; a true read-only
+  root (dm-verity, e.g. Gen2's Live III -- remount refused outright) gets the key on `/run` (tmpfs) and `sshd` started directly
+  with it, for that boot only. Re-run (reinsert the stick) after every reboot on the second kind of device.
 - `tools/usb_stick/open.sh` + `run.sh`: on the device. `open.sh` copies the runtime to RAM and starts `run.sh` as a systemd unit;
-  `run.sh` first reapplies every already-installed addin's `install.sh -y -n` (2026-10-23: a no-op where its LD_PRELOAD entry
-  persisted; on a device with no persistent `/etc` at all, e.g. Gen2's Live III, the entry lives on `/run` and a reboot wiped
-  it, while `/data/mpc-addins/<id>/` itself -- including its own copy of `install.sh` -- survived; mpc-vst-plugins
-  `docs/ADDINS.md`, "A device with no persistent /etc"), then copies `MPC.settings` to the stick, then runs the bundled
-  `mpc-store.sh -y install <ids>` (default `plugin-manager`; ids from `install.txt` on the stick) and writes
-  `mpc-install-result.txt`. `mpc-store.sh` stops MPC once, starts it once, and starts it again on failure. It does not touch
-  `LD_PRELOAD` itself, so addins keep working. `mpc-store.sh` already picks the aarch64 vs armv7 zip by `uname -m` and the
-  right `MPC.settings` plugin-list key per generation, so the same stick build works unmodified on Gen1 and Gen2. The result
-  is that reinserting the stick restores SSH (via the autorun mechanism itself) and every addin in one step on a device like
-  the Live III, where neither survives a reboot on its own.
+  `run.sh` first runs `enable_ssh.sh` if the stick carries a key, then reapplies every already-installed addin's
+  `install.sh -y -n` (2026-10-23: a no-op where its LD_PRELOAD entry persisted; on a device with no persistent `/etc` at all,
+  e.g. Gen2's Live III, the entry lives on `/run` and a reboot wiped it, while `/data/mpc-addins/<id>/` itself -- including its
+  own copy of `install.sh` -- survived; mpc-vst-plugins `docs/ADDINS.md`, "A device with no persistent /etc"), then copies
+  `MPC.settings` to the stick, then runs the bundled `mpc-store.sh -y install <ids>` (default `plugin-manager`; ids from
+  `install.txt` on the stick) and writes `mpc-install-result.txt`. `mpc-store.sh` stops MPC once, starts it once, and starts it
+  again on failure. It does not touch `LD_PRELOAD` itself, so addins keep working. `mpc-store.sh` already picks the aarch64 vs
+  armv7 zip by `uname -m` and the right `MPC.settings` plugin-list key per generation, so the same stick build works unmodified
+  on Gen1 and Gen2. The result: reinserting the stick restores SSH, every addin, and installs/updates catalog plugins, all in
+  one step, on a device like the Live III where none of it survives a reboot on its own.
 - `tools/test_usb_stick.py`, CI in `.github/workflows/usb-stick.yml`: made-up salt; the real one is never stored.
 
 ## Rules
