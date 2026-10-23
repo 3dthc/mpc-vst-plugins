@@ -211,3 +211,20 @@ func TestSynthsAltIsIgnoredWhenTheConfiguredPrimaryExists(t *testing.T) {
 		t.Errorf("primary should be the configured SynthsDir, got %+v", p)
 	}
 }
+
+func TestAGen2OnlyVersionIsRefusedOnGen1(t *testing.T) {
+	raw := `{"schema":1,"plugins":[{"id":"g2","name":"G2","author":"a","kind":"instrument","distribution":"release","latest":"1.0.0","versions":[
+	 {"version":"1.0.0","size":20,"sha256":"` + strings.Repeat("b", 64) + `","url":"https://example.com/g2-aarch64.zip","channel":"stable","yanked":false,"gen2":true,"gen2_only":true,
+	  "assets":{"aarch64":{"size":20,"sha256":"` + strings.Repeat("b", 64) + `","url":"https://example.com/g2-aarch64.zip"}}}]}]}`
+	got, err := parseCatalog([]byte(raw))
+	if err != nil || len(got) != 1 || !got[0].Gen2Only || got[0].Aarch64 == nil {
+		t.Fatalf("parse: %+v %v", got, err)
+	}
+	if _, err := got[0].ForArch("armv7l"); err == nil || !strings.Contains(err.Error(), "Gen2 only") {
+		t.Errorf("a Gen1 or Force device must be refused, got %v", err)
+	}
+	c, err := got[0].ForArch("aarch64")
+	if err != nil || c.URL != "https://example.com/g2-aarch64.zip" {
+		t.Errorf("Gen2: %+v %v", c, err)
+	}
+}

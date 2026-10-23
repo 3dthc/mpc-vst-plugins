@@ -57,7 +57,12 @@ Still no real Gen2 device run. See NOTES.md 2026-10-20.
   `catalog_check.py` run, be arch `aarch64`, and match the armv7 zip's version and uid. Each version then carries
   `assets: {armv7: {url, sha256, size}, aarch64: {...}}` and `gen2: true`. The top-level `url`/`sha256` stay the armv7 asset, so
   schema-1 readers keep working. A bad aarch64 asset is reported in `problems.json` and never hides the Gen1 release.
-- An aarch64-only plugin is not supported yet (the armv7 asset is still the required one).
+- **A plugin with only a Gen2 build** (its engine has no 32-bit ARM backend, e.g. a DSP56300 JIT emulator) uses `"asset_pattern": "*-mpc-aarch64.zip"`
+  (no `armv7` in it). `catalog_build.py` then lists the one zip as the version's Gen2 asset: `assets: {aarch64: {...}}`, `gen2: true`,
+  `gen2_only: true`, and `url`/`sha256`/`size` stay that zip so older readers keep parsing (their installer refuses a wrong-arch zip). The zip must be
+  arch `aarch64` (checked). `catalog.tsv` has `-` in the size/sha256/url columns, so `mpc-store.sh` on a Gen1 device or a Force says "Gen2 only" and installs
+  nothing (`list` shows `[Gen2 only]`), the desktop installer's `ForArch` refuses it the same way, and the site shows a "Gen2 only" tag and a single
+  "Download (Gen2)" button. Offline tests only (`tools/test_catalog.py`, `tools/desktop/gen2_test.go`); the site template change is not run in a browser.
 
 ## Installer
 - `install.sh` reads `arch` from the package's `mpc-plugin.json` (absent = armv7) and refuses on a mismatch with `uname -m`, naming the
