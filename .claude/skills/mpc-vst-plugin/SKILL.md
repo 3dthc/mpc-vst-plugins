@@ -171,7 +171,8 @@ Parameter entries feeding `gen_vst.py` (`tools/params.py` format) can carry:
   unless `talign=` says otherwise.
 - A `"display": "string"` param is polled every 10 ms for `<key>_on` (list tiles lit from MIDI) and every 100 ms
   for text changes (readouts refreshed without a tap); `"poll": false` on the param turns that off for one
-  whose text only changes on a tap or whose `get_param()` is costly.
+  whose text only changes on a tap or whose `get_param()` is costly. The wrapper spreads the polls over the blocks, and a text param
+  the layout never mentions is not polled (`"poll": true` forces it; `params.h: N text param(s) ... not polled` says how many).
 - A host write (a Q-Link, automation, a touch) sends no `audioMasterUpdateDisplay`: MPC rebuilds its parameter screen
   on each one, which broke Q-Links on the automation screen (NOTES 2026-10-21). Polled readouts catch up within 100 ms.
   A param that other unpolled text depends on (a machine selector behind `dynamic_name` labels, a `"poll": false`

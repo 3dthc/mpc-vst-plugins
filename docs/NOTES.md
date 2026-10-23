@@ -1700,3 +1700,17 @@ WSL host, and `tools/bench.sh` is useless for this plugin (silent PASS, 5% p99):
 the bench's unpaced loop starves (docs/BENCH.md already warns about background threads). Virus B and C need more DSP time; their
 default DSP clock reduction (45% / 35%) comes from a Move's Cortex-A72 and has not been checked here. Sound and the skin were confirmed
 working by the user on the same unit.
+
+## 2026-10-23: the wrapper spreads its text polls over the blocks, and skips text the skin never shows (offline only)
+Two of the follow-ups from the port author's review (flaw 3, poll cost on the audio thread). `housekeeping()` used to read every
+polled readout in one block every 100 ms (and every `<key>_on` in one block every 10 ms), so a port with hundreds of text params had
+a spike on the audio thread at each poll. Now each block visits its share of the list (`poll_list`, a cursor and an accumulator of
+frames x params), so every param is still read about once per 10 / 100 ms and a changed text still asks for an UpdateDisplay within a
+period, but no block reads them all. And `gen_vst.py` (`shown_keys`) marks a `"display": "string"` param `no_poll` when the layout never
+mentions its key (a widget's `key=`, `get=`, `when=`, a list's `<key>_N` tiles, a `qlinks` line): nothing on the skin shows it, so nothing needs
+refreshing. `"poll": true` keeps one polled; a layout with `%`, `*`, `{` or `$` in a widget value, no layout, `custom_skin` and `skin_post` poll everything.
+Checked offline with `poc/polltest` (40 readouts, 30 shown, one tile with `_on`): 0 reads of the 10 unshown, about 297 reads a second of the shown,
+at most 1 read in any block (the old wrapper: 40 in one block and 100 reads of the unshown), a change reported in under 40 blocks, a tile within 3,
+the tile asked about every 10 ms. The same test fails on the old wrapper. Not measured on a device; the saving is the old worst-block cost (docs/BENCH.md).
+On our ports it skips: Clementine 3 (`patch_name`, `bank_name`, `browse_bank_name`), Luckydip 2, Morpho-PE 1, Sturm 3 (`patch_name`, `bank_name`, `bank_range`),
+Maschine 4, Rhythmbank 6; JV-880, Dexed and Profit-8 show all theirs. Existing builds keep polling everything until rebuilt.

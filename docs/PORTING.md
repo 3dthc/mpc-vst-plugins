@@ -84,8 +84,11 @@ for the pattern). This applies to every future port, not just ones that hit the 
       sent from `processReplacing()`. When MPC stops calling it, nothing goes out, so don't treat render as a heartbeat. A
       status light that must move while idle needs its own timer (MM-303 runs a 50 ms ticker per instance).
 - [ ] Polled readouts cost one `get_param()` each on the audio thread (every 10 ms for `<key>_on`, every 100 ms for text).
-      With hundreds of params, set `"poll": false` on readouts that only change on a tap, and keep anything costly out of a
-      polled key (docs/BENCH.md).
+      The wrapper spreads them over the blocks (each block reads its share of the list, never all of it), and `gen_vst.py` leaves
+      out a text param the layout never mentions (its key, `get=`, a `when=`, a list or a `qlinks` line); `"poll": true` keeps one the
+      skin does not show but you want refreshed. A layout with a pattern in a widget value (`%`, `*`, `{`), no layout, `custom_skin` and
+      `skin_post` polls everything. Still set `"poll": false` on readouts that only change on a tap, and keep anything costly out of
+      a polled key (docs/BENCH.md).
 - [ ] State saved via chunks (`effGetChunk`/`effSetChunk`).
 - [ ] Offline x86 test: `tools/test_port.sh <port>/vst.json` prints PASSED (instances, parameter round-trip,
       options, popups, MIDI → audio, chunk restore, under ASan).
