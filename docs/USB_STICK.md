@@ -57,6 +57,11 @@ its position differs, and it appears twice. The scheme is gone in MPC OS 3.10.0 
   on Gen1 and Gen2. The result: reinserting the stick restores SSH, every addin, and installs/updates catalog plugins, all in
   one step, on a device like the Live III where none of it survives a reboot on its own.
 - `tools/test_usb_stick.py`, CI in `.github/workflows/usb-stick.yml`: made-up salt; the real one is never stored.
+- `tools/desktop/stick.go` (2026-10-23): a Go port of `saltscan.py` and `make_stick.py` into the downloadable installer app, so a
+  user who would rather not use Python/the CLI can build a stick from a web page -- a new top-level mode there ("Set up a USB
+  stick"), independent of the SSH-based install steps. Same algorithm (`tools/desktop/stick_test.go` mirrors
+  `tools/test_usb_stick.py`'s cases), same output, plus a UI for the optional SSH key (paste one, or the app generates an ed25519
+  keypair and shows the private half once). See `tools/desktop/README.md`.
 
 ## Rules
 
