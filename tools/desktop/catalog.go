@@ -47,7 +47,7 @@ type CatPlugin struct {
 	Tested2x    bool     `json:"tested_2x"`     // the version has a tested.json entry on MPC OS 2.x firmware
 	Gen2        bool     `json:"gen2"`          // the version also has a Gen2 (aarch64) zip; SHA256/URL/Size above are the Gen1 (armv7) one
 	Aarch64     *Asset   `json:"aarch64,omitempty"`
-	Gen2Only    bool     `json:"gen2_only"`     // the version has no Gen1 zip at all: SHA256/URL/Size above are the Gen2 (aarch64) one
+	Gen2Only    bool     `json:"gen2_only"` // the version has no Gen1 zip at all: SHA256/URL/Size above are the Gen2 (aarch64) one
 }
 
 // ForArch returns the plugin with the zip that fits a device whose `uname -m` is arch: the armv7 zip on Gen1 and Force, the aarch64
