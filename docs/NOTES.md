@@ -1660,3 +1660,28 @@ loop — all three addins' `LD_PRELOAD` entries came back correctly from just th
 "/run fallback" case; `tools/test_addin.sh` cases 15/16 (remount works / is refused outright) and 3c (the folder's own install.sh
 after a simulated reboot) cover it offline. Issue #515 (the nightly catalog build failing commander's Gen2 asset on the
 now-stale "addins are armv7 only" check) is the first real-world confirmation the fix was needed; #512 merged to close it.
+
+## 2026-10-23: MPC fills its filmstrip cache in RAM and never empties it (MPC Live III, Gen2, MPC OS 3.9.1; device)
+Found while testing a plugin with a many-knob skin: MPC raised a **"Low Memory!" System Resources dialog** (a 100% meter) with the
+project idle. `/var/volatile` is a 3.9 GB tmpfs on this device, and it was 100% full: all of it in `/var/volatile/tmp/filmstrips/`
+(`/tmp/filmstrips` shows the same files on Gen1/Force), 1,660 `temp_<hash>.img` files, 3.96 GB, the oldest from the boot a day earlier.
+MPC writes one file per distinct knob filmstrip each time it loads a skin and **does not delete them** (not on project close, not on an
+MPC restart through `acvs`; only a reboot clears the tmpfs). `MemAvailable` was 380 MB of 8 GB, with 5.7 GB of it shown as `Shmem`.
+- A skin with ~190 live knobs wrote 86 files / 195 MB each time it was loaded (several loads per install and restart); the same plugin's
+  later skin, which reuses one knob strip and fewer controls, wrote 11 small files. So **many distinct knob sizes or strips per skin
+  cost RAM on every load**: keep knob sizes and strips few (docs/PORTING.md's skin checklist).
+- MPC held none of the files open or mapped (checked `/proc/<pid>/fd` and `maps`); deleting all of them over SSH freed 3.96 GB
+  (`MemAvailable` 380 MB -> 4.4 GB) and the running project kept drawing. Workaround on a device that shows the warning: reboot, or
+  `rm /var/volatile/tmp/filmstrips/temp_*.img`. Not verified on a Gen1/Force or whether MPC re-reads an old file by name.
+- It refills fast: after the clean-up above, several MPC restarts and plugin loads (a plugin being reinstalled and re-added) put **2,091 files / 3.97 GB** back into the
+  tmpfs within about two hours, and the "RAM at 100%" the user saw when changing a plugin's ROM was this cache, not the plugin. Emptied again (`MemAvailable` 0.46 -> 4.5 GB, MPC's
+  own `RssShmem` unchanged at 1.38 GB). Osirus's emulator memory shows in MPC's process as two 576 MB `/dev/zero` shared mappings (gearmulator's DSP memory), about 1.4 GB of shmem with a Virus C ROM.
+
+## 2026-10-23: Osirus (Access Virus emulation) CPU on a Live III (device; first reading, one patch, no bench)
+The Osirus port (own repo, Gen2 only) runs gearmulator's DSP56300 JIT on an emulator thread inside MPC. Playing a Virus A ROM
+(likely; the first ROM in the folder) the emulator thread used **about 59% of one core** over 10 s (`/proc/<pid>/task/<tid>/stat`,
+nice -10), MPC's four AudioWorkers 2-5% each, load average 1.1 on 8 cores. The same engine renders a Virus A at ~9x realtime on an x86
+WSL host, and `tools/bench.sh` is useless for this plugin (silent PASS, 5% p99): its worker thread is paced by the audio ring, which
+the bench's unpaced loop starves (docs/BENCH.md already warns about background threads). Virus B and C need more DSP time; their
+default DSP clock reduction (45% / 35%) comes from a Move's Cortex-A72 and has not been checked here. Sound and the skin were confirmed
+working by the user on the same unit.
