@@ -219,6 +219,12 @@ thread-safe, but a slow `set_param` holds audio. Links need `-lpthread`. host_te
 - Q-Links: one bank of 4 per tab if the target has 4 knobs (MPC Key 37 sub-pages don't cycle); nothing destructive
   on a Q-Link; `-` slots give each panel its own column; keep watched controls left of x ~1025 (Q-Link sidebar).
 - Ship `tested.json`, a `TESTING.md` (offline + numbered device table) and, for skin rework, a design-QA note.
+- **When a realistic or hardware-looking skin is requested**, follow SKIN_STUDIO "Realistic hardware skins". Draw each
+  tab at 2x and cut each control's frames from it. Light the knobs from a fixed direction: draw the round, lit body
+  once, and turn only the pointer and any non-round parts (a 303-style chamfer). Shade those parts by how they face
+  the light. Draw the plate as a bevelled slab with depth, a drop shadow and screws, with sections recessed as wells
+  and lettering engraved. Draw everything (no product photos, no maker's marks) and check min/mid/max frames side by
+  side.
 
 ## Skin studio (layout design)
 `tools/studio.py`: `auto` (params → first-pass layout.conf), `to-svg` / `from-svg` (Inkscape round trip; tabs are layers,
