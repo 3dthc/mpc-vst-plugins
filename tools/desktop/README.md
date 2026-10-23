@@ -15,7 +15,10 @@ so the app needs no Python) from your device's own stock Akai firmware image. Th
 manager (so you can browse and install more from the MPC screen itself), reapplies every already-installed addin's `LD_PRELOAD`
 entry (needed on a device with no persistent `/etc`, docs/ADDINS.md), and optionally sets up an ordinary SSH login too (paste your
 own public key, or have the app generate one; the private half is shown once and never kept). None of this needs the device's own
-SSH yet -- that's the point.
+SSH yet -- that's the point. Both the firmware path and the output folder have a **Browse…** button (`/api/browse`, a server-side
+folder/file picker, since a browser's own file input never exposes a real path) instead of typing one, and the output folder step
+also lists this computer's mounted drives (`/api/drives`; Linux, macOS and Windows): pick a mounted USB stick there and Build writes
+the stick straight onto it, with nothing left to copy by hand.
 
 ## What it does, in order
 

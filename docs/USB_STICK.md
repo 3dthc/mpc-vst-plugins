@@ -61,7 +61,9 @@ its position differs, and it appears twice. The scheme is gone in MPC OS 3.10.0 
   user who would rather not use Python/the CLI can build a stick from a web page -- a new top-level mode there ("Set up a USB
   stick"), independent of the SSH-based install steps. Same algorithm (`tools/desktop/stick_test.go` mirrors
   `tools/test_usb_stick.py`'s cases), same output, plus a UI for the optional SSH key (paste one, or the app generates an ed25519
-  keypair and shows the private half once). See `tools/desktop/README.md`.
+  keypair and shows the private half once). The firmware path and output folder each have a **Browse…** button (`tools/desktop/browse.go`,
+  a server-side picker, since a browser's file input can't hand back a real path) and the output folder also lists mounted drives
+  (`tools/desktop/drives_*.go`) so picking a USB stick there writes the build straight onto it. See `tools/desktop/README.md`.
 
 ## Rules
 

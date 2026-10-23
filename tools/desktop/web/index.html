@@ -193,6 +193,7 @@ footer { color:var(--muted); font-size:12.5px; margin-top:24px; }
   <p class="sub">This reads your device's own stock Akai update image to work out a one-time check it needs (nothing from this image is kept or sent anywhere). Use the exact image for your device: Gen1 MPC, Force, or Gen2 (Live III, One G2, Key(s) G2). <a href="https://www.akaipro.com/downloads-and-support/downloads/firmware/mpc/" target="_blank" rel="noopener">Get it from Akai</a> if you don't have it already, then point this at the downloaded file.</p>
   <div class="row">
     <label class="f">Path to the firmware file (.img, or the MPC executable from one)<input id="st-fw" type="text" placeholder="e.g. /home/you/Downloads/MPC-3.9.1-Gen2-update.img" spellcheck="false"></label>
+    <button id="st-fw-browse" type="button">Browse…</button>
     <button class="primary" id="st-scan" type="button">Scan…</button>
   </div>
   <p class="msg" id="st-scanmsg" role="status" aria-live="polite"></p>
@@ -227,9 +228,11 @@ footer { color:var(--muted); font-size:12.5px; margin-top:24px; }
 
 <section id="st4" class="off">
   <h2><span class="n">4</span>Build the stick</h2>
-  <p class="sub">Writes the stick's files to a folder on this computer. Copy everything in that folder (hidden files too) to the root of a FAT32/exFAT USB stick, insert it into the device, and confirm the prompt there.</p>
+  <p class="sub">Writes the stick's files to the folder you pick. Point it straight at a mounted FAT32/exFAT USB stick's top level (pick one below, or Browse to it) and there's nothing left to copy -- otherwise, copy everything in the folder (hidden files too) to the root of a stick afterward. Either way: insert the stick into the device and confirm the prompt there.</p>
+  <div id="st-drives"></div>
   <div class="row">
-    <label class="f">Folder to write it to<input id="st-out" type="text" placeholder="e.g. /home/you/Desktop/mpc-stick" spellcheck="false"></label>
+    <label class="f">Folder to write it to<input id="st-out" type="text" placeholder="e.g. /home/you/Desktop/mpc-stick, or a mounted USB stick" spellcheck="false"></label>
+    <button id="st-out-browse" type="button">Browse…</button>
     <button class="primary" id="st-build" type="button">Build…</button>
   </div>
   <p class="msg" id="st-buildmsg" role="status" aria-live="polite"></p>
@@ -244,6 +247,14 @@ footer { color:var(--muted); font-size:12.5px; margin-top:24px; }
   <p id="dlgtxt"></p>
   <p id="dlgsave"><b>Save your project first.</b> MPC will be stopped and started again, and anything unsaved is lost.</p>
   <div class="actions"><button id="no">Cancel</button><button class="primary" id="yes">Install</button></div>
+</dialog>
+
+<dialog id="bdlg">
+  <h3 id="bdlgtitle">Choose a folder</h3>
+  <p class="small" id="bdlgpath" style="word-break:break-all"></p>
+  <p class="msg" id="bdlgmsg" role="status" aria-live="polite"></p>
+  <ul class="list" id="bdlglist" style="max-height:320px;overflow:auto"></ul>
+  <div class="actions"><button id="bdlgcancel">Cancel</button><button id="bdlgup">Up a level</button><button class="primary" id="bdlgpick">Use this folder</button></div>
 </dialog>
 
 <script>
@@ -688,6 +699,49 @@ function setMode(m) {
 }
 $("mode-install").addEventListener("click", function () { setMode("install"); });
 $("mode-stick").addEventListener("click", function () { setMode("stick"); });
+
+var BR = { mode: "dir", target: null, dir: "" };
+function openBrowse(mode, target, start) {
+  BR.mode = mode; BR.target = target;
+  $("bdlgtitle").textContent = mode === "file" ? "Choose the firmware file" : "Choose a folder";
+  $("bdlgpick").hidden = mode === "file";
+  $("bdlg").showModal();
+  browseTo(start || "");
+}
+function browseTo(dir) {
+  msg($("bdlgmsg"), "Loading…");
+  api("/api/browse?dir=" + encodeURIComponent(dir)).then(function (r) {
+    BR.dir = r.dir; BR.parent = r.parent || "";
+    $("bdlgpath").textContent = r.dir;
+    $("bdlgup").disabled = !r.parent;
+    msg($("bdlgmsg"), "");
+    var ul = $("bdlglist"); ul.textContent = "";
+    r.entries.forEach(function (e) {
+      var li = el("li"); var b = el("button", "linkbtn", (e.isDir ? "📁 " : "") + e.name);
+      b.type = "button";
+      b.onclick = function () {
+        if (e.isDir) { browseTo(e.path); }
+        else if (BR.mode === "file") { BR.target.value = e.path; $("bdlg").close(); }
+      };
+      li.appendChild(b); ul.appendChild(li);
+    });
+  }).catch(function (e) { msg($("bdlgmsg"), e.message, "err"); });
+}
+$("bdlgup").addEventListener("click", function () { if (BR.parent) browseTo(BR.parent); });
+$("bdlgcancel").addEventListener("click", function () { $("bdlg").close(); });
+$("bdlgpick").addEventListener("click", function () { BR.target.value = BR.dir; $("bdlg").close(); });
+$("st-fw-browse").addEventListener("click", function () { openBrowse("file", $("st-fw"), $("st-fw").value.trim()); });
+$("st-out-browse").addEventListener("click", function () { openBrowse("dir", $("st-out"), $("st-out").value.trim()); });
+api("/api/drives").then(function (r) {
+  var ds = r.drives || []; if (!ds.length) return;
+  var box = $("st-drives"); box.innerHTML = '<p class="small">Mounted drives: </p>';
+  var ul = el("ul", "list"); box.appendChild(ul);
+  ds.forEach(function (d) {
+    var li = el("li"); var b = el("button", "linkbtn", d.label + " (" + d.path + ")");
+    b.type = "button"; b.onclick = function () { $("st-out").value = d.path; };
+    li.appendChild(b); ul.appendChild(li);
+  });
+}).catch(function () {});
 
 $("st-scan").addEventListener("click", function () {
   var fw = $("st-fw").value.trim();
