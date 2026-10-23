@@ -65,7 +65,9 @@ an old-scheme stick; not something to rely on.)
   the script is fetched from the site on every run, so it and the table always match.
 - The desktop installer app (`tools/desktop`) reads `versions[].assets.aarch64` from `catalog.json`, installs the zip that fits the connected
   device (`CatPlugin.ForArch`), accepts aarch64 devices, refuses a hand-added zip for the other generation (naming the zip to get), shows a
-  Gen2 tag and a "no Gen2 build" note on a Gen2 device. Tested against a fake SSH device only; no real Gen2.
+  Gen2 tag and a "no Gen2 build" note on a Gen2 device. Device-confirmed on a real Live III (2026-10-22/23): an install hang traced to
+  `Run()` having no deadline/keepalive against that device's weaker Wi-Fi (fixed, #509, released as desktop-v0.6.1), then a full install
+  of five plugins to `/nvme/Synths` through the app itself.
 
 ## Site
 `index.html`: a **Gen2 build** tag on a version with an aarch64 asset (always that text and a neutral colour since 2026-10-12; whether it

@@ -1588,3 +1588,33 @@ internal-storage preference and defaults list include `/nvme/Synths`; and `do_la
 confirmed Live III layout) resolves to `/nvme/Synths` under the existing x86 `tests/run.sh`, and the same build re-run under real
 aarch64 emulation (QEMU, `arm64v8/gcc:12-bookworm`) confirms the `uname()`-gated branches actually take the Gen2 path for real.
 PR: <https://github.com/poloq-instruments/mpc-vst-manager/pull/12>. Not run on real Gen2 hardware; not merged.
+
+## 2026-10-23: three addins confirmed together on a real Gen2 device (Live III, MPC OS 3.9.1); two device-found installer bugs fixed
+
+mpc-addin-remote, mpc-addin-skipback and mpc-addin-commander (each already Gen2-compat per their own PRs above) installed and
+device-tested on a Live III, all three loaded together with no conflicts (`tested.json` in each repo):
+- **remote** 1.0.1: screen capture `"ok"` at 1280x800, touch device found — the RK3588 AFBC/tiled-buffer risk flagged in its PR did
+  not materialize; this device's scanout is a linear buffer.
+- **skipback** 0.6.1: loaded, LD_PRELOAD confirmed.
+- **commander** (PR already merged upstream as v1.1.0 before this session caught up to it): loaded, HTTP answering, its
+  `dlsym(RTLD_NEXT)` preload-chaining fix holds with the other two present.
+
+**Found installing the first one (remote): the shared addin installer never worked on this device at all.** Two bugs, both in
+`tools/release/addin/addin-lib.sh`, neither caught by the existing test suite because no test ever made the drop-in's own target
+directory genuinely unwritable (only the *unit file* in the read-only-root test case, never the drop-in's folder):
+1. `preload_add`/`preload_remove` never remounted root before writing the shared `LD_PRELOAD` drop-in to `/etc/systemd/system` —
+   only `boot_reload_add`/`remove` did, for a different problem (the `/etc`-is-an-overlay boot race). Worked by luck on every
+   device seen before (Gen1/Force: a writable root, or `/etc` already on a writable overlay).
+2. Even with that fixed, this device's root is **true dm-verity** (`/dev/dm-0`): `mount -o remount,rw /` is refused outright, not
+   just permission-denied, so there is no way to write under `/etc` at all, ever. Fixed with a `/run` (tmpfs) fallback
+   (`resolve_dropin_root()`): not persistent, so `install.sh` now also carries into the installed folder (`install.sh` and
+   `mpc-plugin.json` added to `SELF_FILES`), letting `sh /data/mpc-addins/<id>/install.sh -y -n` redo the entry after a reboot
+   without the release zip.
+3. The USB stick's `run.sh` (`tools/usb_stick`, branch `usb-bootstrap`, local only) now does exactly that for every installed
+   addin on each boot it is inserted for, so reinserting it restores both SSH and every addin in one step on this device.
+
+Verified end to end on the device itself: wiped the `/run` drop-in by hand (what a real reboot does) and ran the stick's exact
+loop — all three addins' `LD_PRELOAD` entries came back correctly from just their own folders. docs/ADDINS.md documents the new
+"/run fallback" case; `tools/test_addin.sh` cases 15/16 (remount works / is refused outright) and 3c (the folder's own install.sh
+after a simulated reboot) cover it offline. Issue #515 (the nightly catalog build failing commander's Gen2 asset on the
+now-stale "addins are armv7 only" check) is the first real-world confirmation the fix was needed; #512 merged to close it.
