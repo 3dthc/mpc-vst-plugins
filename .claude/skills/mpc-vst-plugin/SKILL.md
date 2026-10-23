@@ -235,6 +235,13 @@ Always `preview` before deploying. Enum `options=` are optional in layouts (they
   thread-CPU timed, verdict PASS/WARN/FAIL against the 2902 µs block (docs/BENCH.md). Nothing installed; MPC keeps running.
 - `tools/release.py`: one shareable zip (the `portable/<skin>/` plugin folder + install.sh/uninstall.sh + generated INSTALL.md + SHA256SUMS); the
   installer stops/restarts MPC, so installing a release on the user's device needs their go-ahead (docs/RELEASING.md).
+- **Every release should include a Gen2 (aarch64) build when the port's engine allows it** (proven pilot, 2026-10-11, docs/GEN2.md):
+  add `"targets": ["armv7", "aarch64"]` to `vst.json`, `tools/build_port.sh vst.json all`, `tools/test_port.sh vst.json aarch64` must PASS,
+  run `release.py` once per arch (two zips, same tag), and wire `TARGETS="armv7 aarch64"` + `extra_aarch64` into the repo's `vst-release.yml`.
+  No catalog registry change is needed — `catalog_build.py` picks up the aarch64 sibling asset automatically. **The user has no Gen2
+  device of their own** (2026-10-11) — Gen2 verification depends on testers, so an aarch64 build/test/release can be shipped and still
+  sit unverified for a while; don't claim or infer "tested" status, and add a `tested.json` entry only from an actual tester report
+  naming the device. Skip aarch64 only when the engine/toolchain genuinely can't build for it, and say why.
 - `tools/screenshot.sh <ssh target> out.png [--plugin]`: a screenshot of what the device shows now (read-only DRM grab; NOTES.md).
 - `tools/probe_device.sh` (read-only): arch, CPU, audio workers, plugin formats. VST3 is **not** compiled into MPC OS
   (Force, 2026-09-24): don't build VST3 ports.

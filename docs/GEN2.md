@@ -34,6 +34,16 @@ A device already updated to 3.10+ has no documented root route from this project
 OTA update to "3.10.0" left a device's rootfs still reporting "3.9.1" underneath — if real, that specific device might still take
 an old-scheme stick; not something to rely on.)
 
+Update (2026-10-20, community-reported, not run by us): the stock **autorun-stick route** (see NOTES.md 2026-10-13 and the
+2026-10-20 entry) is now reported to work on **Gen2** — one user confirmed it on Gen2 and used the same bug to enable SSH.
+If that holds, it would be a no-hack Gen2 root route usable by this project's USB stick, but we have not generated or run a
+Gen2 autorun stick, and the Gen2 salt/offset is unverified. Akai is predicted (unverified) to patch autorun in firmware v3.10+.
+Offline (2026-10-20, us): the autorun salt in the Gen2 stock image `MPC-3.9.1-Gen2-update.img` is **identical to Gen1/Force**
+(same value, in the Gen2 main rootfs) — so the scheme carries to Gen2 and our `tools/usb_stick/` generator should produce an
+accepted Gen2 stick. Fixed (2026-10-20, us): `saltscan.find_salt()` now auto-resolves on Gen2 (drops full-WIDTH, non-padded false
+candidates), verified to return the same salt on Gen2/Gen1/Force; the generator can build a Gen2 stick with no manual override.
+Still no real Gen2 device run. See NOTES.md 2026-10-20.
+
 ## One plugin, two zips
 - `release.py` names the zip from the `.so`'s ELF machine: `<Name>-<ver>-mpc-armv7.zip` (Gen1, unchanged) or
   `<Name>-<ver>-mpc-aarch64.zip` (Gen2). Run it once per build. Both go on the **same** GitHub release / tag.
