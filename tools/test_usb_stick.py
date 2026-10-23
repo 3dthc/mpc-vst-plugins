@@ -99,6 +99,22 @@ class Stick(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 make_stick.build(out, SALT, ROOT / "mpc-store.sh", [])
 
+    def test_building_into_an_already_existing_empty_folder_works(self):
+        # the common case when "out" is a mounted USB stick's own root: the mount point already exists.
+        with tempfile.TemporaryDirectory() as d:
+            mounted = Path(d) / "stick"
+            mounted.mkdir()
+            out = make_stick.build(mounted, SALT, ROOT / "mpc-store.sh", [])
+            self.assertTrue((out / "autorun" / "open.sh").exists())
+
+    def test_building_into_a_non_empty_folder_is_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            occupied = Path(d) / "stick"
+            occupied.mkdir()
+            (occupied / "something.txt").write_text("not ours\n")
+            with self.assertRaises(FileExistsError):
+                make_stick.build(occupied, SALT, ROOT / "mpc-store.sh", [])
+
     def test_changing_a_file_changes_the_check(self):
         with tempfile.TemporaryDirectory() as d:
             a = make_stick.build(Path(d) / "s", SALT, ROOT / "mpc-store.sh", []) / "autorun"

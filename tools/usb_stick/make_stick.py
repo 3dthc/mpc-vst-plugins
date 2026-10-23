@@ -38,10 +38,13 @@ def build(out, salt, store, install, ssh_key=None, ssh_password=None):
         raise ValueError("use --ssh-key or --ssh-password, not both")
     out = Path(out)
     if out.exists():
-        raise FileExistsError(f"{out} already exists")
+        if not out.is_dir():
+            raise FileExistsError(f"{out} already exists and is not a folder")
+        if any(out.iterdir()):
+            raise FileExistsError(f"{out} is not empty; pick an empty folder (or an empty, freshly formatted USB stick)")
     autorun = out / "autorun"
     runtime = autorun / "runtime"
-    runtime.mkdir(parents=True)
+    runtime.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(HERE / "open.sh", autorun / "open.sh")
     shutil.copyfile(HERE / "run.sh", runtime / "run.sh")
     shutil.copyfile(store, runtime / "mpc-store.sh")
