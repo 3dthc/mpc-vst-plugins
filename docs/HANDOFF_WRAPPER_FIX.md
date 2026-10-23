@@ -14,7 +14,7 @@ six flaws in `wrapper/vst2_wrap.c` and the port workflow. Two were fixed in code
 | 2 | Reports only go out from `processReplacing()` | Documented (PORTING.md, #489). No code change |
 | 3 | `housekeeping()` polls DSP text on the audio thread | Documented (#489). Skipping unshown params is still open (ROADMAP idea) |
 | 4 | One lock over set/get/midi/render | Documented (#489): no I/O in set/get; worker + trylock |
-| 5 | No `effGetParameterProperties` (opcode 56) | Documented (#489). **Open:** whether MPC honours the switch / whole-step flags (could let Q-Links step options natively). Needs a probe plugin on a device |
+| 5 | No `effGetParameterProperties` (opcode 56) | Documented (#489). Probed on the Force 2026-10-23: MPC never asks for opcode 56 and ignores the flags, so there is nothing to implement |
 | 6 | Skin binds params by index; an insert mid-list breaks them | Fixed: `gen_vst.py` writes `<port>/params.lock`, build fails if an existing key changes index (#488) |
 
 Why not the author's one-line fix (delete the flag): it was added on 2026-09-24 so `get=`-bound readouts (jv880 bank/patch names)
@@ -106,6 +106,6 @@ The scripts used this session lived in the session scratchpad (`rel.sh`, `port.s
 4. Test one more port on the Force (an effect, since the report says effects show the problem too): track edit → automation with a Q-Link.
 5. Post the notice and issues to the other authors after the user approves the text; decide per-repo issues vs one per author.
 6. Reply to the reporting author.
-7. Probe opcode 56 (`effGetParameterProperties`) on a device in `poc/`; only then consider wrapper changes for flaw 5.
+7. Done 2026-10-23: probe run on the Force, MPC never asks for opcode 56 and ignores the flags (NOTES.md); no wrapper change. (Was: probe opcode 56 (`effGetParameterProperties`) on a device in `poc/`; only then consider wrapper changes for flaw 5.)
 8. Ideas, not started: skip polling for params the skin does not show; spread the polls across blocks; a catalog "rebuild recommended" flag.
 9. Machinemodule: publish or delete the old v0.4.0 draft; the Gen2 build is untried on a Gen2 device.
