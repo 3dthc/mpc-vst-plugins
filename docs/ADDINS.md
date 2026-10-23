@@ -174,7 +174,10 @@ be the installer's own. An addin finds its settings file in its own folder (the 
 ## Releasing
 
 1. Build the `.so` for armhf (an older glibc than the device's, as for plugins: `docs/RELEASING.md`) into a folder with `addin.manifest`
-   and the files it names.
+   and the files it names. For Gen2 (aarch64) too: a second build into a separate folder, same `addin.manifest` and files,
+   `arm64v8/gcc:12-bookworm` under QEMU (no older-glibc ceiling to respect: Gen2 only runs MPC OS 3.x, glibc 2.39) --
+   optional, and the only thing that changes in step 2 is a second `release_addin.py --dir` for it (named by the
+   built `.so`'s own arch, same as a plugin's zip).
 2. Package and check it:
    ```sh
    tools/release_addin.py --dir build/package --version 1.0.0 --repo owner/mpc-addin-<name> --license MIT \
@@ -204,12 +207,17 @@ jobs:
       tools_ref: <sha>                 # the same commit
       package_dir: build/package       # the build writes addin.manifest, the .so and the files it names here
       build: tools/build_armhf.sh      # run from the repo root; MPC_VST is set
+      package_dir_aarch64: build/aarch64   # optional: a Gen2 build too, same layout; omit for an armv7-only addin
+      build_aarch64: tools/build_aarch64.sh
       host_test: tools/test_host.sh    # optional; MPC_VST is set
       about: One line about the addin.
       license: MIT                     # needed to be listed in the catalog
       dry_run: ${{ inputs.dry_run }}   # optional: the zip as a run artifact only
 ```
-Re-running with the same version replaces the draft's zip; a version that is already published is refused.
+With both `package_dir_aarch64`/`build_aarch64` set, one run builds and attaches **both** zips to the same draft
+release (mpc-addin-remote and mpc-addin-commander do this; mpc-addin-skipback releases by hand instead, `tools/build_aarch64.sh`
++ `tools/release_addin.py` run directly). Re-running with the same version replaces the draft's zip(s); a version
+that is already published is refused.
 
 Addin repos are named `mpc-addin-<name>`. For a quick test without a release, unzip the package from step 2 (or copy
 the three installer files next to the build output) and run its `install.sh`.
