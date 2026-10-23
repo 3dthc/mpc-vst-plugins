@@ -37,8 +37,8 @@ type App struct {
 	cat       []CatPlugin
 	catAt     time.Time
 	job       *Job
-	stickJob  *Job                   // the USB-stick builder's own job slot: independent of a device connection
-	stickScan map[string]*stickScan  // salt-scan results, by handle
+	stickJob  *Job                  // the USB-stick builder's own job slot: independent of a device connection
+	stickScan map[string]*stickScan // salt-scan results, by handle
 
 	patches   []Patch
 	patchesAt time.Time

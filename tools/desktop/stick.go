@@ -43,7 +43,7 @@ var stickEnableSSHSH []byte
 var saltKey = [8]byte{0x87, 0x3b, 0x91, 0xf9, 0x45, 0x1b, 0x77, 0xc9} // 0xc9771b45f9913b87, little-endian; from the firmware's scheme, not a secret
 
 const (
-	saltWidth = 37 // bytes reserved for the salt, padded with zeros
+	saltWidth  = 37 // bytes reserved for the salt, padded with zeros
 	saltMinLen = 16
 	saltChunk  = 8 << 20
 )
@@ -261,11 +261,11 @@ const stickPrompt = "MPC PLUGIN INSTALLER\n\nThis installs the plugins listed in
 	"(the plugin manager by default) and restarts MPC.\n\nHave you saved your project?"
 
 type autorunScript struct {
-	Path           string `json:"path"`
-	AskQuestion    bool   `json:"askQuestion"`
-	Message        string `json:"message"`
-	YesButtonText  string `json:"yesButtonText"`
-	NoButtonText   string `json:"noButtonText"`
+	Path          string `json:"path"`
+	AskQuestion   bool   `json:"askQuestion"`
+	Message       string `json:"message"`
+	YesButtonText string `json:"yesButtonText"`
+	NoButtonText  string `json:"noButtonText"`
 }
 type autorunManifest struct {
 	Value0 struct {
