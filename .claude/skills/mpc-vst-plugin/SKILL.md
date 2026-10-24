@@ -248,7 +248,8 @@ Always `preview` before deploying. Enum `options=` are optional in layouts (they
   run `release.py` once per arch (two zips, same tag), and wire `TARGETS="armv7 aarch64"` + `extra_aarch64` into the repo's `vst-release.yml`.
   No catalog registry change is needed — `catalog_build.py` picks up the aarch64 sibling asset automatically. **The user has their own
   Gen2 device (an MPC Live III) since 2026-10-22** and can test a build directly over SSH (the autorun-stick route, `docs/USB_STICK.md`,
-  works on MPC OS 3.9.1; not on 3.10.0+). Still don't claim or infer "tested" status without an actual run; add a `tested.json` entry
+  works on MPC OS 3.9.1; not on 3.10.0+). To have both, `tools/mpc310_on_391/` builds a stick that runs the 3.10 app on 3.9.1
+  at every boot (device-verified 2026-10-24); never commit or share a built stick. Still don't claim or infer "tested" status without an actual run; add a `tested.json` entry
   only after one (on the user's device or a tester's). Skip aarch64 only when the engine/toolchain genuinely can't build for it, and say why.
 - `tools/screenshot.sh <ssh target> out.png [--plugin]`: a screenshot of what the device shows now (read-only DRM grab; NOTES.md).
 - `tools/probe_device.sh` (read-only): arch, CPU, audio workers, plugin formats. VST3 is **not** compiled into MPC OS

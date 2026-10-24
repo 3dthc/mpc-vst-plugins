@@ -228,6 +228,9 @@ screen shows. If you are comfortable in a terminal and on 2.x, the output of thi
   checkout is needed.
 - `tools/html_art.py` + `tools/html_art/`: the optional browser renderer for skin artwork (`"art": "html"`):
   the same layouts drawn as SVG/CSS in headless Chromium, restyled per port with a stylesheet.
+- `tools/mpc310_on_391/`: a USB stick that runs the MPC 3.10 app on an MPC Live III that stays on MPC OS 3.9.1 (which
+  keeps the USB-script route developers use for SSH). Built on your computer from Akai's two official Gen2 update
+  images; nothing from Akai is in the repo. See [its README](tools/mpc310_on_391/README.md).
 - `tools/skin_check.py`: checks a built skin for overlapping touch areas, controls off the screen, Q-Links on hidden
   parameters and switches missing options; `gen_vst.py` runs it after every build.
 - `tools/studio.py` + `tools/skin_template.svg`: the skin studio. Auto-layout from a port's
