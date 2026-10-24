@@ -56,7 +56,8 @@ its position differs, and it appears twice. The scheme is gone in MPC OS 3.10.0 
   own copy of `install.sh` -- survived; mpc-vst-plugins `docs/ADDINS.md`, "A device with no persistent /etc"), then copies
   `MPC.settings` to the stick, then runs the bundled `mpc-store.sh -y install <ids>` (default `plugin-manager`; ids from
   `install.txt` on the stick) and writes `mpc-install-result.txt`. `mpc-store.sh` stops MPC once, starts it once, and starts it
-  again on failure. It does not touch `LD_PRELOAD` itself, so addins keep working. `mpc-store.sh` already picks the aarch64 vs
+  again on failure; when every requested id was skipped (no build for this device) MPC is never touched at all, and the run is
+  not a failure. It does not touch `LD_PRELOAD` itself, so addins keep working. `mpc-store.sh` already picks the aarch64 vs
   armv7 zip by `uname -m` and the right `MPC.settings` plugin-list key per generation, so the same stick build works unmodified
   on Gen1 and Gen2. The result: reinserting the stick restores SSH, every addin, and installs/updates catalog plugins, all in
   one step, on a device like the Live III where none of it survives a reboot on its own.
@@ -88,14 +89,17 @@ its position differs, and it appears twice. The scheme is gone in MPC OS 3.10.0 
 
 ## Not known yet
 
-- Not run end to end on real Gen1 hardware, or on any real Gen2 hardware (Gen2 autorun itself is community-reported to work —
-  2026-10-20 — and the salt is confirmed offline in the Gen2 3.9.1 image, but this project's stick has not been run on a Gen2
-  device). First run on a new device: back up `MPC.settings`, save the session, ask before the restart.
-- The stick's default install, `plugin-manager` (poloq-instruments/mpc-vst-manager), had no aarch64 build at all until
-  2026-10-23: `mpc-store.sh` would refuse it on Gen2 with no Gen2 build, so the stick's default install did nothing there.
-  A Gen2-compat PR (device probe: `/nvme`, `/data/Settings`, `pluginList-arm-64bit`, plus an aarch64 build) is open at
-  <https://github.com/poloq-instruments/mpc-vst-manager/pull/12>, offline-tested only (fake Gen2 device + aarch64/QEMU);
-  not yet merged, not yet run on real Gen2 hardware.
+- **Run end to end on a real Gen2 device (Live III, 2026-10-23):** the desktop app's "Plugin install" mode built a stick from
+  the device's own firmware, the prompt appeared, SSH setup and every already-installed addin's reapply (commander, remote,
+  skipback) all succeeded. The one thing that did not install was the catalog default, `plugin-manager`, because
+  poloq-instruments/mpc-vst-manager has no Gen2 (aarch64) build published yet (see below) -- `mpc-store.sh` now skips an id
+  with no build for the device instead of aborting the run (2026-10-25 fix, see `docs/GEN2.md`), so this no longer blocks
+  SSH/addin reapply or any other catalog id also listed. Not yet run end to end on real Gen1 hardware.
+- The stick's default install, `plugin-manager` (poloq-instruments/mpc-vst-manager), still has no aarch64 build published: a
+  Gen2-compat PR (device probe: `/nvme`, `/data/Settings`, `pluginList-arm-64bit`, plus an aarch64 build), device-tested on the
+  Live III above, is open at <https://github.com/poloq-instruments/mpc-vst-manager/pull/12>, not yet merged upstream. Until it
+  is, a Gen2 stick's default install is a no-op (now reported as "skipped", not a failure) unless `install.txt` is edited to
+  name something else with a Gen2 build.
 - Needs internet on the device for the catalog. An offline stick (bundled zips) is not built.
 - Other MPC OS 3.x point releases and Key/X/One: the salt scheme and the reader are still unchecked, beyond the 3.10.0 break
   above.

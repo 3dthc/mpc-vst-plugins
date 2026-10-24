@@ -63,6 +63,13 @@ Still no real Gen2 device run. See NOTES.md 2026-10-20.
   arch `aarch64` (checked). `catalog.tsv` has `-` in the size/sha256/url columns, so `mpc-store.sh` on a Gen1 device or a Force says "Gen2 only" and installs
   nothing (`list` shows `[Gen2 only]`), the desktop installer's `ForArch` refuses it the same way, and the site shows a "Gen2 only" tag and a single
   "Download (Gen2)" button. Offline tests only (`tools/test_catalog.py`, `tools/desktop/gen2_test.go`); the site template change is not run in a browser.
+- **`mpc-store.sh install <id>...` with more than one id: an id with no build for this device's architecture is skipped, not fatal**
+  (2026-10-25 fix -- found on a real Gen2 device: `install plugin-manager` used to abort the whole batch immediately with no build
+  for Gen2, so the USB stick's default install, `plugin-manager`, silently prevented any other configured catalog plugin from
+  being attempted, even though the stick's SSH setup and addin reapply run separately before it and were never affected). The
+  summary line says how many were skipped and why (`"Installed 2 of 3 (1 skipped: no build for this device)."`), and the run is
+  not reported as a failure (exit 0) when every requested id was skipped for this reason -- only a real error (download, checksum,
+  unzip, or the plugin's own installer failing) still returns non-zero.
 
 ## Installer
 - `install.sh` reads `arch` from the package's `mpc-plugin.json` (absent = armv7) and refuses on a mismatch with `uname -m`, naming the
