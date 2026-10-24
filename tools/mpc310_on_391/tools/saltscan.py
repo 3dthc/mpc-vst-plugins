@@ -1,8 +1,9 @@
 """Find the autorun check's salt in MPC firmware.
 
 The stock USB-script reader validates autorun/autorun.check = sha256(autorun.json + open.sh + the listed files + salt). The salt
-is a short string kept XOR-obfuscated in the MPC executable. Discovered and first used by Eurikon (plugin-manager-usb, MIT);
-this module finds it by scanning instead of reading a fixed offset, so it works on any firmware build that keeps the same scheme.
+is a short string kept XOR-obfuscated in the MPC executable. The autorun feature was documented by TheKikGen (MPC-LiveXplore)
+and its check worked out and first used by Eurikon (plugin-manager-usb, MIT), credited equally;
+this module finds the salt by scanning instead of reading a fixed offset, so it works on any firmware build that keeps the same scheme.
 
 Nothing Akai-derived is stored in this repo: the salt is read from the user's own firmware at generation time.
 """

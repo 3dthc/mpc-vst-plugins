@@ -49,9 +49,15 @@ What happened is written to `mpc310-result.txt` on the stick.
 ## How it works
 MPC OS 3.9.1 runs a script from a USB stick at start-up when the stick carries `autorun/` with a matching
 `autorun.check` (a SHA-256 over the stick's files plus a value inside the MPC program; `tools/saltscan.py` finds it
-in the 3.9.1 image, credit to Eurikon, who found the route). The script (`stick/run.sh`) copies the 3.10 app to
+in the 3.9.1 image). The script (`stick/run.sh`) copies the 3.10 app to
 `/data/mpc310` once, then for each start adds a temporary systemd drop-in that mounts the 3.10 program and its
 `/usr/share/Akai` over the 3.9.1 ones inside MPC's service only, and restarts MPC. Nothing on the system partition
 changes; the drop-in lives in RAM and is gone at the next restart.
 
 Tests: `tests/run_test.sh` (Docker, BusyBox userland like the device).
+
+## Credits
+This builds on two people's work, credited equally: **TheKikGen**, whose MPC-LiveXplore wiki documented MPC OS's
+USB autorun feature, and **Eurikon**, who worked out its check and first used it for a no-SSH USB plugin manager
+(plugin-manager-usb, MIT). `tools/saltscan.py` was written in this repo and shared with Eurikon's project.
+
