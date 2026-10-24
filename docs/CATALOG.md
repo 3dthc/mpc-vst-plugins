@@ -37,6 +37,9 @@ bundles a program under another licence, e.g. `MIT AND Apache-2.0`: open when ev
 (optional `https://` URL; the site ignores anything else), `asset_pattern` (default `*-mpc-armv7.zip`), `homepage` (optional),
 `tier` (optional, only `"experimental"`) and `featured` (optional bool); see Trust tiers below. `flags_reviewed` (optional list of
 risky-call categories a maintainer has looked at, e.g. `["network"]` for a remote-control plugin; see Validation). Nothing versioned.
+`catalog/added.json` (`{"<id>": "YYYY-MM-DD"}`) records when each entry joined the catalog, for the site's "Newest in catalog" sort. A
+maintainer adds a line when merging a new entry (not the contributor, so PRs don't conflict on one file); an entry without a line uses
+the date of its oldest release. Backfilled 2026-10-24 from the first commit that added each registry file.
 
 Length limits (checked by `tools/catalog_build.py`): `summary` at most 350 characters and `tags` at most 8, so cards and the page stay
 readable. Put the full feature list in the repo README. Maintainers may edit a summary or tags for length and consistency, but do not
@@ -190,7 +193,7 @@ here first and move to its own repo (recommended, for community ownership) once 
 
 ### Phase 3: The website
 - [x] `tools/catalog_site.py` generates the site from `catalog.json`; `catalog.yml` deploys with Pages on main (2026-09-29; checked in headless Chromium; Pages deploy live at https://sd88me.github.io/mpc-vst-plugins/).
-- [x] List with search, filters (kind, style, developer, license, MPC OS 2.x / 3.x, beta) and sorting (updated, downloads, name, developer, kind), state kept in the URL hash; plugin page with history, install steps, checksum, source link.
+- [x] List with search, filters (kind, style, developer, license, MPC OS 2.x / 3.x, beta) and sorting (updated, newest in catalog, downloads, name, developer, kind), state kept in the URL hash; plugin page with history, install steps, checksum, source link.
 - [x] Guide pages Install, Build and Workflow (Add yours was merged into Workflow on 2026-10-09; add.html redirects) (2026-09-29): Markdown in `catalog/pages/*.md`, rendered by `tools/catalog_site.py`
       with a shared menu; checked in headless Chromium at desktop and phone width.
 - [x] (2026-09-29; live, `feed.xml` and `catalog.tsv` both served, checked 2026-10-02) Atom feed `feed.xml`; "Tested on" from optional `tested.json` in the plugin repo; contributor docs in `catalog/README.md`.
@@ -222,7 +225,7 @@ Locrian's installer uses a drop-in folder in `Synths` (`docs/CATALOG_SPEC.md`, "
 - [x] Guides (Install, Build, Workflow; Setup was merged into Build on 2026-10-01) checked against the new layout (2026-09-30): Install's manual steps use `plugin-meta.xml`,
       and it has "If a plugin disappears after a restart". Site cards carry no layout-specific text (`index.template.html`).
 - [x] Old-layout releases are flagged (2026-10-13, offline: `tools/test_catalog.py`): warning in `catalog_check.py`, a builder problem for a newest stable release, and a PR check (`--require-portable`) for new or changed registry entries. Prompted by a third-party port whose release zip still used `/sdcard/vst` and did not show up in plugin managers.
-- [x] Stray registry files are rejected (2026-10-15, offline: `tools/test_catalog.py`): `--check-registry` fails on any `*.json` directly in `catalog/` other than `apps.json`, `patches.json` and `yanked.json`. The build only reads `catalog/plugins/*.json`, so an entry added one folder too high (GitHub's "Create file" in `catalog/`) used to pass CI and never be listed (Fretty, #447).
+- [x] Stray registry files are rejected (2026-10-15, offline: `tools/test_catalog.py`): `--check-registry` fails on any `*.json` directly in `catalog/` other than `added.json`, `apps.json`, `patches.json` and `yanked.json`. The build only reads `catalog/plugins/*.json`, so an entry added one folder too high (GitHub's "Create file" in `catalog/`) used to pass CI and never be listed (Fretty, #447).
 - [x] Published releases still in the old layout dropped off a list-rebuilding scanner (NOTES 2026-09-30); all current plugins were re-released above, so the scanner and the catalog agree.
 
 ### Phase 4: Install and update from the device or desktop

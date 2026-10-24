@@ -636,6 +636,25 @@ class BuildTest(Base):
         self.assertEqual(p["downloads"], 9)   # all time: every published zip, including the yanked 1.0.0 and the invalid 1.2.0
         self.assertEqual(sorted((x["tag"] for x in problems)), ["v1.2.0", "v1.3.0-b"])
 
+    def test_added_date_comes_from_added_json_else_the_oldest_release(self):
+        old, new = self.build("1.0.0"), self.build("1.1.0")
+        rels = [self.rel("v1.1.0", 2, at="2026-10-05T00:00:00Z"), self.rel("v1.0.0", 1, at="2026-09-29T00:00:00Z")]
+        for added, want in (({"test-synth": "2026-10-20"}, "2026-10-20"), ({}, "2026-09-29"), (None, "2026-09-29")):
+            gh = FakeGitHub({"acme/test-synth": rels}, {1: old, 2: new})
+            cat, _ = catalog_build.build([self.ENTRY], gh, os.path.join(self.tmp, "cache"), set(), added=added)
+            self.assertEqual(cat["plugins"][0]["added"], want)
+            self.assertEqual(cat["plugins"][0]["updated"], "2026-10-05")
+
+    def test_added_json_is_checked(self):
+        path = os.path.join(self.tmp, "added.json")
+        self.assertEqual(catalog_build.load_added(path), ({}, []))   # optional
+        open(path, "w").write('{"a": "2026-10-01", "b": "yesterday", "c": 5}')
+        added, problems = catalog_build.load_added(path)
+        self.assertEqual(added, {"a": "2026-10-01", "b": "yesterday"})
+        self.assertEqual(len(problems), 2)
+        open(path, "w").write("[1]")
+        self.assertEqual(len(catalog_build.load_added(path)[1]), 1)
+
     def test_flagged_versions_are_listed_and_kept(self):
         old, new = self.build("1.0.0", imports=("socket",)), self.build("1.1.0", imports=("socket", "system"))
         gh = FakeGitHub({"acme/test-synth": [self.rel("v1.1.0", 2), self.rel("v1.0.0", 1)]}, {1: old, 2: new})
@@ -879,7 +898,7 @@ class BuildTest(Base):
 
     def test_stray_json_beside_the_registry(self):
         os.makedirs(os.path.join(self.tmp, "plugins"))
-        for n in ("apps.json", "patches.json", "yanked.json", "plugins/test-synth.json", "test-synth.json", "README.md"):
+        for n in ("added.json", "apps.json", "patches.json", "yanked.json", "plugins/test-synth.json", "test-synth.json", "README.md"):
             open(os.path.join(self.tmp, n), "w").write("{}")
         self.assertEqual([os.path.basename(f) for f, _ in catalog_build.stray_files(self.tmp)], ["test-synth.json"])
 
