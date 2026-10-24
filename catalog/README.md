@@ -112,7 +112,7 @@ never offered as the latest.
 
 ## Build locally
 `python3 tools/catalog_build.py --check-registry` validates entries (and fails on any `*.json` directly in `catalog/` other than
-`apps.json`, `patches.json` and `yanked.json`: an entry put one folder too high); without the flag it fetches releases (set
+`added.json`, `apps.json`, `patches.json` and `yanked.json`: an entry put one folder too high); without the flag it fetches releases (set
 `GITHUB_TOKEN` to avoid API limits) and writes `catalog/dist/catalog.json` and `problems.json`.
 In `problems.json`, `superseded: true` marks a failing release that a newer, unyanked release of the same plugin
 replaces. `python3 tools/catalog_issues.py --dry-run` shows the issues the nightly would open and close.

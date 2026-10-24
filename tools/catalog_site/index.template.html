@@ -165,6 +165,7 @@ var SORTS = {
     verifiedOn(b).length - verifiedOn(a).length || testedDate(b).localeCompare(testedDate(a)) || b.downloads - a.downloads || a.name.localeCompare(b.name); }, desc: false },
   name:      { label: "Name",              cmp: function (a, b) { return a.name.localeCompare(b.name); }, desc: false },
   updated:   { label: "Recently updated",  cmp: function (a, b) { return a.updated.localeCompare(b.updated); }, desc: true },
+  added:     { label: "Newest in catalog", cmp: function (a, b) { return (a.added || "").localeCompare(b.added || "") || b.name.localeCompare(a.name); }, desc: true },
   downloads: { label: "Downloads",         cmp: function (a, b) { return a.downloads - b.downloads; }, desc: true },
   developer: { label: "Developer",         cmp: function (a, b) { return a.author.localeCompare(b.author) || a.name.localeCompare(b.name); }, desc: false },
   kind:      { label: "Kind",              cmp: function (a, b) { return a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name); }, desc: false }

@@ -2,7 +2,7 @@
 """Build catalog.json from the registry (catalog/plugins/*.json) and the plugins' GitHub releases or tags.
 
   tools/catalog_build.py [--registry catalog/plugins] [--out catalog/dist] [--cache catalog/.cache]
-                         [--yanked catalog/yanked.json] [--keep 10] [--check-registry]
+                         [--yanked catalog/yanked.json] [--added catalog/added.json] [--keep 10] [--check-registry]
 
 For every registry entry with distribution "release" (the default): list the repo's releases, download the asset
 matching asset_pattern, validate it with tools/catalog_check.py (--catalog, id and repo must match the entry), and record
@@ -43,7 +43,7 @@ ZIP_PATTERN = "*-mpc-armv7.zip"
 # SPDX ids accepted as open source; anything else needs a human decision (edit this list in the PR that adds it).
 MAX_SUMMARY = 350   # characters; longer detail belongs in the repo README (docs/CATALOG.md)
 MAX_TAGS = 8
-CATALOG_FILES = {"apps.json", "patches.json", "yanked.json"}   # the only JSON directly in catalog/; plugin entries live in plugins/
+CATALOG_FILES = {"added.json", "apps.json", "patches.json", "yanked.json"}   # the only JSON directly in catalog/; plugin entries live in plugins/
 OPEN_LICENSES = {"MIT", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Apache-2.0", "GPL-2.0-only", "GPL-2.0-or-later",
                  "GPL-3.0-only", "GPL-3.0-or-later", "LGPL-2.1-only", "LGPL-2.1-or-later", "LGPL-3.0-only",
                  "LGPL-3.0-or-later", "AGPL-3.0-only", "AGPL-3.0-or-later", "MPL-2.0", "Unlicense", "CC0-1.0", "Zlib"}
@@ -257,6 +257,21 @@ def load_registry(path):
     return entries, problems
 
 
+def load_added(path):
+    """-> ({id: "YYYY-MM-DD"}, problems [(file, message)]) from catalog/added.json (the date each entry joined the catalog)."""
+    if not os.path.exists(path):
+        return {}, []
+    try:
+        data = json.load(open(path))
+    except ValueError as err:
+        return {}, [(path, "not valid JSON: %s" % err)]
+    if not isinstance(data, dict):
+        return {}, [(path, "must be an object of id: date")]
+    bad = [(path, "%r: %r is not a YYYY-MM-DD date" % (k, v)) for k, v in sorted(data.items())
+           if not (isinstance(v, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", v))]
+    return ({k: v for k, v in data.items() if isinstance(v, str)}, bad)
+
+
 def stray_files(catalog_dir):
     """JSON files directly in catalog/ other than CATALOG_FILES: usually a plugin entry added one folder too high (GitHub's
     "Create file" in catalog/), which the build never reads, so without this check CI passes an entry that is never listed."""
@@ -388,7 +403,7 @@ def tag_versions(e, src, yanked, tested, keep, problems):
     return versions
 
 
-def build(entries, src, cache, yanked, keep=10, now=None, require_portable=()):
+def build(entries, src, cache, yanked, keep=10, now=None, require_portable=(), added=None):
     """-> (catalog dict, problems list [{id, tag, error, unreadable?, superseded?}]). "unreadable" marks a repo or
     release list that could not be read at all, as opposed to one that was read and found invalid.
     A plugin whose newest stable release is of the old layout (no "layout" field) gets a problem, so the catalog repo opens an
@@ -537,6 +552,8 @@ def build(entries, src, cache, yanked, keep=10, now=None, require_portable=()):
         item["latest_beta"] = next((v["version"] for v in versions if v["channel"] == "beta" and not v["yanked"]), None)
         item["downloads"] = all_time
         item["updated"] = max((v["date"] for v in versions if not v["yanked"]), default="")
+        # when the entry joined the catalog (the site's "Newest in catalog" sort): catalog/added.json, else the oldest release
+        item["added"] = (added or {}).get(e["id"]) or min((v["date"] for v in versions if not v["yanked"] and v.get("date")), default="")
         plugins.append(item)
     plugins.sort(key=lambda p: p["name"].lower())
     catalog = {"schema": 1, "generated": (now or datetime.datetime.now(datetime.timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -571,14 +588,17 @@ def main():
     ap.add_argument("--out", default="catalog/dist")
     ap.add_argument("--cache", default="catalog/.cache")
     ap.add_argument("--yanked", default="catalog/yanked.json")
+    ap.add_argument("--added", default="catalog/added.json")
     ap.add_argument("--keep", type=int, default=10)
     ap.add_argument("--check-registry", action="store_true")
     ap.add_argument("--require-portable", metavar="ID", nargs="+",
                     help="validate only these entries' releases and fail when a newest release is of the old layout (PR check for new listings)")
     a = ap.parse_args()
     entries, reg_problems = load_registry(a.registry)
+    added, added_problems = load_added(a.added)
     if a.check_registry:
-        reg_problems += stray_files(os.path.dirname(os.path.normpath(a.registry)))
+        reg_problems += stray_files(os.path.dirname(os.path.normpath(a.registry))) + added_problems
+        reg_problems += [(a.added, "%r is not a registry entry" % k) for k in sorted(added) if k not in {e["id"] for e in entries}]
     for f, m in reg_problems:
         print("error: %s: %s" % (f, m), file=sys.stderr)
     if a.check_registry:
@@ -587,13 +607,13 @@ def main():
     yanked = set(json.load(open(a.yanked))) if os.path.exists(a.yanked) else set()
     if a.require_portable:
         sel = [e for e in entries if e["id"] in a.require_portable]
-        catalog, problems = build(sel, GitHub(os.environ.get("GITHUB_TOKEN")), a.cache, yanked, a.keep, require_portable=set(a.require_portable))
+        catalog, problems = build(sel, GitHub(os.environ.get("GITHUB_TOKEN")), a.cache, yanked, a.keep, require_portable=set(a.require_portable), added=added)
         bad = [p for p in problems if not p.get("superseded")]
         for p in bad:
             print("error: %(id)s %(tag)s: %(error)s" % p, file=sys.stderr)
         print("%d entries checked for the portable layout, %d problems" % (len(sel), len(bad)))
         sys.exit(1 if bad or reg_problems else 0)
-    catalog, problems = build(entries, GitHub(os.environ.get("GITHUB_TOKEN")), a.cache, yanked, a.keep)
+    catalog, problems = build(entries, GitHub(os.environ.get("GITHUB_TOKEN")), a.cache, yanked, a.keep, added=added)
     os.makedirs(a.out, exist_ok=True)
     json.dump(catalog, open(os.path.join(a.out, "catalog.json"), "w"), indent=1)
     json.dump(problems, open(os.path.join(a.out, "problems.json"), "w"), indent=1)
