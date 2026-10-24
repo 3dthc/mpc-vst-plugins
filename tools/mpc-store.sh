@@ -164,12 +164,19 @@ do_list() {
 
 # install_rows <catalog line>...: download and verify everything first, then one stop/start around all the installs
 do_install_rows() {
-    n=0; : > "$W/todo"
+    n=0; skipped=0; : > "$W/todo"
     for r in "$@"; do
         id=$(col "$r" 2); ver=$(col "$r" 3); size=$(col "$r" 10); sha=$(col "$r" 11); url=$(col "$r" 12)
-        if [ "$ARCH" != aarch64 ] && [ "$url" = "-" ]; then die "$id $ver is Gen2 only (aarch64): it has no build for this device, nothing was installed"; fi
+        # Not built for this device's architecture: skipped, not fatal, so the rest of a batch (other plugins, and
+        # whatever else a caller like the USB stick does around this, e.g. enabling SSH) still goes ahead.
+        if [ "$ARCH" != aarch64 ] && [ "$url" = "-" ]; then
+            echo "skipping $id $ver: Gen2 only (aarch64), no build for this device"; skipped=$((skipped + 1)); continue
+        fi
         if [ "$ARCH" = aarch64 ]; then   # a Gen2 device takes the aarch64 zip; the armv7 one would not load
-            url=$(col "$r" 19); [ -n "$url" ] && [ "$url" != "-" ] || die "$id $ver has no Gen2 (aarch64) build: nothing was installed"
+            url=$(col "$r" 19)
+            if [ -z "$url" ] || [ "$url" = "-" ]; then
+                echo "skipping $id $ver: no Gen2 (aarch64) build yet for this device"; skipped=$((skipped + 1)); continue
+            fi
             size=$(col "$r" 17); sha=$(col "$r" 18)
         fi
         echo "Downloading $id $ver ($((size / 1024)) KB)"
@@ -183,7 +190,11 @@ do_install_rows() {
         if grep -q 'DEFER=' "$dir/install.sh"; then echo 1 > "$W/defer.$id"; else echo 0 > "$W/defer.$id"; fi
         printf '%s\n' "$r" >> "$W/todo"; n=$((n + 1))
     done
-    [ $n -gt 0 ] || { echo "Nothing to install."; return 0; }
+    if [ $n -eq 0 ]; then
+        if [ $skipped -gt 0 ]; then echo "Nothing to install: $skipped skipped (no build for this device)."
+        else echo "Nothing to install."; fi
+        return 0
+    fi
     echo "Verified. About to install:"; awk -F'\t' '{ print "  " $2 " " $3 " (" $6 ($5 == "addin" ? ", an addin" : "") ")" }' "$W/todo"
     os_warnings "$W/todo"
     [ $DRY = 1 ] && { echo "Dry run: nothing changed."; return 0; }
@@ -207,7 +218,8 @@ do_install_rows() {
             else echo "error: $name failed; continuing would leave a mixed state, so stopping here" >&2; break; fi
         done < "$W/todo"
     fi
-    echo "Installed $ok of $n."
+    if [ $skipped -gt 0 ]; then echo "Installed $ok of $n ($skipped skipped: no build for this device)."
+    else echo "Installed $ok of $n."; fi
     [ $ok = $n ] || return 1
 }
 
