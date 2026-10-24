@@ -1044,14 +1044,17 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                 sliders.add((img, sw_, sh_, vert, lid, nfr))
                 # as stock skins (Electric slider_distance 250x6969 = 101 frames of 69): frames of the slider's own
                 # w x h, numFrames = their count, bounds = the slider (docs/NOTES.md 2026-10-07)
-                cw = max(sw_, w["bw"]) if w.get("bw") else max(130, sw_)
-                nfont, vfont = float(17 if w.get("ns") is None else w["ns"]), float(22 if w.get("vs") is None else w["vs"])
-                name_h = 0 if nfont == 0 else max(20, round(nfont * 1.2))
+                # scale_names=1: the name/value text and the label width follow label_scale, as a knob's do
+                cw = max(sw_, w["bw"]) if w.get("bw") else max(round(130 * LABEL_SCALE) if SCALE_NAMES else 130, sw_)
+                nfont = NAME_FONT("knob") if w.get("ns") is None else float(w["ns"])
+                vfont = (22.0 * LABEL_SCALE if SCALE_NAMES else 22.0) if w.get("vs") is None else float(w["vs"])
+                name_h = 0 if nfont == 0 else max(NAME_H(), round(nfont * 1.2))
                 value_h = max(26, round(vfont * 1.2))
                 name_y = sh_ + 2
                 value_y = name_y + name_h + (2 if name_h else 0)
                 ch = value_y + value_h + 6
-                key = "shSlider_%s_%dx%d%s%s" % ("v" if vert else "h", sw_, sh_, sfx, text_sfx(w, cw))
+                key = "shSlider_%s_%dx%d%s%s%s" % ("v" if vert else "h", sw_, sh_, sfx, text_sfx(w, cw),
+                                                    ("_ls%g" % LABEL_SCALE) if SCALE_NAMES and LABEL_SCALE != 1.0 else "")
                 defs.setdefault(key, _local(key, [_action("Mouse Down", "Q-Link"),
                                                   _action("Double Click", "Show Overlay", "knob overlay"),
                                                   _action("Enter Pressed", "Show Overlay", "knob overlay")], [

@@ -192,6 +192,34 @@ class BuildAttrs(unittest.TestCase):
         w = {"kind": "enum_v", "options": ["A", "B"], "cx": 100, "cy": 100, "sh": 44}
         self.assertEqual({r[3] for r in shadow_skin.seg_rects(w)}, {44})
 
+    def slider_texts(self, layout):
+        defs, _ = self.build(layout)
+        sd = [v for k, v in defs.items() if k.startswith("shSlider")][0]
+        out = {}
+        for c in sd["componentsData"]:
+            if c["componentData"]["name"] in ("Name", "Value"):
+                out[c["componentData"]["name"]] = (c["componentData"]["data"]["textStyle"]["font"]["height"],
+                                                   int(c["bounds"]["bounds"].split()[2]))
+        return out
+
+    def test_plain_slider_text_unchanged(self):
+        t = self.slider_texts("[tab T]\nslider_v cx=500 cy=350 w=40 h=200 key=a\n")
+        self.assertEqual(t, {"Name": (17.0, 130), "Value": (22.0, 130)})
+
+    def test_label_scale_alone_leaves_slider_text(self):
+        t = self.slider_texts("label_scale=1.3\n[tab T]\nslider_v cx=500 cy=350 w=40 h=200 key=a\n")
+        self.assertEqual(t, {"Name": (17.0, 130), "Value": (22.0, 130)})
+
+    def test_scale_names_scales_slider_text(self):
+        t = self.slider_texts("scale_names=1\nlabel_scale=1.3\n[tab T]\nslider_v cx=500 cy=350 w=40 h=200 key=a\n")
+        self.assertAlmostEqual(t["Name"][0], 21.0 * 1.3)
+        self.assertAlmostEqual(t["Value"][0], 22.0 * 1.3)
+        self.assertEqual(t["Name"][1], round(130 * 1.3))
+
+    def test_slider_ns_vs_override_under_scale_names(self):
+        t = self.slider_texts("scale_names=1\n[tab T]\nslider_v cx=500 cy=350 w=40 h=200 key=a ns=30 vs=36\n")
+        self.assertEqual((t["Name"][0], t["Value"][0]), (30.0, 36.0))
+
     def test_plain_knob_unchanged(self):
         defs, _ = self.build("[tab T]\nknob cx=200 cy=300 r=30 key=a\n")
         self.assertEqual([k for k in defs if k.startswith("shKnob")], ["shKnob30_ls%g" % shadow_skin.LABEL_SCALE])
