@@ -1714,3 +1714,16 @@ at most 1 read in any block (the old wrapper: 40 in one block and 100 reads of t
 the tile asked about every 10 ms. The same test fails on the old wrapper. Not measured on a device; the saving is the old worst-block cost (docs/BENCH.md).
 On our ports it skips: Clementine 3 (`patch_name`, `bank_name`, `browse_bank_name`), Luckydip 2, Morpho-PE 1, Sturm 3 (`patch_name`, `bank_name`, `bank_range`),
 Maschine 4, Rhythmbank 6; JV-880, Dexed and Profit-8 show all theirs. Existing builds keep polling everything until rebuilt.
+
+## 2026-10-24: MPC 3.10 app on a Live III kept on MPC OS 3.9.1, at every boot from a USB stick (device: Live III, MPC OS 3.9.1)
+- The 3.10.0.49 binary resolves against the 3.9.1 rootfs libraries (same 23 NEEDED, all undefined symbols resolve,
+  glibc ceiling 2.39; offline), and `acvs.service` and `az01-launch-MPC` are identical in both releases. So a drop-in
+  `BindReadOnlyPaths=<kit>/MPC:/usr/bin/MPC <kit>/Akai:/usr/share/Akai` on /run starts 3.10 in MPC's own mount namespace;
+  nothing on the read-only root changes and a reboot reverts it. The Live III's controller firmware is byte-identical in
+  both releases, so 3.10 flashes nothing. Ran on the device across several MPC restarts and two reboots with addins (commander, remote, Skipback) loaded.
+- The stick's `autorun.json` with `askQuestion: false` runs without a prompt at MPC start, once per boot (the MPC restart
+  it causes did not run it again; journal count 1). Hands-free boot to 3.10 in about 30 s.
+- The autorun check salt read from the official `MPC-3.9.1-Gen2-update.img` signs identically to the one in the device's
+  own binary. Built with `tools/mpc310_on_391/` (2 copies of the salt found in the image, as in the binary).
+- Caveats: 3.10 may rewrite `MPC.settings` (the stick backs it up first); projects saved in 3.10 may not open in 3.9.1.
+
