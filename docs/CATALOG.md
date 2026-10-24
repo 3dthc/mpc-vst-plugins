@@ -32,7 +32,8 @@ vst-release.yml  --release-->   nightly + on-dispatch workflow:       device scr
 ```
 
 ### Registry entry (`plugins/<id>.json`, hand-written once)
-`id`, `name`, `author`, `repo` (owner/name), `kind` (instrument | effect), `license`, `summary`, `screenshot`
+`id`, `name`, `author`, `repo` (owner/name), `kind` (instrument | effect), `license` (an SPDX ID, or IDs joined by `AND`/`OR` when the zip
+bundles a program under another licence, e.g. `MIT AND Apache-2.0`: open when every ID is), `summary`, `screenshot`
 (optional `https://` URL; the site ignores anything else), `asset_pattern` (default `*-mpc-armv7.zip`), `homepage` (optional),
 `tier` (optional, only `"experimental"`) and `featured` (optional bool); see Trust tiers below. `flags_reviewed` (optional list of
 risky-call categories a maintainer has looked at, e.g. `["network"]` for a remote-control plugin; see Validation). Nothing versioned.

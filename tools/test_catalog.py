@@ -968,6 +968,12 @@ class SiteTest(unittest.TestCase):
         self.assertEqual(catalog_build.check_entry(dict(e, source_available=True, style="rompler", tags=["jv-880"])), [])
         self.assertTrue(catalog_build.check_entry(dict(BuildTest.ENTRY, style="Bad Style")))
 
+    def test_registry_license_expression(self):
+        for lic in ("MIT AND Apache-2.0", "(MIT OR Apache-2.0) AND GPL-3.0-only"):
+            self.assertEqual(catalog_build.check_entry(dict(BuildTest.ENTRY, license=lic)), [], lic)
+        for lic in ("MIT AND MAME license", "MIT AND", "AND MIT", "MIT WITH Apache-2.0", "MIT Apache-2.0"):
+            self.assertTrue(catalog_build.check_entry(dict(BuildTest.ENTRY, license=lic)), lic)
+
     def test_registry_role_midi_only_on_an_instrument(self):
         ok = dict(BuildTest.ENTRY, kind="instrument", role="midi")
         self.assertEqual(catalog_build.check_entry(ok), [])

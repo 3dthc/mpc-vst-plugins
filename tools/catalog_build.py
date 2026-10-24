@@ -49,6 +49,14 @@ OPEN_LICENSES = {"MIT", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Apache-2.0", "GP
                  "LGPL-3.0-or-later", "AGPL-3.0-only", "AGPL-3.0-or-later", "MPL-2.0", "Unlicense", "CC0-1.0", "Zlib"}
 
 
+def is_open_license(lic):
+    """An SPDX ID on OPEN_LICENSES, or several joined by AND/OR (a zip that bundles a program under another open licence,
+    e.g. "MIT AND Apache-2.0"): open when every ID in it is."""
+    ids = lic.replace("(", " ").replace(")", " ").split()
+    return bool(ids) and len(ids) % 2 == 1 and all(t in OPEN_LICENSES for t in ids[::2]) \
+        and all(t in ("AND", "OR") for t in ids[1::2])
+
+
 def check_entry(e, fname=None):
     """Problems with one registry entry (a list of strings)."""
     p = []
@@ -68,7 +76,7 @@ def check_entry(e, fname=None):
         p.append("repo must be owner/name")
     if e["kind"] not in ENTRY_KINDS:
         p.append("kind must be one of %s" % ", ".join(ENTRY_KINDS))
-    if e["license"] not in OPEN_LICENSES and e.get("source_available") is not True:
+    if not is_open_license(e["license"]) and e.get("source_available") is not True:
         p.append("license %r is not on the open-source list: set \"source_available\": true if the source is public "
                  "but the license limits use (shown as a badge), see docs/CATALOG.md" % e["license"])
     if "source_available" in e and not isinstance(e["source_available"], bool):
@@ -169,7 +177,7 @@ def _nonempty_str(v):
 def check_build_yourself(e):
     """Registry rules for a "build-yourself" entry (offline; the tag and script checks need GitHub, see build())."""
     p = []
-    if e["license"] not in OPEN_LICENSES:
+    if not is_open_license(e["license"]):
         p.append("build-yourself needs an open-source SPDX license (source_available is not enough): the source must be "
                  "open even though no built zip is published")
     if e.get("source_available"):

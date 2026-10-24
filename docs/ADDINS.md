@@ -129,13 +129,13 @@ Most addins also have an off switch in their settings file (`enabled=0`), which 
 
 An addin that serves something over the network must listen on the device only by default (`bind=127.0.0.1`),
 must say in its catalog `summary` what it exposes and how to reach it, and must have a `bind` setting. Addins run as
-root inside MPC and the ones below have no login, so the network is opt-in.
+root inside MPC and most of the ones below have no login, so the network is opt-in.
 
 To reach one from a computer, open an SSH tunnel to the device and leave it running, then use `localhost` on that
 computer:
 
 ```sh
-ssh -N -L 6730:127.0.0.1:6730 root@<device address>     # one -L per addin: 6720 for remote, 6730 for commander
+ssh -N -L 6730:127.0.0.1:6730 root@<device address>     # one -L per addin: 6720 remote, 6730 commander, 6760 filebrowser
 ```
 
 `bind=0.0.0.0` in the addin's settings file opens it to every network interface instead (settings are read when MPC
@@ -145,6 +145,7 @@ starts). The ones in the catalog, and what anyone who can reach the port can the
 |---|---|---|---|
 | `remote` | HTTP 6720 | none | see and touch the screen, send any MIDI into MPC, and read text files in the `mcp_files` folders through its MCP endpoint (read-only; `mcp=0` turns MCP off). The MCP endpoint refuses requests from a web page on another site (`Origin` and `Host` checks); the rest of the server has no such check |
 | `commander` | HTTP and WebSocket 6730 | none | change any parameter of the VST plugins MPC has loaded, send MIDI and transport commands into MPC, write to the control-surface injector file, read the most recent project file and the plugins' skins. There is no `Origin` check yet, so a web page open in a browser on the same network can reach it too |
+| `filebrowser` | HTTP 6760 | password: `admin`, default `mpcadmin` (the same on every device until changed: in FileBrowser, or `password=` in the settings) | after logging in as admin: read, upload, change and delete any file in the folders it shows (`sources`, default `/media:/storage`; on Gen1 `/media/az01-internal` is all of `/data`, MPC's settings included). FileBrowser Quantum runs as root, as its own process beside MPC |
 
 `install.sh` asks about this itself for an addin with `ADDIN_NETWORK=1`, on a first interactive install (`-y` keeps the safe default), and after restarting MPC it checks that the library is in the new MPC's `LD_PRELOAD`, warning if a launcher dropped it.
 
