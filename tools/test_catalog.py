@@ -1711,7 +1711,8 @@ class StoreTest(Base):
         shutil.copy(z64, self.web)
         self.write_catalog(["1.2.0"], gen2=os.path.join(self.web, os.path.basename(z64)), gen2_only=True)
         r = self.store("install", "test-synth", env_extra={"MPC_STORE_ARCH": "armv7l"})
-        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)   # skipped, not an error (#548)
+        self.assertIn("skipping test-synth", r.stdout + r.stderr)
         self.assertIn("Gen2 only", r.stdout + r.stderr)
         self.assertFalse(os.path.exists(os.path.join(self.synths, self.SKIN)))
         self.assertIn("[Gen2 only]", self.store("list", env_extra={"MPC_STORE_ARCH": "armv7l"}).stdout)
@@ -1734,7 +1735,8 @@ class StoreTest(Base):
 
     def test_a_gen2_device_refuses_a_plugin_with_no_gen2_build(self):
         r = self.store("install", "test-synth", env_extra={"MPC_STORE_ARCH": "aarch64"})
-        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)   # skipped, not an error (#548: the rest of a batch still goes ahead)
+        self.assertIn("skipping test-synth", r.stdout + r.stderr)
         self.assertIn("no Gen2", r.stdout + r.stderr)
         self.assertFalse(os.path.exists(os.path.join(self.synths, self.SKIN)))
 
