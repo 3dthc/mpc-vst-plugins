@@ -180,7 +180,7 @@ def parse_layout(path):
     return tabs, top
 
 
-INT_KEYS = ("x", "y", "w", "h", "cx", "cy", "r", "sw", "sh", "rows", "cols", "th", "gap", "cw", "ns", "vs", "bw", "bh")
+INT_KEYS = ("x", "y", "w", "h", "cx", "cy", "r", "sw", "sh", "rows", "cols", "th", "gap", "cw", "ns", "vs", "vy", "bw", "bh")
 
 
 def parse_widget(line):
@@ -675,7 +675,7 @@ def _value_label(x, y, w, h, size, colour, just="horizontallyCentred verticallyC
 
 def text_sfx(w, cw):
     """Definition-key suffix for a control's own ns=/vs=/bw= (controls that differ need their own definition)."""
-    return "".join("_%s%d" % (k, w[k]) for k in ("ns", "vs", "bw") if w.get(k) is not None)
+    return "".join("_%s%d" % (k, w[k]) for k in ("ns", "vs", "vy", "bw") if w.get(k) is not None)
 
 
 def _name_label(x, y, w, h, size, colour, just="horizontallyCentred verticallyCentred"):
@@ -937,7 +937,7 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                 if w.get("ns") is not None:
                     name_h = 0 if w["ns"] == 0 else max(name_h, round(w["ns"] * 1.2))
                 name_y = s // 2 + r + 2
-                value_y = name_y + name_h + (2 if name_h else 0)
+                value_y = name_y + name_h + (2 if name_h else 0) + int(w.get("vy") or 0)   # vy=: push the value text down (below a label baked into the art)
                 value_h = round(26 * LABEL_SCALE) if w.get("vs") is None else max(round(26 * LABEL_SCALE), round(w["vs"] * 1.2))
                 novalue = w.get("vs") == 0   # vs=0: no value text under the knob (the artwork has its own labels)
                 if novalue:

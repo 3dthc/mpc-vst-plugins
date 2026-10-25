@@ -162,7 +162,7 @@ Parameter entries feeding `gen_vst.py` (`tools/params.py` format) can carry:
 - `vst.json`'s `"title_font"` (a `.ttf`/`.otf` path, e.g. a real downloaded font under an OFL-style licence,
   never a recreation of a manufacturer's proprietary font) overlays frame titles in that font via PIL after
   the PNGs are drawn; off by default, every other port keeps its current look.
-- Per control: `ns=`/`vs=` (name/value px, `ns=0` no name, `vs=0` no value text on a knob) and `bw=` (touch width) on knobs and sliders; `banks="A|B"`
+- Per control: `ns=`/`vs=` (name/value px, `ns=0` no name, `vs=0` no value text on a knob, `vy=` pushes it down) and `bw=` (touch width) on knobs and sliders; `banks="A|B"`
   on any line keeps it to those `qlinks` sub-pages; toggles take `bw=`/`ns=0`; `knob lay=side bw= bh= vs=` is a step cell (docs/SKIN_STUDIO.md; offline only so far).
 - `scale_names=1` in `layout.conf` makes the knob, toggle and slider names MPC draws follow `label_scale` (21 px × it,
   toggle box grown to fit; a slider's value text and label width scale too); without it they stay the fixed 15-17 px /
