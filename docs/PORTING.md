@@ -116,6 +116,10 @@ for the pattern). This applies to every future port, not just ones that hit the 
       draws it wrongly (misaligned half-frames); reduce the frame count or size. (Reported by another port author; not yet
       reproduced on our device. `catalog_check.py` warns about such images.)
 - [ ] Q-Links: 1–8 = knob bank 1, 9–16 = bank 2; nested pages via several `qlinks` lines.
+- [ ] A param the engine changes by itself (a network or status readout, a progress value) gets `"live": true` in params.json:
+      `gen_vst.py` lists it as `PLUG_LIVE` in params.h and `host_test`'s "parameter 0 toggle changes nothing" check skips it. Without it that check
+      fails offline (2026-10-27, found porting the Plugin Manager). `host_test` also no longer uses parameter 0 for its option-step tests: the
+      wrapper holds parameter 0 for MPC's STOP toggle, so a one-event move of it does not step.
 - [ ] Option lists and `"display": "int"` params step one option or whole number per Q-Link event and per data wheel
       click (`settle()`). If a short one races by under a Q-Link, `"qlink_ticks": N` on that param (opt-in, off by default)
       counts N events per step: 6 suited a 9-option list on a Key 37. It costs N wheel clicks per step too, and on a Force

@@ -381,7 +381,7 @@ int main(void) {
     for (int i = 0; i < NPARAMS; i++) {
         const param_t *p = &PARAMS[i];
         if (cont < 0 && !p->nopts && !p->momentary && !p->string_display && p->step_target < 0 && p->max > p->min) cont = i;
-        if (en < 0 && p->nopts > 2 && !p->momentary && p->popup_of < 0) en = i;
+        if (en < 0 && i > 0 && p->nopts > 2 && !p->momentary && p->popup_of < 0) en = i;   /* not parameter 0: the wrapper holds it for MPC's STOP toggle (param0_toggle_check) */
         if (pop < 0 && p->popup_of >= 0) pop = i;
     }
     if (cont >= 0) {

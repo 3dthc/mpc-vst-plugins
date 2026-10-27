@@ -166,6 +166,11 @@ def gen_params(cfg, params, out):
               "#define PLUG_UID 0x%08x /* '%s' */" % (int.from_bytes(cfg["uid"].encode(), "big"), cfg["uid"]),
               "#define PLUG_VERSION %d" % cfg.get("version", 1000)]
     lines += ["#define %s %s" % (k, v) for k, v in cfg.get("defines", {}).items()]
+    # "live": true on a param -- the engine changes it by itself (a status readout, a progress value), not only when the host
+    # writes it. host_test skips these in its "parameter 0 toggle changes nothing" check (PLUG_LIVE / PLUG_LIVE_COUNT).
+    live = [i for i, q in enumerate(params) if q.get("live")]
+    if live:
+        lines += ["static const int PLUG_LIVE[] = {%s};" % ", ".join(str(i) for i in live), "#define PLUG_LIVE_COUNT %d" % len(live)]
     if cfg.get("effect"):
         lines.append("#define PLUG_EFFECT 1")
     lines += program_lines(cfg, params, key_to_index)
