@@ -1238,7 +1238,12 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                     own = w.get("img")   # img=/img_on=: the port's own card pictures (off, selected)
                     mark = w.get("mark") in ("1", "yes", "on")
                     tile_fill = w.get("color") or LCD
-                    img = "sh_tile_%dx%d" % (tw, th) if not own else "sh_card_%s_%dx%d" % (slug(w["key"]), tw, th)
+                    # The pictures go in the name, the way a look does for every other widget: a port that gives one
+                    # list different cards per theme has several lists on the same key and size, and a name made of
+                    # key and size alone would have them all write to one file, leaving every theme the last one's.
+                    card_id = skin_assets.look_id({"img": own, "img_on": w.get("img_on", "")}) if own else ""
+                    img = "sh_tile_%dx%d" % (tw, th) if not own else "sh_card_%s_%dx%d_%s" % (
+                        slug(w["key"]), tw, th, card_id)
                     if w.get("color") and not own:
                         img = "sh_tile_%dx%d_%s" % (tw, th, tile_fill)
                     if mark:
@@ -1262,7 +1267,10 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                     key = "shRow_%dx%d%s" % (tw, th, sig + ("_%d_%d_%d_%d" % (lx, ly, lw, lh) if (lx, ly, lw, lh) != (12, 0, tw - 24, th) else "")
                                             + ("_mark" if mark else "")
                                             + ("_vel" if vel else "")
-                                            + ("_" + slug(w["key"]) if own else ""))
+                                            # the pictures belong in the key as well as in their file name: these
+                                            # definitions are shared by key, so without them the first list to be
+                                            # built would hand its cards to every other list of the same shape.
+                                            + ("_" + slug(w["key"]) + "_" + card_id if own else ""))
                     # the Value label lies over the button and takes the touch, so the row itself toggles on touch
                     acts = [] if w.get("tap") == "no" or vel else [_action("Mouse Down", "Toggle Switch"), _action("Enter Pressed", "Toggle Switch")]
                     on_img = img + "_off.png" if vel else img + "_on.png"
