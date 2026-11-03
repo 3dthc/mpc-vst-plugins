@@ -12,6 +12,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import shadow_skin  # noqa: E402
 import html_art  # noqa: E402
+import skin_assets  # noqa: E402
 
 
 class SegRects(unittest.TestCase):
@@ -489,6 +490,28 @@ class HtmlArtBoxButton(unittest.TestCase):
         svg = self.svg("boxbtn|10|10|136|40|aabbcc|PANIC|1")
         self.assertNotIn("button-sheen", svg)
         self.assertIn('<rect class="button-bg" x="10" y="10" width="136" height="40" rx="8"/>', svg)
+
+class ListCardNames(unittest.TestCase):
+    """A port that gives one list different cards per theme has several list widgets sharing a key and a size.
+    Their asset names have to differ, or each theme's cards overwrite the last and every theme shows one theme's."""
+
+    def name(self, img, img_on):
+        cid = skin_assets.look_id({"img": img, "img_on": img_on})
+        return "sh_card_%s_%dx%d_%s" % (shadow_skin.slug("pt"), 284, 48, cid)
+
+    def test_cards_of_different_themes_get_different_names(self):
+        names = {self.name("images/tile_pt_off_%d.png" % t, "images/tile_pt_on_%d.png" % t) for t in range(4)}
+        self.assertEqual(len(names), 4, names)
+
+    def test_the_same_pictures_keep_one_name(self):
+        a = self.name("images/tile_off.png", "images/tile_on.png")
+        b = self.name("images/tile_off.png", "images/tile_on.png")
+        self.assertEqual(a, b)
+
+    def test_the_selected_picture_is_part_of_the_name(self):
+        a = self.name("images/tile_off.png", "images/tile_on_a.png")
+        b = self.name("images/tile_off.png", "images/tile_on_b.png")
+        self.assertNotEqual(a, b)
 
 
 if __name__ == "__main__":

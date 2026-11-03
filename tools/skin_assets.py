@@ -9,6 +9,9 @@ A control's look comes from its layout line, else from a top-level default for i
     enum_h / enum_v   img=seg.png [img_on=seg_lit.png]         (each option: the image, its name on top)
     frame    img=panel.png                                     (a panel picture instead of the drawn border)
     popup    img=list.png                                      (the open list's panel, under the options)
+    list     img=row.png [img_on=row_lit.png]                  (each row's card; the row's text is drawn on top.
+                                                        Several when= copies of one list may carry different cards:
+                                                        the pictures are part of the baked name, so they keep apart)
     meter    strip=meter.png [frames=N]                        (a display-only filmstrip: see shadow_skin.py)
     meter    look=native img=bg.png [peak=fill.png] [rms=fill2.png] [direction=up|down|right] [invert=1]
                                                        (EXPERIMENTAL, unverified: a real native Meter component
