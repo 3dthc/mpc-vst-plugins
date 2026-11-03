@@ -39,6 +39,8 @@ vst.json (paths are relative to the vst.json's folder):
                                                  # optional: a page on the MPC Sample's screen (wrapper/sample_page.h; sample_lines())
       "targets": ["armv7", "aarch64"],           # optional: device builds tools/build_port.sh makes (default ["armv7"] = Gen1 MPC / Force;
                                                  #   aarch64 = Gen2, docs/GEN2.md). `build_port.sh vst.json aarch64` builds just one.
+      "skin_os": 2,                              # optional: write TUI.json in the MPC OS 2.x shape (docs/OS2_SKINS.md). 3.x reads
+                                                 #   it too, so one skin covers both; default 3 (3.x only). SHADOW_SKIN_MPC_OS wins.
     }
 The sources provide mpc_engine() (wrapper/engine.h). An engine from another ecosystem names its own
 parameter source instead of "params" and gets its adapter linked in (adapters/<name>/README.md).
@@ -466,8 +468,11 @@ def main():
     shutil.rmtree(os.path.join(build, "skin"), ignore_errors=True)   # no stale images from older builds
     art = os.environ.get("SHADOW_ART") or (os.path.join(TOOLS, "html_art.py") if cfg.get("art") == "html"
                                            else os.path.join(build, "shadow_art"))
+    # "skin_os": 2 asks for the older MPC OS 2.x TUI.json shape, which 3.x reads too (docs/OS2_SKINS.md), so one
+    # skin serves both generations. The environment variable still wins, for building a port both ways to compare.
+    skin_os = int(os.environ.get("SHADOW_SKIN_MPC_OS") or cfg.get("skin_os") or 3)
     skin = shadow_skin.write_skin(os.path.join(build, "skin"), cfg["vendor"], cfg["name"], layout, plist, art,
-                                  version=cfg.get("version", 1000))
+                                  version=cfg.get("version", 1000), mpc_os=skin_os)
     print("skin:", skin)
     import skin_check   # overlapping touch boxes, boxes off the screen, Q-Links on unseen parameters
     for f in skin_check.check(skin):

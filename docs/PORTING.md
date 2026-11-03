@@ -172,9 +172,12 @@ for the pattern). This applies to every future port, not just ones that hit the 
       998) has the opposite problem: a Q-Link event (1/128 of the range) or wheel click (1/100) crosses eight to ten entries, so
       add `"nudge_pct": 10` (a move up to 10% of the range is one step; a bigger one sets outright). A two-column `list` can
       number down each column first with `order=cols`, so it reads and steps top to bottom.
-- [ ] MPC OS 2.x: skins are written in the MPC OS 3.x format by default. `SHADOW_SKIN_MPC_OS=2` in the environment of the build
-      (`tools/build_port.sh` passes it on) writes the older shape MPC OS 2.15.1 reads, which a Force on 3.x reads too (docs/OS2_SKINS.md).
+- [ ] MPC OS 2.x: skins are written in the MPC OS 3.x format by default. `"skin_os": 2` in `vst.json` writes the older shape
+      MPC OS 2.15.1 reads, which a Force on 3.x reads too (docs/OS2_SKINS.md), so one skin covers both generations and the
+      port's CI needs no change. `SHADOW_SKIN_MPC_OS=2` in the environment of the build (`tools/build_port.sh` passes it on)
+      does the same and overrides the key, for building a port both ways to compare.
       The release tool prints `MPC OS compatibility: ...` and the catalog labels the version from the skin and the library's glibc.
+      The library has to be within glibc 2.32 as well; a port already built in the bullseye container usually is.
 - [ ] Choice lists: `enum_h`/`enum_v` (all options on screen) or `popup` (a field; a tap opens a drawn list, a
       pick closes it). Not `menu`: MPC's native picker opens empty for a VST2. A `popup` adds a hidden
       `<key>__open` param after the port's own (gen_vst.py), kept by `wrapper/vst2_wrap.c`. A hand-written
