@@ -149,6 +149,11 @@ it back with the same file list and an updated `SHA256SUMS` line (the permission
   labelled `3.x` today (67 versions), because none uses the 2.x skin shape.
 - **Generator option (#139, merged 2026-10-05):** `SHADOW_SKIN_MPC_OS=2` writes the 2.x shape (`to_mpc2x`), after a 2.x tester reported the converted Dexed skin working on a 2.15.1 MPC Live; its unit
   tests (in `tools/test_shadow_skin.py`) pass offline.
+- **As a `vst.json` key (2026-11-03, offline):** `"skin_os": 2` asks for the same shape, so a port opts in where the rest of its
+  build settings live and its release workflow needs no new input (the environment variable still overrides it). Checked offline
+  on eight ports of one author (Sonix, Tropix, Fretty, OB-Xd, Odin 2, Shapey's two EQs, Tuney): each went from `3.x` to `2.x, 3.x`
+  with no blockers, and their shipped libraries are glibc 2.27-2.29, already inside the 2.32 ceiling, so no rebuild was needed.
+  Not yet confirmed on a 2.x device.
 - **User-facing docs (2026-10-05):** the main README, the install guide and the developer page (`catalog/pages/add.md`) describe the
   labels and say that making a plugin 2.x-capable, and re-releasing it, is up to its developer. The nine plugin READMEs (Dexed with its 1.0.5 release, the others by PR) carry the updated note: this release works on 3.x, 2.x needs a release with a compatible skin, the catalog labels each release (2026-10-05).
 - The test Force has Dexed's converted `TUI.json` installed; the original is at `/sdcard/os2test-backup/TUI.json.os3` on that
