@@ -1,0 +1,11 @@
+{
+  "id": "nova-editor",
+  "name": "Nova Editor",
+  "author": "3dthc",
+  "repo": "3dthc/nova-editor",
+  "kind": "instrument",
+  "license": "MIT",
+  "summary": "Editor and librarian for the Novation MiniNova, and a SysEx patch librarian for any other synth: one editing page, follows the synth\u2019s current patch, keeps banks on the SD card, imports, exports and writes patches back. Needs the repository bridge daemon to reach the synth. Tested on an Akai MPC Live II; unofficial port.",
+  "screenshot": "https://raw.githubusercontent.com/3dthc/nova-editor/main/nova-editor-main.png",
+  "asset_pattern": "*-mpc-armv7.zip"
+}
