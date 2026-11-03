@@ -210,7 +210,19 @@ static void debounce_tests(void) {
 #endif
 
 /* A step_of button pair on an option list (e.g. a synth model picked with prev/next): steps by index, wraps both ways, and
- * tells the host the new value (audioMasterAutomate) on the next block. */
+ * tells the host the new value (audioMasterAutomate) on the next block.
+ *
+ * Each press waits out the param's debounce first. A momentary param ignores a second press within debounce_ms of
+ * the last one it acted on, because MPC delivers one tap as two presses 30-140 ms apart; pressing again a block
+ * later (about 3 ms) is that same tap as far as the wrapper is concerned, so without the wait the checks below
+ * would be asking a correctly debounced stepper to step twice for one touch. */
+static void press_step(AEffect *a, int i) {
+    if (PARAMS[i].debounce_ms > 0) usleep((PARAMS[i].debounce_ms + 50) * 1000);
+    a->setP(a, i, 1.0f);
+    run(a, 1);
+    a->setP(a, i, 0.0f);
+}
+
 static void step_of_option_tests(AEffect *a) {
     int prev = -1, next = -1;
     for (int i = 0; i < NPARAMS; i++)
@@ -222,15 +234,21 @@ static void step_of_option_tests(AEffect *a) {
     int t = PARAMS[next].step_target, n = PARAMS[t].nopts;
     a->setP(a, t, 1.0f); run(a, 1);
     automated[t] = 0;
-    a->setP(a, next, 1.0f); run(a, 1); a->setP(a, next, 0.0f);
+    press_step(a, next);
     CHECK(a->getP(a, t) < 1e-3f && automated[t] == 1, "step_of %s on %s: last -> first (%.3f), reported %d time(s)",
           PARAMS[next].key, PARAMS[t].key, a->getP(a, t), automated[t]);
-    a->setP(a, prev, 1.0f); run(a, 1); a->setP(a, prev, 0.0f);
+    press_step(a, prev);
     CHECK(fabsf(a->getP(a, t) - 1.0f) < 1e-3f && automated[t] == 2, "step_of %s on %s: first -> last (%.3f)",
           PARAMS[prev].key, PARAMS[t].key, a->getP(a, t));
-    a->setP(a, prev, 1.0f); run(a, 1); a->setP(a, prev, 0.0f);
+    press_step(a, prev);
     CHECK(fabsf(a->getP(a, t) - (float)(n - 2) / (n - 1)) < 1e-3f, "step_of %s on %s: steps one option (%.3f)",
           PARAMS[prev].key, PARAMS[t].key, a->getP(a, t));
+    /* and the debounce really is what stops a faster second press: this one must NOT step */
+    float before = a->getP(a, t);
+    a->setP(a, prev, 1.0f); run(a, 1); a->setP(a, prev, 0.0f);
+    CHECK(PARAMS[prev].debounce_ms <= 0 || fabsf(a->getP(a, t) - before) < 1e-3f,
+          "step_of %s on %s: a second press inside the debounce is the same tap (%.3f -> %.3f)",
+          PARAMS[prev].key, PARAMS[t].key, before, a->getP(a, t));
     /* a stepper pressed every block asks for an UpdateDisplay each time; the wrapper sends at most one per 50 ms */
     run(a, 40); updates = 0;
     for (int k = 0; k < 32; k++) { a->setP(a, next, 1.0f); run(a, 1); a->setP(a, next, 0.0f); }

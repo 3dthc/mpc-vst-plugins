@@ -6,6 +6,13 @@ from the Force and may differ on MPC Live/One/X/Key (e.g. `Force Documents` vs `
 
 ## Facts (verified)
 
+- **The `step_of` host test had to learn about the debounce** (2026-11-03, offline). A momentary param ignores a
+  second press within `debounce_ms` (default 250, added 2026-10-30 after a Live III delivered one tap as two
+  presses 30-140 ms apart). `step_of_option_tests` in `tools/host_test.c` predates that by two days and pressed
+  again one block later, about 3 ms, so a correctly debounced stepper failed "steps one option". It was the only
+  failing check in Fretty, which is the only port using a `stepper` and so the only one reaching that test. The
+  test now waits out `debounce_ms` between presses and also checks that a faster second press does NOT step.
+
 - **The host processes in place**: an effect's `processReplacing` gets the same buffers as input and output, so read each
   frame's input before writing its output. Until 2026-10-31 the wrapper's effect path did not, for block sizes that are not a
   multiple of 128 (Preferences block size 32, 64, 96 or 192): the effect heard its own output instead of the track. Fixed in
