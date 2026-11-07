@@ -66,6 +66,14 @@ on:
         description: zig version to install, if the build needs it
         type: string
         default: ''
+      os2:
+        description: Also build and package the MPC OS 2.x zip (skin in the 2.x shape); on by default so no release is missing it
+        type: boolean
+        default: true
+      build_os2:
+        description: Command, run from the caller's repo root, that builds the Gen1 target for MPC OS 2.x (SHADOW_SKIN_MPC_OS=2 is set; e.g. "$MPC_VST/tools/build_port.sh" vst/vst.json armv7). Required when os2 is true
+        type: string
+        default: ''
       dry_run:
         description: Build and package only (zip + previews as run artifacts), no draft release
         type: boolean
@@ -193,6 +201,42 @@ jobs:
           echo "name=$(sed -n 's/.* name="\([^"]*\)".*/\1/p' "$entry")" >> "$GITHUB_OUTPUT"
           echo "bench=$bench" >> "$GITHUB_OUTPUT"
 
+      - name: Build and package the MPC OS 2.x zip
+        id: os2
+        if: ${{ inputs.os2 }}
+        working-directory: port
+        env:
+          BUILD_OS2: ${{ inputs.build_os2 }}
+          ABOUT: ${{ inputs.about }}
+          PLUGIN_ID: ${{ inputs.plugin_id }}
+          LICENSE_ID: ${{ inputs.license }}
+          REQUIRES: ${{ inputs.requires }}
+          EXTRA: ${{ inputs.extra }}
+          USER_DATA: ${{ inputs.user_data }}
+        run: |
+          [ -n "$BUILD_OS2" ] || { echo "::error::os2 is on but build_os2 is empty: pass the Gen1 build command with SHADOW_SKIN_MPC_OS=2"; exit 1; }
+          SHADOW_SKIN_MPC_OS=2 bash -euo pipefail -c "$BUILD_OS2"
+          B="$VST_DIR/build"
+          entry="$B/pluginlist-entry.xml"
+          so="$B/$(sed -n 's/.* file="[^"]*\/\([^"/]*\)".*/\1/p' "$entry")"
+          skins=("$B"/skin/*/)
+          [ ${#skins[@]} = 1 ] || { echo "::error::expected one skin folder in $B/skin, found ${#skins[@]}"; exit 1; }
+          skin="${skins[0]%/}"
+          file -b "$so" | grep -q 'ELF 32-bit LSB.*ARM' || { echo "::error::$so is not a 32-bit ARM ELF: $(file -b "$so")"; exit 1; }
+          out="$RUNNER_TEMP/os2"; rm -rf "$out"; mkdir -p "$out"
+          args=(--so "$so" --skin "$skin" --entry "$entry" --version "$VERSION" --about "$ABOUT" --repo "$GITHUB_REPOSITORY" -o "$out")
+          [ -z "$PLUGIN_ID" ] || args+=(--id "$PLUGIN_ID")
+          [ -z "$LICENSE_ID" ] || args+=(--license "$LICENSE_ID")
+          [ -z "$REQUIRES" ] || args+=(--requires "$REQUIRES")
+          for e in $EXTRA; do args+=(--extra "$e"); done
+          for u in $USER_DATA; do args+=(--user-data "$u"); done
+          python3 "$MPC_VST/tools/release.py" "${args[@]}"
+          z=$(ls "$out"/*-mpc-armv7.zip)
+          mv "$z" "$GITHUB_WORKSPACE/dist/$(basename "$z" .zip)-os2.zip"
+          python3 "$MPC_VST/tools/catalog_check.py" "$GITHUB_WORKSPACE/dist/$(basename "$z" .zip)-os2.zip" ${LICENSE_ID:+--catalog}
+          zips=$(ls "$GITHUB_WORKSPACE"/dist/*.zip | tr '\n' ' ')
+          echo "zips=$zips" >> "$GITHUB_OUTPUT"
+
       - name: Upload zip and skin previews as run artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -207,7 +251,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ZIP: ${{ steps.pkg.outputs.zip }}
-          ZIPS: ${{ steps.pkg.outputs.zips }}
+          ZIPS: ${{ steps.os2.outputs.zips || steps.pkg.outputs.zips }}
           NAME: ${{ steps.pkg.outputs.name }}
           ABOUT: ${{ inputs.about }}
           TOOLS_REF: ${{ inputs.tools_ref }}
@@ -233,7 +277,7 @@ jobs:
 
       - name: Summary
         env:
-          ZIPS: ${{ steps.pkg.outputs.zips }}
+          ZIPS: ${{ steps.os2.outputs.zips || steps.pkg.outputs.zips }}
           BENCH: ${{ steps.pkg.outputs.bench }}
           DRY: ${{ inputs.dry_run }}
         run: |
