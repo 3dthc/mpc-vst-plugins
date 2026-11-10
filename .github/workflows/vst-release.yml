@@ -218,6 +218,12 @@ jobs:
           ABOUT: ${{ inputs.about }}
           TOOLS_REF: ${{ inputs.tools_ref }}
         run: |
+          # The notes say what changed: port/docs/releases/v<version>.md (a list of changes and fixes, written with the
+          # release). Install steps belong in INSTALL.md inside the zip, so they are only pointed to. A port without
+          # that file still gets the install summary below.
+          if [ -f "port/docs/releases/v$VERSION.md" ]; then
+            { cat "port/docs/releases/v$VERSION.md"; printf '\nInstall: see `INSTALL.md` inside the zip.\n'; } > notes.md
+          else
           python3 - "$ZIP" > notes.md <<'PY'
           import os, re, sys, zipfile
           z = zipfile.ZipFile(sys.argv[1])
@@ -228,6 +234,7 @@ jobs:
           print("".join(keep).rstrip() + "\n")
           print("Full instructions, including installing by hand, are in `INSTALL.md` inside the zip.")
           PY
+          fi
           printf '\n---\nBuilt by GitHub Actions from %s@%s with mpc-vst-plugins@%s.\n' \
             "$GITHUB_REPOSITORY" "${GITHUB_SHA::7}" "${TOOLS_REF::7}" >> notes.md
           if gh release view "$TAG" >/dev/null 2>&1; then
