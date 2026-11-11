@@ -41,6 +41,8 @@ vst.json (paths are relative to the vst.json's folder):
                                                  #   aarch64 = Gen2, docs/GEN2.md). `build_port.sh vst.json aarch64` builds just one.
       "skin_os": 2,                              # optional: write TUI.json in the MPC OS 2.x shape (docs/OS2_SKINS.md). 3.x reads
                                                  #   it too, so one skin covers both; default 3 (3.x only). SHADOW_SKIN_MPC_OS wins.
+      "skin_compact": true,                      # optional: write TUI.json without indentation whatever its size (always so above
+                                                 #   8 MB): about 3/4 smaller for MPC to read and parse when the plugin opens
     }
 The sources provide mpc_engine() (wrapper/engine.h). An engine from another ecosystem names its own
 parameter source instead of "params" and gets its adapter linked in (adapters/<name>/README.md).
@@ -472,7 +474,8 @@ def main():
     # skin serves both generations. The environment variable still wins, for building a port both ways to compare.
     skin_os = int(os.environ.get("SHADOW_SKIN_MPC_OS") or cfg.get("skin_os") or 3)
     skin = shadow_skin.write_skin(os.path.join(build, "skin"), cfg["vendor"], cfg["name"], layout, plist, art,
-                                  version=cfg.get("version", 1000), mpc_os=skin_os)
+                                  version=cfg.get("version", 1000), mpc_os=skin_os,
+                                  compact=bool(cfg.get("skin_compact")))
     print("skin:", skin)
     import skin_check   # overlapping touch boxes, boxes off the screen, Q-Links on unseen parameters
     for f in skin_check.check(skin):
