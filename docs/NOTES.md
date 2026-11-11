@@ -20,7 +20,8 @@ from the Force and may differ on MPC Live/One/X/Key (e.g. `Force Documents` vs `
   version="1.0" file="/sdcard/vst/x.so" uid="<hex uniqueID>" isInstrument="0|1" fileTime="0"
   infoUpdateTime="0" numInputs="2" numOutputs="2" isShell="0"/>`
 - Device: armv7l, glibc 2.39 on MPC OS 3.x (2.32 on MPC OS 2.x). Build with an older glibc: `arm32v7/gcc:11-bullseye` (2.31) is what
-  `build_port.sh` uses since 2026-10-02; `arm32v7/gcc:12` (2.36) binds some pthread symbols to `GLIBC_2.34` and does not load on 2.x.
+  `build_port.sh` uses since 2026-10-02; `arm32v7/gcc:12` (2.36) binds some pthread symbols to `GLIBC_2.34` and does not load on 2.x. C++ ports also need MPC OS 2.x's libstdc++: at most `GLIBCXX_3.4.28` (GCC 10), so armv7 C++ ports
+  build with `arm32v7/gcc:10-bullseye` since 2026-11-10 (below).
 - Audio: 44100 Hz, 128-frame period; the engine interface (`wrapper/engine.h`) renders in exactly those blocks.
 - AEffect magic must be `'VstP'` (0x56737450). **The forum snippet's magic is wrong.**
 - Instruments: set `effFlagsIsSynth`, category 2, answer `effCanDo "receiveVstEvents"`;
@@ -2116,3 +2117,13 @@ Fixes (offline-tested; not yet on a device): the manager's keys get the same 250
 Offline only: `VST3_TARGET=windows` in `tools/build_vst3.sh` and `tools/test_vst3.sh` cross-builds the wrapper with mingw-w64
 and runs the host test under Wine 11 (passes for `poc/uiprobe`). Not tried on real Windows or in a DAW; no editor on Windows;
 the Maschine engine does not compile (`dlfcn.h`). Details: docs/DESKTOP_VST3.md, "Windows".
+
+### 2026-11-10: armv7 C++ ports need GLIBCXX <= 3.4.28 on MPC OS 2.x (user report; fix checked in CI, not yet on a device)
+Report (Odin2-MPC issue #2): an MPC Live (Gen1) on MPC OS 2.15.1 does not load Odin 2 armv7 1.4.4, 1.4.6 or 1.4.7:
+`/lib/libstdc++.so.6: version 'GLIBCXX_3.4.29' not found`. That device's `/lib/libstdc++.so.6` goes up to `GLIBCXX_3.4.28`
+(GCC 10). `arm32v7/gcc:11-bullseye` keeps glibc at 2.31 but links GCC 11's libstdc++, so every C++ port built with it
+(Odin 2, OB-XD, JV-880, ...) can need 3.4.29; C ports do not link libstdc++ and are unaffected. `build_port.sh` now builds
+armv7 C++ ports with `arm32v7/gcc:10-bullseye` (same glibc 2.31), prints `highest libstdc++` and fails the armv7 build above
+3.4.28. aarch64 (Gen2, MPC OS 3.x only, libstdc++ from GCC 13) is unchanged. To check a device: `strings /lib/libstdc++.so.6 |
+grep GLIBCXX_3.4.2` and, for a plugin, `/lib/ld-linux-armhf.so.3 --list <so>` must print no "not found". `catalog_check.py`
+does not look at GLIBCXX yet.
