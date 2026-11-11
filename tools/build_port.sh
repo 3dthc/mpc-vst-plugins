@@ -47,8 +47,8 @@ else
     "pip install -q --no-warn-script-location --target /tmp/p pillow >/dev/null 2>&1; PYTHONPATH=/tmp/p python3 /mv/tools/gen_vst.py '$PORT/vst.json'"
 fi
 
-build_target() {   # build_target <image> <docker platform> <extra cflags> <output dir, relative to ROOT>
-  local IMG="$1" PLAT="$2" XF="$3" OUT="$4"
+build_target() {   # build_target <image> <docker platform> <extra cflags> <output dir, relative to ROOT> [highest GLIBCXX allowed]
+  local IMG="$1" PLAT="$2" XF="$3" OUT="$4" MAXCXX="${5:-}"
   mkdir -p "$ROOT/$OUT"
 # 3. the plugin, once per target (armhf, glibc 2.31 (bullseye) so it loads on MPC OS 2.x (glibc 2.32) as well as 3.x (2.39); keep the highest symbol <= 2.32 or the plugin is listed as MPC OS 3.x only)
 # All-C sources (every port so far): unchanged single gcc command (byte-identical Maze builds).
@@ -87,6 +87,11 @@ else
     strip '$OUT/$SO'
     echo \"exported: \$(readelf --dyn-syms -W '$OUT/$SO' | grep -E ' GLOBAL .* [0-9]+ [A-Za-z]' | grep -v UND | awk '{print \$8}' | tr '\n' ' ')\"
     echo \"highest glibc: \$(readelf -V '$OUT/$SO' | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1) (device has 2.39)\"
+    cxx=\$(readelf -V '$OUT/$SO' | grep -o 'GLIBCXX_[0-9.]*' | sort -uV | tail -1)
+    echo \"highest libstdc++: \${cxx:-none}\"
+    if [ -n '$MAXCXX' ] && [ -n \"\$cxx\" ] && [ \"\$(printf '%s\\n' \"\$cxx\" 'GLIBCXX_$MAXCXX' | sort -V | tail -1)\" != 'GLIBCXX_$MAXCXX' ]; then
+      echo \"\$cxx is newer than GLIBCXX_$MAXCXX, the libstdc++ of MPC OS 2.x: it would not load on a Gen1 MPC there\" >&2; exit 1
+    fi
   "
 fi
   md5sum "$ROOT/$OUT/$SO"
@@ -97,7 +102,12 @@ WANT="${2:-all}"
 for t in $TARGETS; do
   [ "$WANT" = all ] || [ "$WANT" = "$t" ] || continue
   case "$t" in
-    armv7)   build_target arm32v7/gcc:11-bullseye linux/arm/v7 "$CFLAGS_ARM" "$PORT/build" ;;
+    # armv7 C++ ports: GCC 10's libstdc++ (GLIBCXX_3.4.28), the newest MPC OS 2.x has (2.15.1 on an MPC Live); GCC 11
+    # links GLIBCXX_3.4.29 symbols and the plugin fails to load there ("version GLIBCXX_3.4.29 not found"). Same glibc 2.31.
+    armv7)   case "$SOURCES" in
+               *.cpp*|*.cc*|*.cxx*) build_target arm32v7/gcc:10-bullseye linux/arm/v7 "$CFLAGS_ARM" "$PORT/build" 3.4.28 ;;
+               *) build_target arm32v7/gcc:11-bullseye linux/arm/v7 "$CFLAGS_ARM" "$PORT/build" ;;
+             esac ;;
     # aarch64: Gen2 runs MPC OS 3.x only (glibc 2.39), so bookworm (2.36) is fine; no 2.x ceiling to respect
     aarch64) build_target arm64v8/gcc:12-bookworm linux/arm64 "$CFLAGS_A64" "$PORT/build/aarch64" ;;
     *) echo "unknown target $t" >&2; exit 1 ;;
