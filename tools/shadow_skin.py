@@ -1545,7 +1545,7 @@ def version_xml(vendor, name, version=None):
             % (vendor, name.lower().replace(" ", ""), vst_version(version)))
 
 
-def write_skin(outdir, vendor, name, layout_path, params, art_bin, mpc_os=None, version=None):
+def write_skin(outdir, vendor, name, layout_path, params, art_bin, mpc_os=None, version=None, compact=False):
     """Build the whole skin folder <outdir>/<vendor> - VST - <name>/ from a layout. Needs Pillow.
     mpc_os=2 (or SHADOW_SKIN_MPC_OS=2) writes TUI.json in the older MPC OS 2.x shape (to_mpc2x); default is 3.x."""
     import json
@@ -1571,7 +1571,8 @@ def write_skin(outdir, vendor, name, layout_path, params, art_bin, mpc_os=None, 
     open(os.path.join(d, "version.xml"), "w").write(version_xml(vendor, name, version))
     for f, obj in (("TUI.json", tui), ("Q-Links.json", qlinks), ("Q-Links - 8by1.json", qlinks)):
         # a huge TUI.json (every nested Q-Link page repeats its tab's layout) is written compact: the indentation alone is
-        # about 3/4 of the file, which MPC has to read and parse when the plugin loads. Small skins stay byte-identical.
+        # about 3/4 of the file, which MPC has to read and parse when the plugin loads. Small skins stay byte-identical,
+        # unless the port asks for compact (vst.json "skin_compact": a skin of a few MB, many themes x many widgets).
         text = json.dumps(obj, separators=(",", ":"))
-        open(os.path.join(skin, f), "w").write(text if len(text) > 8_000_000 else json.dumps(obj, indent=4))
+        open(os.path.join(skin, f), "w").write(text if compact or len(text) > 8_000_000 else json.dumps(obj, indent=4))
     return d

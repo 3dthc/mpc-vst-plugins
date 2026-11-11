@@ -178,6 +178,9 @@ for the pattern). This applies to every future port, not just ones that hit the 
       does the same and overrides the key, for building a port both ways to compare.
       The release tool prints `MPC OS compatibility: ...` and the catalog labels the version from the skin and the library's glibc.
       The library has to be within glibc 2.32 as well; a port already built in the bullseye container usually is.
+- [ ] A big skin (several themes x every widget, a `TUI.json` of a few MB): `"skin_compact": true` in `vst.json` writes it without
+      indentation, about 3/4 smaller for MPC to read and parse each time the plugin opens (above 8 MB that is automatic).
+      Added 2026-11-10 (offline; Sonix's 3.96 MB `TUI.json` is 1.18 MB compact); the load-time gain on a device is not measured yet.
 - [ ] Choice lists: `enum_h`/`enum_v` (all options on screen) or `popup` (a field; a tap opens a drawn list, a
       pick closes it). Not `menu`: MPC's native picker opens empty for a VST2. A `popup` adds a hidden
       `<key>__open` param after the port's own (gen_vst.py), kept by `wrapper/vst2_wrap.c`. A hand-written
