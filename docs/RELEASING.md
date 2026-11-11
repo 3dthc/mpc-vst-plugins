@@ -10,7 +10,7 @@ the only layout: it can be dropped into any `Synths` folder by other installers 
 An addin (a library MPC preloads) is released with `tools/release_addin.py`, or from CI with `addin-release.yml`, instead: `docs/ADDINS.md`.
 
 ## Checklist
-1. **Build** with the port's `build.sh` (armhf, `arm32v7/gcc:11-bullseye`; highest GLIBC symbol ≤ 2.32 to be MPC OS 2.x-capable; up to 2.36 is accepted and listed as 3.x only). `release.py` prints the MPC OS label it works out (`MPC OS compatibility: ...`); the skin decides the rest (docs/OS2_SKINS.md).
+1. **Build** with the port's `build.sh` (armhf, `arm32v7/gcc:11-bullseye`, or `gcc:10-bullseye` for C++ ports so the highest GLIBCXX symbol is ≤ 3.4.28; highest GLIBC symbol ≤ 2.32 to be MPC OS 2.x-capable; up to 2.36 is accepted and listed as 3.x only). `release.py` prints the MPC OS label it works out (`MPC OS compatibility: ...`); the skin decides the rest (docs/OS2_SKINS.md).
 2. **Host test** (x86, ASan): `tools/test_port.sh <port>/vst.json` (must print PASSED), or the port's own test for a
    hand-written wrapper. It must be clean.
 3. **Skin preview**: `tools/studio.py preview "<skin>/Plugin Skins" -o page_%d.png`, and look at every page.

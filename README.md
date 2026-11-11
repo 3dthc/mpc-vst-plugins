@@ -175,7 +175,7 @@ What's next is in [docs/ROADMAP.md](docs/ROADMAP.md).
    `<PLUGIN format="VST" file="/sdcard/Synths/<vendor> - VST - <name>/x.so" …/>` to its plugin list. Edit it with MPC stopped and back it up
    first: malformed XML makes MPC reset it to defaults.
 2. The `.so` exports `VSTPluginMain` (VST2 ABI, hand-written, no Steinberg SDK). Build for armhf against glibc 2.31
-   (`arm32v7/gcc:11-bullseye`, which `tools/build_port.sh` uses) so it loads on MPC OS 2.x (glibc 2.32) and 3.x (2.39). A
+   (`arm32v7/gcc:11-bullseye`, which `tools/build_port.sh` uses; `gcc:10-bullseye` for C++ ports, whose libstdc++ MPC OS 2.x must also have) so it loads on MPC OS 2.x (glibc 2.32) and 3.x (2.39). A
    newer toolchain binds `pthread_create` and friends to `GLIBC_2.34`, which older firmware cannot load; the catalog
    check lists anything above 2.32 (up to 2.36) as MPC OS 3.x only and rejects more than that. Audio is 44.1 kHz in 128-frame blocks.
 3. A skin folder `/sdcard/Synths/<manufacturer> - VST - <name>/` (`version.xml`, `Plugin Skins/TUI.json`,
