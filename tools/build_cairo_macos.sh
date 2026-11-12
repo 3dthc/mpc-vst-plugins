@@ -11,8 +11,11 @@ PREFIX="$(mkdir -p "$1" && cd "$1" && pwd)"
 CAIRO_VERSION=1.18.4
 CAIRO_SHA256=PIN_ME
 WORK="${CAIRO_WORK:-$(mktemp -d)}"
-command -v meson >/dev/null && command -v ninja >/dev/null || python3 -m pip install --quiet --user meson ninja
-export PATH="$(python3 -m site --user-base)/bin:$PATH"
+if ! command -v meson >/dev/null || ! command -v ninja >/dev/null; then   # a venv of its own: Homebrew's Python is externally managed
+  python3 -m venv "$WORK/venv"
+  "$WORK/venv/bin/pip" install --quiet meson ninja
+  export PATH="$WORK/venv/bin:$PATH"
+fi
 cd "$WORK"
 if [ ! -d "cairo-$CAIRO_VERSION" ]; then
   curl -fsSL -o cairo.tar.xz "https://cairographics.org/releases/cairo-$CAIRO_VERSION.tar.xz"
