@@ -15,7 +15,8 @@ if [ "${VST3_TARGET:-}" = windows ]; then
   D="$ROOT/$PORT/build/vst3"
   x86_64-w64-mingw32-gcc -O1 -g -std=gnu11 -Wall -Wextra -I"$MV/wrapper" "$MV/tools/vst3_host_test.c" -lm -static -o "$D/vst3_host_test.exe"
   cd "$D"
-  WINEDEBUG=-all exec wine ./vst3_host_test.exe "Z:$D/$NAME.vst3/Contents/x86_64-win/$NAME.vst3" "${@:2}"
+  XV=""; [ -n "${DISPLAY:-}" ] || ! command -v xvfb-run >/dev/null || XV="xvfb-run -a"   # a display for the editor window test
+  WINEDEBUG=-all exec $XV wine ./vst3_host_test.exe "Z:$D/$NAME.vst3/Contents/x86_64-win/$NAME.vst3" "${@:2}"
 fi
 if [ "${VST3_TARGET:-}" = macos ]; then   # the release build itself (universal), tested on this Mac's own architecture
   "$MV/tools/build_vst3.sh" "$CFG" | grep -v '^exported'
