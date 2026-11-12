@@ -55,6 +55,17 @@ name, uid and version, since every plugin in a process shares one class namespac
 (`tools/build_cairo_macos.sh <prefix>`, then `CAIRO_PREFIX=<prefix>`); without one the bundle has no editor.
 `VST3_DATA=<folder>` copies the engine's data into the bundle (any target).
 
+Windows (2026-11-12): the same editor in a child HWND (`wrapper/vst3_editor_win.c`: WM_TIMER tick, SetDIBitsToDevice, window
+class named per plugin and version and unregistered with the last view), built when `CAIRO_PREFIX` points at a static
+mingw cairo (`tools/build_cairo_windows.sh <prefix>`, cross-built on Linux). `vst3_host_test` opens it in a real window under
+Wine (paint, click, drag, wheel, close).
+
+Gatekeeper: a bundle downloaded in a browser is quarantined, and without Apple notarization macOS refuses it ("can't be
+verified"). `tools/install_mac_vst3.sh` installs with curl (no quarantine) and clears the flag from copies already downloaded;
+each macOS zip's README gives its one-line command. With the optional workflow secrets `MACOS_CERT_P12`, `MACOS_CERT_PASSWORD`,
+`APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD` (an Apple Developer Program account; callers pass `secrets: inherit`), the
+macOS job signs with the Developer ID (hardened runtime), notarizes and staples, and the prompt goes away for everyone.
+
 Releases: `vst-release.yml` with `desktop: true` (and `desktop_data: <data folder>`, `desktop_targets` default
 `["macos", "windows"]`) runs `tools/release_vst3.sh` after the device zip, on a macOS runner and on Linux (mingw, tested under
 Wine), and attaches `<Name>-<version>-macos-vst3.zip` / `-windows-vst3.zip` to the same draft. The macOS job also uploads the

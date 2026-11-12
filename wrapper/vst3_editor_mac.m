@@ -78,7 +78,7 @@ typedef struct {
     NSTimer *timer;
 } mac_view_t;
 
-void *mpc_mac_open(void *parent, int w, int h, void *ctx) {
+void *mpc_plat_open(void *parent, int w, int h, void *ctx) {
     @autoreleasepool {
         NSView *p = (NSView *)parent;
         if (!p) return NULL;
@@ -95,7 +95,7 @@ void *mpc_mac_open(void *parent, int w, int h, void *ctx) {
     }
 }
 
-void mpc_mac_close(void *h) {
+void mpc_plat_close(void *h) {
     mac_view_t *m = h;
     if (!m) return;
     @autoreleasepool {
@@ -110,13 +110,13 @@ void mpc_mac_close(void *h) {
     free(m);
 }
 
-void mpc_mac_size(void *h, int w, int hh) {
+void mpc_plat_size(void *h, int w, int hh) {
     mac_view_t *m = h;
     if (m) [m->view setFrame:NSMakeRect(0, 0, w, hh)];
 }
 
 /* Pixels per point of the screen the view is on (2 on a Retina display), so the page is drawn sharp. */
-double mpc_mac_backing_scale(void *h) {
+double mpc_plat_backing_scale(void *h) {
     mac_view_t *m = h;
     if (!m) return 1;
     NSWindow *win = [m->view window];
@@ -125,7 +125,7 @@ double mpc_mac_backing_scale(void *h) {
 }
 
 /* A new frame: data is cairo's ARGB32 (premultiplied, native-endian 32-bit words). The image keeps its own copy. */
-void mpc_mac_present(void *h, const unsigned char *data, int stride, int w, int hh) {
+void mpc_plat_present(void *h, const unsigned char *data, int stride, int w, int hh) {
     mac_view_t *m = h;
     if (!m || !data || w <= 0 || hh <= 0) return;
     CFDataRef bytes = CFDataCreate(NULL, data, (CFIndex)stride * hh);

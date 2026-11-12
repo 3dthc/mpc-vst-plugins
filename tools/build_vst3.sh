@@ -69,7 +69,13 @@ EDITOR_LIBS=""
 if [ -z "$SKIN" ]; then
   echo "editor: none (no built skin in $PORT/build/skin; run build_port.sh, or set VST3_SKIN)"
 elif [ "$ARCH" = x86_64-win ]; then
-  echo "editor: none (not on Windows yet)"
+  if [ -n "${CAIRO_PREFIX:-}" ] && [ -f "$CAIRO_PREFIX/lib/libcairo.a" ]; then
+    EDITOR_CF="-DVST3_EDITOR -DCAIRO_WIN32_STATIC_BUILD -I$CAIRO_PREFIX/include/cairo -I$CAIRO_PREFIX/include/freetype2 -I$CAIRO_PREFIX/include"
+    EDITOR_LIBS="$CAIRO_PREFIX/lib/libcairo.a $CAIRO_PREFIX/lib/libpixman-1.a $CAIRO_PREFIX/lib/libfreetype.a"
+    EDITOR_LIBS="$EDITOR_LIBS $CAIRO_PREFIX/lib/libpng16.a $CAIRO_PREFIX/lib/libz.a -lgdi32 -lmsimg32 -luser32"
+  else
+    echo "editor: none (set CAIRO_PREFIX to a static Windows cairo: tools/build_cairo_windows.sh)"
+  fi
 elif [ -n "$MAC" ]; then
   if [ -n "${CAIRO_PREFIX:-}" ] && [ -f "$CAIRO_PREFIX/lib/libcairo.a" ]; then
     EDITOR_CF="-DVST3_EDITOR -I$CAIRO_PREFIX/include/cairo -I$CAIRO_PREFIX/include/freetype2 -I$CAIRO_PREFIX/include"
@@ -102,8 +108,12 @@ for f in "$MV/wrapper/vst3_wrap.c" $ADAPTER_SRC; do
   $CC $OPT -std=gnu11 $EDITOR_CF -I"$MV/wrapper" -I"$PORT/build" -c "$f" -o "$o"
   OBJS="$OBJS $o"
 done
+VIEW_CLASS="MPCView_$(printf '%s_%s_%s' "$NAME" "$UID4" "$VERSION" | tr -c 'A-Za-z0-9_' '_')"   # per plugin and version
+if [ "$ARCH" = x86_64-win ] && [ -n "$EDITOR_CF" ]; then   # the child window, its class named for this plugin and version
+  $CC $OPT -std=gnu11 -DMPC_VIEW_CLASS="$VIEW_CLASS" -c "$MV/wrapper/vst3_editor_win.c" -o "$OBJ/vst3_editor_win.o"
+  OBJS="$OBJS $OBJ/vst3_editor_win.o"
+fi
 if [ -n "$MAC" ] && [ -n "$EDITOR_CF" ]; then   # the NSView, its Objective-C class named for this plugin and version
-  VIEW_CLASS="MPCView_$(printf '%s_%s_%s' "$NAME" "$UID4" "$VERSION" | tr -c 'A-Za-z0-9_' '_')"
   $CC $OPT -fno-objc-arc -DMPC_VIEW_CLASS="$VIEW_CLASS" -c "$MV/wrapper/vst3_editor_mac.m" -o "$OBJ/vst3_editor_mac.o"
   OBJS="$OBJS $OBJ/vst3_editor_mac.o"
 fi
@@ -113,7 +123,7 @@ if [ -n "$MAC" ]; then
   $CXX -bundle $LDSAN $OBJS $LIBS $EDITOR_LIBS -lpthread $WEAK -o "$SO"   # -U: the engine's optional weak hooks may be absent
 elif [ "$ARCH" = x86_64-win ]; then
   SO="$BUNDLE/Contents/$ARCH/$NAME.vst3"
-  $CXX -shared $LDSAN $OBJS $LIBS -static -lpthread -Wl,--no-undefined -o "$SO"
+  $CXX -shared $LDSAN $OBJS $LIBS $EDITOR_LIBS -static -lpthread -Wl,--no-undefined -o "$SO"
 else
   SO="$BUNDLE/Contents/$ARCH/$NAME.so"
   $CXX -shared -fPIC $LDSAN $OBJS $LIBS $EDITOR_LIBS -lpthread -Wl,--no-undefined -o "$SO"
