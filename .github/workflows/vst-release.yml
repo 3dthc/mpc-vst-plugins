@@ -302,7 +302,7 @@ jobs:
       TAG: ${{ inputs.tag }}
       VERSION: ${{ inputs.version }}
       VST_DIR: ${{ inputs.vst_dir }}
-      DATA: ${{ inputs.desktop_data }}
+      DATA: ${{ inputs.desktop_data != '' && format('port/{0}', inputs.desktop_data) || '' }}
       MPC_VST: ${{ github.workspace }}/mpc-vst-plugins
       GH_REPO: ${{ github.repository }}
     steps:

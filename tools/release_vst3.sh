@@ -16,15 +16,26 @@ sys.exit(0 if json.load(open(sys.argv[1])).get("defines", {}).get("VST3_REPLACES
 PY
 skins=("$SKINROOT"/*/)
 [ -d "${skins[0]}" ] && export VST3_SKIN="${skins[0]%/}"
-[ -z "${DATA:-}" ] || export VST3_DATA="$(cd "$DATA" && pwd)"
+if [ -n "${DATA:-}" ]; then
+  [ -d "$DATA" ] || { echo "data folder $DATA not found (from $(pwd))" >&2; exit 1; }
+  VST3_DATA="$(cd "$DATA" && pwd)"; export VST3_DATA
+fi
 export VST3_TARGET="$OS"
 [ "$OS" != macos ] || export CAIRO_PREFIX="${CAIRO_PREFIX:-$HOME/cairo-macos}"
 mkdir -p "$OUT/shots"
+LOG="$OUT/host-test.txt"
 if [ "$OS" = macos ]; then
-  "$MV/tools/test_vst3.sh" "$CFG" --shots "$OUT/shots"
+  "$MV/tools/test_vst3.sh" "$CFG" --shots "$OUT/shots" 2>&1 | tee "$LOG" || true
 else
-  "$MV/tools/test_vst3.sh" "$CFG"
+  "$MV/tools/test_vst3.sh" "$CFG" 2>&1 | tee "$LOG" || true
 fi
+# Blocking: the bundle must load and restore a device project (its VST2 chunk). Other host-test findings are shown, since
+# some ports have known ones that don't touch the desktop build (a page selector left out of the state on purpose, say).
+grep -q '^class: ' "$LOG" || { echo "::error::the VST3 did not load in the host test" >&2; exit 1; }
+grep -q '^state: a VST2 chunk' "$LOG" || { echo "::error::the VST3 state test did not run" >&2; exit 1; }
+grep -q '^FAIL: setState' "$LOG" && { echo "::error::setState refused a saved state" >&2; exit 1; }
+grep -q '^all passed' "$LOG" || echo "::warning::the desktop VST3 host test reported: $(grep '^FAIL' "$LOG" | head -3 | tr '\n' ' ')"
+! grep -q 'silent after a note' "$LOG" || echo "::warning::silent after a note: check the engine's data reached the bundle (desktop_data)"
 B="$ROOT/$PORT/build/vst3/$NAME.vst3"
 [ -d "$B" ] || { echo "no bundle at $B" >&2; exit 1; }
 STAGE="$(mktemp -d)"

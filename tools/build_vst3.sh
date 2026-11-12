@@ -109,7 +109,8 @@ if [ -n "$MAC" ] && [ -n "$EDITOR_CF" ]; then   # the NSView, its Objective-C cl
 fi
 if [ -n "$MAC" ]; then
   SO="$BUNDLE/Contents/MacOS/$NAME"
-  $CXX -bundle $LDSAN $OBJS $LIBS $EDITOR_LIBS -lpthread -o "$SO"
+  WEAK="$(grep -ho '[a-z_0-9]*([^()]*) __attribute__((weak))' "$MV"/wrapper/*.h | sed -E 's/^([a-z_0-9]*)\(.*/-Wl,-U,_\1/' | sort -u | tr '\n' ' ')"
+  $CXX -bundle $LDSAN $OBJS $LIBS $EDITOR_LIBS -lpthread $WEAK -o "$SO"   # -U: the engine's optional weak hooks may be absent
 elif [ "$ARCH" = x86_64-win ]; then
   SO="$BUNDLE/Contents/$ARCH/$NAME.vst3"
   $CXX -shared $LDSAN $OBJS $LIBS -static -lpthread -Wl,--no-undefined -o "$SO"
