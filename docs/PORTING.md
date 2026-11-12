@@ -58,6 +58,9 @@ for the pattern). This applies to every future port, not just ones that hit the 
       convention (`MODULE_DIR` itself, or `MODULE_DIR/banks/`?) against the port's on-device layout. A mismatch
       fails silently (no files found, default patch) and an offline test built on the upstream's own folder
       layout never shows it; build the test fixture to the port's layout.
+- [ ] Optional: `"defines": {"VST3_REPLACES_VST2": 1}` gives the desktop VST3 (docs/DESKTOP_VST3.md) the VST2-compatible class ID,
+      so MPC Desktop and DAWs open projects saved on the device with it. Set it before the first desktop release: it changes the
+      VST3's ID, so projects saved with an earlier VST3 of the port would no longer find it.
 - [ ] Optional, instruments only: `"defines": {"SAMPLE_ACCURATE": 1}` starts each note at its in-block position (MPC sends 0..127 for
       sequenced notes) instead of at the 128-frame block start. The engine's `render()` must then accept any 1..128 frames
       (check block-counting clocks, fixed-block cores) and `tools/test_port.sh` plus a bench (docs/BENCH.md) must pass.

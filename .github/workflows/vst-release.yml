@@ -297,7 +297,7 @@ jobs:
       fail-fast: false
       matrix:
         os: ${{ fromJSON(inputs.desktop_targets) }}
-    runs-on: ${{ matrix.os == 'macos' && 'macos-14' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.os == 'macos' && 'macos-latest' || 'ubuntu-latest' }}
     env:
       TAG: ${{ inputs.tag }}
       VERSION: ${{ inputs.version }}
