@@ -172,6 +172,15 @@ elif [ "$ARCH" = x86_64-win ]; then
 else
   echo "exported: $(readelf --dyn-syms -W "$SO" | grep -E ' GLOBAL .* [0-9]+ [A-Za-z]' | grep -v UND | awk '{print $8}' | tr '\n' ' ')"
 fi
+if [ "$ARCH" = x86_64-win ]; then   # the single-file layout Windows hosts scan (MPC 3 lists only these): <name>.vst3 + <name>\
+  FLAT="$OUTDIR/windows"
+  rm -rf "$FLAT"; mkdir -p "$FLAT/$NAME"
+  cp "$SO" "$FLAT/$NAME.vst3"
+  [ ! -d "$BUNDLE/Contents/Resources/skin" ] || cp -R "$BUNDLE/Contents/Resources/skin" "$FLAT/$NAME/skin"
+  [ -z "$SUBDIR" ] || cp -R "$DATA" "$FLAT/$NAME/$SUBDIR"
+  rmdir "$FLAT/$NAME" 2>/dev/null || true   # nothing to keep beside it
+  echo "windows: $ROOT/$FLAT ($NAME.vst3$( [ -d "$FLAT/$NAME" ] && echo " + $NAME\\"))"
+fi
 echo "bundle: $ROOT/$BUNDLE"
 if [ "${2:-}" = --install ] && [ -n "$MAC" ]; then
   D="$HOME/Library/Audio/Plug-Ins/VST3"
