@@ -38,6 +38,13 @@ grep -q '^all passed' "$LOG" || echo "::warning::the desktop VST3 host test repo
 ! grep -q 'silent after a note' "$LOG" || echo "::warning::silent after a note: check the engine's data reached the bundle (desktop_data)"
 B="$ROOT/$PORT/build/vst3/$NAME.vst3"
 [ -d "$B" ] || { echo "no bundle at $B" >&2; exit 1; }
+if [ -n "${VST3_DATA:-}" ]; then   # every data file made it into the bundle (a port that generates its data at build time)
+  want=$(find "$VST3_DATA" -type f | wc -l)
+  sub="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("defines", {}).get("MODULE_SUBDIR", "").strip("\""))' "$CFG")"
+  got=$(find "$B" -type d -name "$sub" -exec find {} -type f \; | wc -l)
+  echo "data: $got of $want files in the bundle"
+  [ "$got" -ge "$want" ] && [ "$want" -gt 1 ] || { echo "::error::the bundle is missing engine data ($got of $want files)" >&2; exit 1; }
+fi
 STAGE="$(mktemp -d)"
 cp -R "$B" "$STAGE/"
 if [ "$OS" = macos ]; then
