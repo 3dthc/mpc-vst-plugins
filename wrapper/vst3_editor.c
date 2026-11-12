@@ -13,10 +13,19 @@
  * changed is redrawn.
  *
  * mpc_vst3_snapshot() renders a page to a PNG without any window (tools/vst3_host_test.c --shots). */
+#ifdef __APPLE__   /* the window layer is vst3_editor_mac.m: an NSView the page image is shown in */
+#include <cairo.h>
+void *mpc_mac_open(void *parent, int w, int h, void *ctx);
+void mpc_mac_close(void *m);
+void mpc_mac_size(void *m, int w, int h);
+double mpc_mac_backing_scale(void *m);
+void mpc_mac_present(void *m, const unsigned char *data, int stride, int w, int h);
+#else
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <cairo.h>
 #include <cairo-xlib.h>
+#endif
 #include <cairo-ft.h>
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -338,8 +347,13 @@ typedef struct {
     pthread_mutex_t lock;  /* the window and its size: our own thread's tick() against the host's onSize() */
     volatile int stop;
     int thread_on;
+#ifdef __APPLE__
+    void *mac;             /* the NSView (vst3_editor_mac.m), or NULL when not attached */
+    double bs;             /* backing pixels per point */
+#else
     Display *dpy;
     Window win;
+#endif
     int width, height;     /* window pixels */
     double scale;
     cairo_surface_t *xs, *back;   /* the window, and the image the page is drawn into */
@@ -360,6 +374,29 @@ static int page_h(view_t *v) { return v->skin->h + TAB_H; }
 /* The page is drawn into an image the window's size, then copied to the window in one paint. Drawing the skin's images
  * straight onto the X surface would leave an uploaded copy cached on each of them, holding the X connection open past
  * removed(); only this backbuffer gets one, and view_detach() frees it first. */
+#ifdef __APPLE__
+static void redraw(view_t *v) {   /* the page at the screen's pixel density, handed to the NSView as an image */
+    if (!v->mac) return;
+    v->bs = mpc_mac_backing_scale(v->mac);
+    int pw = (int)lround(v->width * v->bs), ph = (int)lround(v->height * v->bs);
+    if (pw < 1 || ph < 1) return;
+    if (!v->back || cairo_image_surface_get_width(v->back) != pw || cairo_image_surface_get_height(v->back) != ph) {
+        if (v->back) cairo_surface_destroy(v->back);
+        v->back = cairo_image_surface_create(CAIRO_FORMAT_RGB24, pw, ph);
+    }
+    cairo_t *cr = cairo_create(v->back);
+    cairo_set_source_rgb(cr, 0, 0, 0);
+    cairo_paint(cr);
+    double sx = (double)v->width / page_w(v), sy = (double)v->height / page_h(v);
+    v->scale = sx < sy ? sx : sy;   /* points per skin pixel: the mouse comes in points */
+    cairo_scale(cr, v->scale * v->bs, v->scale * v->bs);
+    draw_page(v->skin, v->w, cr, v->tab);
+    cairo_destroy(cr);
+    cairo_surface_flush(v->back);
+    mpc_mac_present(v->mac, cairo_image_surface_get_data(v->back), cairo_image_surface_get_stride(v->back), pw, ph);
+    v->dirty = 0;
+}
+#else
 static void redraw(view_t *v) {
     if (!v->xs) return;
     if (!v->back || cairo_image_surface_get_width(v->back) != v->width || cairo_image_surface_get_height(v->back) != v->height) {
@@ -383,6 +420,7 @@ static void redraw(view_t *v) {
     XFlush(v->dpy);
     v->dirty = 0;
 }
+#endif
 
 static const item_t *hit_at(view_t *v, double px, double py) {
     for (int i = v->skin->nitems - 1; i >= 0; i--) {
@@ -471,6 +509,9 @@ static void wheel(view_t *v, double px, double py, int up) {
     ui_set(v, p, val, 3);
 }
 
+#ifdef __APPLE__
+static void handle_events(view_t *v) { (void)v; }   /* the NSView calls mpc_ed_mouse() itself */
+#else
 static void handle_events(view_t *v) {
     if (!v->dpy) return;
     while (XPending(v->dpy)) {
@@ -496,6 +537,7 @@ static void handle_events(view_t *v) {
         }
     }
 }
+#endif
 
 static void tick(view_t *v) {
     pthread_mutex_lock(&v->lock);
@@ -511,7 +553,12 @@ static void tick(view_t *v) {
 static void ui_set(view_t *v, int p, double val, int phase) {
     v3_t *w = v->w;
     IComponentHandler *h = w->handler;
-    int via_host = h && v->loop && is_param((uint32_t)p) && !PARAMS[p].string_display;
+#ifdef __APPLE__
+    int on_ui = 1;          /* a macOS host calls the view, and our timer fires, on the main thread */
+#else
+    int on_ui = v->loop != NULL;
+#endif
+    int via_host = h && on_ui && is_param((uint32_t)p) && !PARAMS[p].string_display;
     if (via_host) {
         if (phase == 0 || phase == 3) h->v->beginEdit(h, (uint32_t)p);
         h->v->performEdit(h, (uint32_t)p, val);
@@ -565,6 +612,42 @@ static void tm_timer(void *s) { tick(VIEW(s, tm)); }
 static const EventHandlerVtbl ev_vtbl = { pe_q, pe_ref, pe_rel, ev_fd };
 static const TimerHandlerVtbl tm_vtbl = { pt_q, pt_ref, pt_rel, tm_timer };
 
+#ifdef __APPLE__
+/* vst3_editor_mac.m's callbacks, on the main thread */
+void mpc_ed_tick(void *ctx) { tick(ctx); }
+void mpc_ed_mouse(void *ctx, int kind, double x, double y) {
+    view_t *v = ctx;
+    pthread_mutex_lock(&v->lock);
+    double s = v->scale > 0 ? v->scale : 1;
+    switch (kind) {
+    case 0: press(v, x / s, y / s); break;
+    case 1: motion(v, y / s); break;
+    case 2: unpress(v); break;
+    case 3: case 4: wheel(v, x / s, y / s, kind == 3); break;
+    }
+    if (v->dirty) redraw(v);
+    pthread_mutex_unlock(&v->lock);
+}
+
+static tresult pv_platform(void *s, const char *type) { (void)s; return type && !strcmp(type, "NSView") ? kResultOk : kResultFalse; }
+
+static tresult pv_attached(void *s, void *parent, const char *type) {
+    view_t *v = VIEW(s, vt);
+    if (!type || strcmp(type, "NSView") || v->mac) return kResultFalse;
+    v->mac = mpc_mac_open(parent, v->width, v->height, v);
+    if (!v->mac) return kResultFalse;
+    v->dirty = 1;
+    tick(v);
+    return kResultOk;
+}
+
+static void view_detach(view_t *v) {
+    if (v->mac) { mpc_mac_close(v->mac); v->mac = NULL; }
+    if (v->back) { cairo_surface_destroy(v->back); v->back = NULL; }
+    close_popups(v, -1);
+}
+
+#else
 static void *own_loop(void *arg) {   /* no host run loop: events and the redraw timer on this thread */
     view_t *v = arg;
     struct pollfd pf = { ConnectionNumber(v->dpy), POLLIN, 0 };
@@ -629,6 +712,8 @@ static void view_detach(view_t *v) {
     close_popups(v, -1);
 }
 
+#endif
+
 static tresult pv_removed(void *s) { view_detach(VIEW(s, vt)); return kResultOk; }
 static tresult pv_wheel(void *s, float d) { (void)s; (void)d; return kResultFalse; }
 static tresult pv_key(void *s, char16 k, int16_t c, int16_t m) { (void)s; (void)k; (void)c; (void)m; return kResultFalse; }
@@ -642,12 +727,16 @@ static tresult pv_on_size(void *s, ViewRect *r) {
     pthread_mutex_lock(&v->lock);
     v->width = r->right - r->left;
     v->height = r->bottom - r->top;
+#ifdef __APPLE__
+    if (v->mac) { mpc_mac_size(v->mac, v->width, v->height); v->dirty = 1; }
+#else
     if (v->dpy) {
         XResizeWindow(v->dpy, v->win, (unsigned)v->width, (unsigned)v->height);
         cairo_xlib_surface_set_size(v->xs, v->width, v->height);
         v->dirty = 1;
         XFlush(v->dpy);
     }
+#endif
     pthread_mutex_unlock(&v->lock);
     return kResultOk;
 }

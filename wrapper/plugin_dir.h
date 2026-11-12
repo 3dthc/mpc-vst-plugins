@@ -19,6 +19,8 @@
 #include <string.h>
 #ifdef _WIN32
 #include <windows.h>
+#elif defined(__APPLE__)
+#include <dlfcn.h>
 #endif
 
 static inline int mpc_dirname_of(const char *path, char *buf, size_t n) {
@@ -44,6 +46,10 @@ static inline int mpc_plugin_dir(char *buf, size_t n) {
                             (LPCSTR)&mpc_plugin_dir, &m) || !GetModuleFileNameA(m, path, sizeof path))
         return 0;
     return mpc_dirname_of(path, buf, n);
+#elif defined(__APPLE__)   /* the bundle's binary (Contents/MacOS/<name>): no /proc on macOS, and no old glibc to avoid */
+    Dl_info info;
+    if (!dladdr((const void *)&mpc_plugin_dir, &info) || !info.dli_fname) return 0;
+    return mpc_dirname_of(info.dli_fname, buf, n);
 #else
     FILE *f = fopen("/proc/self/maps", "r");   /* the mapping that contains this function */
     if (!f) return 0;

@@ -537,7 +537,11 @@ static void test_editor(plug_t *pl, void *so, const char *shots) {
     void *view = pl->e->createView(pl->ctrl, "editor");
     if (!view) { printf("editor: none\n"); return; }
     const PlugViewVtbl *v = VT(PlugViewVtbl, view);
+#ifdef __APPLE__
+    CHECK(v->isPlatformTypeSupported(view, "NSView") == kResultOk, "editor: NSView not supported");
+#else
     CHECK(v->isPlatformTypeSupported(view, "X11EmbedWindowID") == kResultOk, "editor: X11EmbedWindowID not supported");
+#endif
     CHECK(v->isPlatformTypeSupported(view, "HWND") != kResultOk, "editor: claims HWND");
     ViewRect r = {0, 0, 0, 0};
     CHECK(v->getSize(view, &r) == kResultOk && r.right > 0 && r.bottom > 0, "editor: getSize");
@@ -573,8 +577,13 @@ int main(int argc, char **argv) {
 #else
     void *h = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);
     if (!h) { printf("FAIL: dlopen: %s\n", dlerror()); return 1; }
+#ifdef __APPLE__   /* macOS bundles export bundleEntry/bundleExit (the host passes a CFBundleRef; ours ignores it) */
+    int (*entry)(void *) = (int (*)(void *))dlsym(h, "bundleEntry");
+    int (*leave)(void) = (int (*)(void))dlsym(h, "bundleExit");
+#else
     int (*entry)(void *) = (int (*)(void *))dlsym(h, "ModuleEntry");
     int (*leave)(void) = (int (*)(void))dlsym(h, "ModuleExit");
+#endif
 #endif
     void *(*get_factory)(void) = (void *(*)(void))dlsym(h, "GetPluginFactory");
     if (!entry || !leave || !get_factory) { printf("FAIL: missing entry/exit/GetPluginFactory\n"); return 1; }

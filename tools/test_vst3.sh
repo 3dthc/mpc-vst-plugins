@@ -17,6 +17,12 @@ if [ "${VST3_TARGET:-}" = windows ]; then
   cd "$D"
   WINEDEBUG=-all exec wine ./vst3_host_test.exe "Z:$D/$NAME.vst3/Contents/x86_64-win/$NAME.vst3" "${@:2}"
 fi
+if [ "${VST3_TARGET:-}" = macos ]; then   # the release build itself (universal), tested on this Mac's own architecture
+  "$MV/tools/build_vst3.sh" "$CFG" | grep -v '^exported'
+  D="$ROOT/$PORT/build/vst3"
+  clang -O1 -g -std=gnu11 -Wall -Wextra -I"$MV/wrapper" "$MV/tools/vst3_host_test.c" -lm -o "$D/vst3_host_test"
+  exec "$D/vst3_host_test" "$D/$NAME.vst3/Contents/MacOS/$NAME" "${@:2}"
+fi
 VST3_SAN=1 "$MV/tools/build_vst3.sh" "$CFG" | grep -v '^exported'
 case "$(uname -m)" in x86_64) ARCH=x86_64-linux ;; *) ARCH=aarch64-linux ;; esac
 SO="$ROOT/$PORT/build/vst3-san/$NAME.vst3/Contents/$ARCH/$NAME.so"

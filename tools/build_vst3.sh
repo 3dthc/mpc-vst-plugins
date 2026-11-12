@@ -14,6 +14,12 @@
 # (x86_64-w64-mingw32-gcc/g++); the engine, winpthreads and the C++ runtime are linked in statically, so the DLL stands alone.
 # No editor yet on Windows (a DAW shows its generic parameter view); --install is not supported there (copy the bundle to
 # %CommonProgramFiles%\VST3).
+# VST3_TARGET=macos (run on a Mac, Xcode command line tools) builds a universal bundle (Apple Silicon and Intel,
+# macOS 10.13+): <name>.vst3/Contents/MacOS/<name>, Info.plist, engine data (MODULE_SUBDIR) in Contents/Resources, ad-hoc
+# signed. The editor (vst3_editor_mac.m, an NSView) is built in when the skin is built and CAIRO_PREFIX points at a static,
+# universal cairo + pixman + FreeType + libpng + zlib (tools/build_cairo_macos.sh makes one); otherwise no editor.
+# --install copies it to ~/Library/Audio/Plug-Ins/VST3.
+# VST3_DATA=<folder>: copied into the bundle's data folder (MODULE_SUBDIR), so a release bundle carries its samples/banks.
 set -euo pipefail
 MV="$(cd "$(dirname "$0")/.." && pwd)"
 CFG="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
@@ -22,11 +28,20 @@ python3 "$MV/tools/gen_vst.py" "$CFG" --params-h
 ADAPTER_SRC=""
 [ -n "$ADAPTER" ] && ADAPTER_SRC="$MV/adapters/$ADAPTER/${ADAPTER}_engine.c"
 CC=gcc; CXX=g++; STRIP=strip; PIC="-fPIC -fvisibility=hidden"
-if [ "${VST3_TARGET:-}" = windows ]; then
+MAC=""
+read -r VENDOR UID4 VERSION < <(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(str(d.get("vendor","mpc")).replace(" ","_"), d.get("uid","none"), int(d.get("version",1000)))' "$CFG")
+if [ "${VST3_TARGET:-}" = macos ]; then
+  [ "$(uname -s)" = Darwin ] || { echo "VST3_TARGET=macos builds on a Mac (or a macOS GitHub runner)" >&2; exit 1; }
+  MAC=1; ARCH=MacOS
+  MACFLAGS="-arch arm64 -arch x86_64 -mmacosx-version-min=10.13"
+  CC="clang $MACFLAGS"; CXX="clang++ $MACFLAGS"; STRIP="strip -x"; PIC="-fPIC -fvisibility=hidden"
+  LIBS="${LIBS//-ldl/}"; LIBS="${LIBS//-lrt/}"
+elif [ "${VST3_TARGET:-}" = windows ]; then
   T=x86_64-w64-mingw32
   command -v $T-gcc >/dev/null || { echo "VST3_TARGET=windows needs mingw-w64 ($T-gcc)" >&2; exit 1; }
   [ "${2:-}" != --install ] || { echo "--install is for Linux; copy the bundle to %CommonProgramFiles%\\VST3" >&2; exit 1; }
   CC=$T-gcc; CXX=$T-g++; STRIP=$T-strip; PIC=""; ARCH=x86_64-win
+  PIC="-include $MV/wrapper/win_compat.h"
 else
   case "$(uname -m)" in
     x86_64) ARCH=x86_64-linux ;;
@@ -55,6 +70,14 @@ if [ -z "$SKIN" ]; then
   echo "editor: none (no built skin in $PORT/build/skin; run build_port.sh, or set VST3_SKIN)"
 elif [ "$ARCH" = x86_64-win ]; then
   echo "editor: none (not on Windows yet)"
+elif [ -n "$MAC" ]; then
+  if [ -n "${CAIRO_PREFIX:-}" ] && [ -f "$CAIRO_PREFIX/lib/libcairo.a" ]; then
+    EDITOR_CF="-DVST3_EDITOR -I$CAIRO_PREFIX/include/cairo -I$CAIRO_PREFIX/include/freetype2 -I$CAIRO_PREFIX/include"
+    EDITOR_LIBS="$CAIRO_PREFIX/lib/libcairo.a $CAIRO_PREFIX/lib/libpixman-1.a $CAIRO_PREFIX/lib/libfreetype.a"
+    EDITOR_LIBS="$EDITOR_LIBS $CAIRO_PREFIX/lib/libpng16.a $CAIRO_PREFIX/lib/libz.a -framework Cocoa -framework CoreGraphics"
+  else
+    echo "editor: none (set CAIRO_PREFIX to a static universal cairo: tools/build_cairo_macos.sh)"
+  fi
 elif ! pkg-config --exists cairo freetype2 x11; then
   echo "editor: none (cairo, freetype2 and x11 development files are needed)"
 else
@@ -64,6 +87,7 @@ fi
 BUNDLE="$OUTDIR/$NAME.vst3"
 rm -rf "$OBJ" "$BUNDLE"
 mkdir -p "$OBJ" "$BUNDLE/Contents/$ARCH"
+[ -z "$MAC" ] || CFLAGS="$(echo " $CFLAGS " | sed -E 's/ -m(fpu|cpu|arch|tune|float-abi)=[^ ]*//g')"   # device-only CPU flags
 OBJS=""
 for f in $SOURCES; do
   o="$OBJ/${f//\//_}.o"
@@ -78,7 +102,15 @@ for f in "$MV/wrapper/vst3_wrap.c" $ADAPTER_SRC; do
   $CC $OPT -std=gnu11 $EDITOR_CF -I"$MV/wrapper" -I"$PORT/build" -c "$f" -o "$o"
   OBJS="$OBJS $o"
 done
-if [ "$ARCH" = x86_64-win ]; then
+if [ -n "$MAC" ] && [ -n "$EDITOR_CF" ]; then   # the NSView, its Objective-C class named for this plugin and version
+  VIEW_CLASS="MPCView_$(printf '%s_%s_%s' "$NAME" "$UID4" "$VERSION" | tr -c 'A-Za-z0-9_' '_')"
+  $CC $OPT -fno-objc-arc -DMPC_VIEW_CLASS="$VIEW_CLASS" -c "$MV/wrapper/vst3_editor_mac.m" -o "$OBJ/vst3_editor_mac.o"
+  OBJS="$OBJS $OBJ/vst3_editor_mac.o"
+fi
+if [ -n "$MAC" ]; then
+  SO="$BUNDLE/Contents/MacOS/$NAME"
+  $CXX -bundle $LDSAN $OBJS $LIBS $EDITOR_LIBS -lpthread -o "$SO"
+elif [ "$ARCH" = x86_64-win ]; then
   SO="$BUNDLE/Contents/$ARCH/$NAME.vst3"
   $CXX -shared $LDSAN $OBJS $LIBS -static -lpthread -Wl,--no-undefined -o "$SO"
 else
@@ -87,19 +119,56 @@ else
 fi
 [ -n "${VST3_SAN:-}" ] || $STRIP "$SO"
 SUBDIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("defines", {}).get("MODULE_SUBDIR", "").strip("\""))' "$CFG")"
-[ -z "$SUBDIR" ] || mkdir -p "$BUNDLE/Contents/$ARCH/$SUBDIR"
+DATA="$BUNDLE/Contents/$ARCH/$SUBDIR"
+[ -z "$MAC" ] || DATA="$BUNDLE/Contents/Resources/$SUBDIR"   # Contents/MacOS holds only code (signing)
+if [ -n "$SUBDIR" ]; then
+  mkdir -p "$DATA"
+  [ -z "${VST3_DATA:-}" ] || cp -R "$VST3_DATA"/. "$DATA"/
+fi
 if [ -n "$EDITOR_CF" ]; then   # the skin, flattened for the editor, and its fonts (SIL OFL: the licence goes with them)
   RES="$BUNDLE/Contents/Resources/skin"
   python3 "$MV/tools/desktop_skin.py" "$SKIN" "$RES"
   cp "$MV"/tools/html_art/fonts/TitilliumWeb-{Regular,SemiBold,Bold}.ttf "$MV/tools/html_art/fonts/OFL.txt" "$RES/"
 fi
-if [ "$ARCH" = x86_64-win ]; then
+if [ -n "$MAC" ]; then   # Info.plist, PkgInfo, an ad-hoc signature (Apple Silicon refuses unsigned code)
+  BID="$(printf '%s' "$VENDOR.$NAME" | tr -c 'A-Za-z0-9.' '-' | tr 'A-Z' 'a-z')"
+  VSTR="$(python3 -c 'v=int(__import__("sys").argv[1]); print("%d.%d.%d"%(v//1000%10,v//100%10,v%100))' "$VERSION")"
+  cat > "$BUNDLE/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key><string>English</string>
+  <key>CFBundleExecutable</key><string>$NAME</string>
+  <key>CFBundleIdentifier</key><string>io.mpcvst.$BID</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleName</key><string>$NAME</string>
+  <key>CFBundlePackageType</key><string>BNDL</string>
+  <key>CFBundleSignature</key><string>????</string>
+  <key>CFBundleShortVersionString</key><string>$VSTR</string>
+  <key>CFBundleVersion</key><string>$VSTR</string>
+  <key>LSMinimumSystemVersion</key><string>10.13</string>
+  <key>NSHighResolutionCapable</key><true/>
+</dict>
+</plist>
+PLIST
+  printf 'BNDL????' > "$BUNDLE/Contents/PkgInfo"
+  codesign --force --sign - "$BUNDLE"
+  echo "exported: $(nm -gU "$SO" 2>/dev/null | awk '{print $NF}' | sort -u | tr '\n' ' ')"
+  lipo -info "$SO"
+elif [ "$ARCH" = x86_64-win ]; then
   echo "exported: $(x86_64-w64-mingw32-objdump -p "$SO" | awk '/Ordinal\/Name Pointer/{f=1;next} f&&NF==0{f=0} f{print $NF}' | tr '\n' ' ')"
 else
   echo "exported: $(readelf --dyn-syms -W "$SO" | grep -E ' GLOBAL .* [0-9]+ [A-Za-z]' | grep -v UND | awk '{print $8}' | tr '\n' ' ')"
 fi
 echo "bundle: $ROOT/$BUNDLE"
-if [ "${2:-}" = --install ]; then
+if [ "${2:-}" = --install ] && [ -n "$MAC" ]; then
+  D="$HOME/Library/Audio/Plug-Ins/VST3"
+  mkdir -p "$D"
+  rm -rf "$D/$NAME.vst3"
+  cp -R "$BUNDLE" "$D/$NAME.vst3"
+  echo "installed: $D/$NAME.vst3"
+elif [ "${2:-}" = --install ]; then
   mkdir -p "$HOME/.vst3"
   rm -rf "$HOME/.vst3/$NAME.vst3.new"
   cp -r "$BUNDLE" "$HOME/.vst3/$NAME.vst3.new"

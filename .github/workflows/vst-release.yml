@@ -74,6 +74,18 @@ on:
         description: Build and package only (zip + previews as run artifacts), no draft release
         type: boolean
         default: false
+      desktop:
+        description: Also build the desktop VST3 (macOS universal with the skin as its editor, and Windows) and attach it to the same release (docs/DESKTOP_VST3.md)
+        type: boolean
+        default: false
+      desktop_targets:
+        description: JSON list of desktop VST3 builds, from "macos" and "windows"
+        type: string
+        default: '["macos", "windows"]'
+      desktop_data:
+        description: The engine's data folder (vst.json MODULE_SUBDIR), relative to the caller's repo root, copied into each desktop bundle
+        type: string
+        default: ''
 
 jobs:
   release:
@@ -199,6 +211,14 @@ jobs:
           echo "name=$(sed -n 's/.* name="\([^"]*\)".*/\1/p' "$entry")" >> "$GITHUB_OUTPUT"
           echo "bench=$bench" >> "$GITHUB_OUTPUT"
 
+      - name: Keep the built skin for the desktop VST3 jobs
+        if: ${{ inputs.desktop }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-skin
+          path: port/${{ inputs.vst_dir }}/build/skin/
+          retention-days: 1
+
       - name: Upload zip and skin previews as run artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -266,3 +286,67 @@ jobs:
             echo "3. CPU: run tools/bench.sh on the device and commit its -j output as \`$VST_DIR/bench.txt\` if it's missing or stale, then re-run this workflow."
             echo "4. Publish the draft. That creates the tag."
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # The desktop VST3 of the same port (docs/DESKTOP_VST3.md "Releases"): a project saved on the device with the VST2 opens
+  # with it in MPC Desktop (controller mode) or any DAW, because a port with VST3_REPLACES_VST2 has the VST2's class ID and
+  # reads its chunk. After the device zip so the draft exists; each job only adds its own file to it.
+  desktop:
+    needs: release
+    if: ${{ inputs.desktop }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(inputs.desktop_targets) }}
+    runs-on: ${{ matrix.os == 'macos' && 'macos-14' || 'ubuntu-latest' }}
+    env:
+      TAG: ${{ inputs.tag }}
+      VERSION: ${{ inputs.version }}
+      VST_DIR: ${{ inputs.vst_dir }}
+      DATA: ${{ inputs.desktop_data }}
+      MPC_VST: ${{ github.workspace }}/mpc-vst-plugins
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: port
+          lfs: true
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          repository: open-mpc/mpc-vst-plugins
+          ref: ${{ inputs.tools_ref }}
+          path: mpc-vst-plugins
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop-skin
+          path: skin
+      - name: Cache cairo (macOS editor)
+        if: ${{ matrix.os == 'macos' }}
+        uses: actions/cache@v4
+        with:
+          path: ~/cairo-macos
+          key: cairo-macos-${{ hashFiles('mpc-vst-plugins/tools/build_cairo_macos.sh') }}
+      - name: Build cairo (macOS editor)
+        if: ${{ matrix.os == 'macos' }}
+        run: '[ -f ~/cairo-macos/lib/libcairo.a ] || mpc-vst-plugins/tools/build_cairo_macos.sh ~/cairo-macos'
+      - name: Install mingw-w64 and Wine (Windows)
+        if: ${{ matrix.os == 'windows' }}
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq mingw-w64 wine64 >/dev/null
+      - name: Build, test and package
+        id: pkg
+        env:
+          OS: ${{ matrix.os }}
+        run: bash -euo pipefail "$MPC_VST/tools/release_vst3.sh" "$OS" "port/$VST_DIR/vst.json" "$GITHUB_WORKSPACE/skin" "$GITHUB_WORKSPACE/dist-$OS"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.tag }}-vst3-${{ matrix.os }}
+          path: dist-${{ matrix.os }}/
+          retention-days: 14
+      - name: Attach to the draft release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OS: ${{ matrix.os }}
+        run: gh release upload "$TAG" dist-$OS/*.zip --clobber
+
