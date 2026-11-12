@@ -2134,3 +2134,14 @@ armv7 C++ ports with `arm32v7/gcc:10-bullseye` (same glibc 2.31), prints `highes
 3.4.28. aarch64 (Gen2, MPC OS 3.x only, libstdc++ from GCC 13) is unchanged. To check a device: `strings /lib/libstdc++.so.6 |
 grep GLIBCXX_3.4.2` and, for a plugin, `/lib/ld-linux-armhf.so.3 --list <so>` must print no "not found". `catalog_check.py`
 does not look at GLIBCXX yet.
+
+### 2026-11-12: desktop VST3 that replaces the device VST2 (offline + CI; not yet opened in MPC Desktop)
+Why: MPC Desktop's controller mode opens the device's projects on the computer, which can't load the ARM VST2, so a track
+with a third-party plugin came up empty. With `"VST3_REPLACES_VST2": 1` the desktop VST3 takes Steinberg's VST2-replacement
+class ID ("VST" + uniqueID + first nine name characters, lower case) and `setState` reads the VST2 chunk (raw, or `VstW` /
+`CcnK` wrapped), docs/DESKTOP_VST3.md. Checked: `tools/vst3_host_test.c` restores from both chunk forms for ten ports
+(Linux, ASan; Windows under Wine in CI; macOS universal in CI on an arm64 runner, editor pages drawn). Found on the way:
+an engine without `"state"` saved an empty VST2 chunk, so MPC projects brought it back at its defaults (Fretty, OxZygen);
+`vst2_wrap.c` now saves its settings as key=value text (`test_port.sh` chunk check passes). **Not yet checked:** whether
+MPC Desktop (3.9+, AU/VST3) maps a device project's VST2 to this VST3 and passes it the chunk; JUCE hosts differ in how
+they hand VST2 state to a replacement VST3. Record the result here.
