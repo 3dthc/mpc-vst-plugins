@@ -23,7 +23,7 @@ if [ ! -d "cairo-$CAIRO_VERSION" ]; then
   tar xf cairo.tar.xz
 fi
 SRC="$WORK/cairo-$CAIRO_VERSION"
-OPTS=(--buildtype=release --default-library=static --wrap-mode=forcefallback -Db_ndebug=true
+OPTS=(--buildtype=release --default-library=static --wrap-mode=nofallback --force-fallback-for=zlib,libpng,freetype2,pixman-1,pixman -Db_ndebug=true
       -Dfreetype=enabled -Dpng=enabled -Dzlib=enabled -Dfontconfig=disabled -Dquartz=disabled -Dxlib=disabled
       -Dxcb=disabled -Dglib=disabled -Dspectre=disabled -Dsymbol-lookup=disabled -Dtests=disabled -Dgtk_doc=false
       -Dlzo=disabled -Dgtk2-utils=disabled
