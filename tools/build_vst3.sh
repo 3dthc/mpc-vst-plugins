@@ -72,7 +72,7 @@ elif [ "$ARCH" = x86_64-win ]; then
   if [ -n "${CAIRO_PREFIX:-}" ] && [ -f "$CAIRO_PREFIX/lib/libcairo.a" ]; then
     EDITOR_CF="-DVST3_EDITOR -DCAIRO_WIN32_STATIC_BUILD -I$CAIRO_PREFIX/include/cairo -I$CAIRO_PREFIX/include/freetype2 -I$CAIRO_PREFIX/include"
     EDITOR_LIBS="$CAIRO_PREFIX/lib/libcairo.a $CAIRO_PREFIX/lib/libpixman-1.a $CAIRO_PREFIX/lib/libfreetype.a"
-    EDITOR_LIBS="$EDITOR_LIBS $CAIRO_PREFIX/lib/libpng16.a $CAIRO_PREFIX/lib/libz.a -lgdi32 -lmsimg32 -luser32"
+    EDITOR_LIBS="$EDITOR_LIBS $CAIRO_PREFIX/lib/libpng16.a $CAIRO_PREFIX/lib/libz.a -ld2d1 -ldwrite -lwindowscodecs -lole32 -luuid -lgdi32 -lmsimg32 -luser32"
   else
     echo "editor: none (set CAIRO_PREFIX to a static Windows cairo: tools/build_cairo_windows.sh)"
   fi
