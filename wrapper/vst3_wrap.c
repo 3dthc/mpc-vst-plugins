@@ -62,6 +62,7 @@
 
 #include "engine.h"
 #include "popup.h"
+#include "state_text.h"
 #include "resample.h"
 
 #define DSP_BLOCK 128
@@ -504,29 +505,19 @@ static int stream_write(IBStream *s, const void *buf, int n) {
     return s->v->write(s, (void *)buf, n, &done) == kResultOk && done == n;
 }
 
-static int is_live(int i) {   /* vst.json "live": a value the engine changes by itself (a status, a meter), not a setting */
-#ifdef PLUG_LIVE_COUNT
-    for (int k = 0; k < PLUG_LIVE_COUNT; k++) if (PLUG_LIVE[k] == i) return 1;
-#endif
-    (void)i;
-    return 0;
-}
+static int st_get(void *w, const char *k, char *buf, int n) { return eng_get(w, k, buf, n); }
+static void st_set(void *w, const char *k, const char *v) { eng_set(w, k, v); }
 
+/* The same text the device VST2 saves (wrapper/state_text.h), then the wrapper's own settings. */
 static tresult save_state(v3_t *w, IBStream *s) {
     int len = eng_get(w, "state", w->state, sizeof w->state);
     if (len > 0) {
         w->state[sizeof w->state - 1] = 0;
-        if (!stream_write(s, "mpc-vst3 state\n", 15) || !stream_write(s, w->state, (int)strlen(w->state))) return kResultFalse;
+        if (!stream_write(s, MPC_STATE_STATE_HDR, (int)strlen(MPC_STATE_STATE_HDR)) ||
+            !stream_write(s, w->state, (int)strlen(w->state))) return kResultFalse;
     } else {
-        if (!stream_write(s, "mpc-vst3 params\n", 16)) return kResultFalse;
-        for (int i = 0; i < NPARAMS; i++) {
-            char line[200], buf[96];
-            const param_t *p = &PARAMS[i];
-            if (popup_is(i) || p->momentary || p->step_target >= 0 || p->string_display || is_live(i)) continue;
-            if (eng_get(w, p->key, buf, sizeof buf) <= 0) continue;
-            int n = snprintf(line, sizeof line, "%s=%s\n", p->key, buf);
-            if (n > 0 && n < (int)sizeof line && !stream_write(s, line, n)) return kResultFalse;
-        }
+        len = mpc_state_params_text(w, st_get, w->state, sizeof w->state);
+        if (len < 0 || !stream_write(s, w->state, len)) return kResultFalse;
     }
     /* the wrapper's own settings, after a \x01 the engine's text never holds */
     char line[64];
@@ -534,6 +525,7 @@ static tresult save_state(v3_t *w, IBStream *s) {
     return stream_write(s, line, n) ? kResultOk : kResultFalse;
 }
 
+/* This VST3's own state, or a project's VST2 chunk (raw, or as a host wrapped it: VstW / CcnK). */
 static tresult load_state(v3_t *w, IBStream *s) {
     int len = 0;
     for (;;) {
@@ -542,25 +534,9 @@ static tresult load_state(v3_t *w, IBStream *s) {
         if (s->v->read(s, w->state + len, (int32_t)(sizeof w->state - 1 - len), &got) != kResultOk || got <= 0) break;
         len += got;
     }
-    w->state[len] = 0;
-    char *own = NULL;
-    for (int i = 0; i + 1 < len; i++)
-        if (w->state[i] == '\x01') { own = w->state + i + 1; w->state[i > 0 ? i - 1 : i] = 0; break; }
-    if (!strncmp(w->state, "mpc-vst3 state\n", 15)) {
-        eng_set(w, "state", w->state + 15);
-    } else if (!strncmp(w->state, "mpc-vst3 params\n", 16)) {
-        for (char *line = w->state + 16, *next; line && *line; line = next) {
-            next = strchr(line, '\n');
-            if (next) *next++ = 0;
-            char *eq = strchr(line, '=');
-            if (!eq) continue;
-            *eq = 0;
-            for (int i = 0; i < NPARAMS; i++)
-                if (!strcmp(PARAMS[i].key, line)) { eng_set(w, line, eq + 1); break; }
-        }
-    } else {
-        return kResultFalse;
-    }
+    int ok;
+    char *own = mpc_state_restore(w, st_set, w->state, len, &ok);
+    if (!ok) return kResultFalse;
     for (char *l = own; l && *l; l = strchr(l, '\n') ? strchr(l, '\n') + 1 : NULL) {
         if (!strncmp(l, "program=", 8)) w->prog = atoi(l + 8);
         if (!strncmp(l, "bypass=", 7)) w->bypass = atoi(l + 7) != 0;
@@ -570,10 +546,32 @@ static tresult load_state(v3_t *w, IBStream *s) {
 }
 
 /* ---- identity ----------------------------------------------------------------- */
-/* Class ID: "MPC3", the port's four-character uid, then 8 bytes of FNV-1a over vendor and name, so two ports that share a uid
- * by mistake still differ. Stable across builds: a saved project finds the plugin again. */
+/* Class ID. With VST3_REPLACES_VST2 (vst.json "defines"), the one Steinberg's VST2 compatibility gives a VST3 that
+ * replaces a VST2 (the SDK's vst2wrapper and JUCE's JUCE_VST3_CAN_REPLACE_VST2 make the same): "VST", the VST2 uniqueID,
+ * then the first nine characters of the VST2 effect name in lower case. A host that finds the VST2 missing (or prefers
+ * the VST3) then opens a project saved with the VST2 with this plugin, and hands it the VST2 chunk (load_state reads it).
+ * Windows keeps a TUID in COM order (the first three fields little-endian), like the SDK's FUID::toTUID there.
+ * Otherwise: "MPC3", the port's four-character uid, then 8 bytes of FNV-1a over vendor and name, so two ports that share
+ * a uid by mistake still differ. Either is stable across builds: a saved project finds the plugin again. */
 static TUID g_cid;
 static void make_cid(void) {
+#ifdef VST3_REPLACES_VST2
+    uint8_t b[16] = { 'V', 'S', 'T' };
+    for (int i = 0; i < 4; i++) b[3 + i] = (uint8_t)((uint32_t)PLUG_UID >> (24 - 8 * i));
+    char name[33];
+    snprintf(name, sizeof name, "%s", PLUG_NAME);   /* effGetEffectName: PLUG_NAME, at most 31 characters */
+    size_t n = strlen(name);
+    for (size_t i = 0; i < 9; i++) {
+        uint8_t c = i < n ? (uint8_t)name[i] : 0;
+        b[7 + i] = (c >= 'A' && c <= 'Z') ? (uint8_t)(c + 'a' - 'A') : c;
+    }
+#ifdef _WIN32
+    const int order[16] = { 3, 2, 1, 0, 5, 4, 7, 6, 8, 9, 10, 11, 12, 13, 14, 15 };
+    for (int i = 0; i < 16; i++) g_cid[i] = b[order[i]];
+#else
+    memcpy(g_cid, b, 16);
+#endif
+#else
     uint64_t h = 1469598103934665603ull;
     const char *parts[2] = { PLUG_VENDOR, PLUG_NAME };
     for (int k = 0; k < 2; k++)
@@ -581,6 +579,7 @@ static void make_cid(void) {
     memcpy(g_cid, "MPC3", 4);
     for (int i = 0; i < 4; i++) g_cid[4 + i] = (uint8_t)((uint32_t)PLUG_UID >> (24 - 8 * i));
     for (int i = 0; i < 8; i++) g_cid[8 + i] = (uint8_t)(h >> (56 - 8 * i));
+#endif
 }
 
 /* ---- FUnknown, shared by every interface of the instance ------------------------ */
