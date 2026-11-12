@@ -30,9 +30,11 @@ LOG="$OUT/host-test.txt"
 grep -q '^class: ' "$LOG" || { echo "::error::the VST3 did not load in the host test" >&2; exit 1; }
 grep -q '^state: a VST2 chunk' "$LOG" || { echo "::error::the VST3 state test did not run" >&2; exit 1; }
 grep -q '^FAIL: setState' "$LOG" && { echo "::error::setState refused a saved state" >&2; exit 1; }
+! grep -qi 'samples missing\|data missing\|not found' "$LOG" || { echo "::error::the plugin did not find its data in the packaged layout" >&2; exit 1; }
 grep -q '^all passed' "$LOG" || echo "::warning::the desktop VST3 host test reported: $(grep '^FAIL' "$LOG" | head -3 | tr '\n' ' ')"
 ! grep -q 'silent after a note' "$LOG" || echo "::warning::silent after a note: check the engine's data reached the bundle (desktop_data)"
 B="$ROOT/$PORT/build/vst3/$NAME.vst3"
+[ "$OS" != windows ] || B="$ROOT/$PORT/build/vst3/windows"   # single file + its folder (build_vst3.sh)
 [ -d "$B" ] || { echo "no bundle at $B" >&2; exit 1; }
 if [ -n "${VST3_DATA:-}" ]; then   # every data file made it into the bundle (a port that generates its data at build time)
   want=$(find "$VST3_DATA" -type f | wc -l)
@@ -42,7 +44,7 @@ if [ -n "${VST3_DATA:-}" ]; then   # every data file made it into the bundle (a 
   [ "$got" -ge "$want" ] && [ "$want" -gt 1 ] || { echo "::error::the bundle is missing engine data ($got of $want files)" >&2; exit 1; }
 fi
 STAGE="$(mktemp -d)"
-cp -R "$B" "$STAGE/"
+if [ "$OS" = windows ]; then cp -R "$B"/. "$STAGE/"; else cp -R "$B" "$STAGE/"; fi
 if [ "$OS" = macos ]; then
   cat > "$STAGE/README.txt" <<TXT
 $NAME $VERSION, VST3 for macOS (Apple Silicon and Intel, macOS 10.13 or later)
@@ -57,8 +59,10 @@ else
   cat > "$STAGE/README.txt" <<TXT
 $NAME $VERSION, VST3 for Windows (64-bit)
 
-Install: copy the $NAME.vst3 folder into C:\\Program Files\\Common Files\\VST3, then rescan plugins in MPC Desktop or
-your DAW. The plugin window shows the same skin as on the MPC.
+Install: copy $NAME.vst3$( [ -d "$B/$NAME" ] && echo " and the $NAME folder next to it (its skin and sounds)") into
+C:\\Program Files\\Common Files\\VST3, then rescan plugins in MPC Desktop or your DAW. Keep them side by side.
+If you installed an earlier version, delete its old $NAME.vst3 folder first.
+The plugin window shows the same skin as on the MPC.
 
 It is the same instrument as the MPC VST2: a project saved on the MPC opens with it in MPC Desktop with the same sound.
 TXT

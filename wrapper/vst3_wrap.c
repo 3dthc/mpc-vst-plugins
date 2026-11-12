@@ -641,6 +641,21 @@ static void make_cid(void) {
 #endif
 }
 
+/* A single-file Windows VST3 (<VST3 folder>\<name>.vst3, the layout every Windows host scans, MPC 3 included) keeps its
+ * skin and data in a folder named after the plugin next to it: <VST3 folder>\<name>\skin, ...\<name>\<MODULE_SUBDIR>.
+ * flat_dir() gives that folder when there is one (here: the folder holding the plugin's binary); a bundle has none. */
+#include <sys/stat.h>
+static int flat_dir(const char *here, char *out, size_t n) {
+#ifdef _WIN32
+    struct stat st;
+    if (snprintf(out, n, "%s/%s", here, PLUG_NAME) >= (int)n) return 0;
+    return stat(out, &st) == 0 && (st.st_mode & S_IFDIR);
+#else
+    (void)here; (void)out; (void)n;
+    return 0;
+#endif
+}
+
 /* ---- FUnknown, shared by every interface of the instance ------------------------ */
 static void destroy(v3_t *w);
 static tresult query(v3_t *w, const TUID iid, void **obj) {
@@ -1121,8 +1136,11 @@ static v3_t *create(void) {
 #else
     const char *data_fmt = "%s/%s";
 #endif
-    if (mpc_plugin_dir(here, sizeof here) && snprintf(data_dir, sizeof data_dir, data_fmt, here, MODULE_SUBDIR) < (int)sizeof data_dir)
-        module_dir = data_dir;
+    char flat[600];
+    if (mpc_plugin_dir(here, sizeof here)) {
+        if (flat_dir(here, flat, sizeof flat)) { snprintf(here, sizeof here, "%s", flat); data_fmt = "%s/%s"; }
+        if (snprintf(data_dir, sizeof data_dir, data_fmt, here, MODULE_SUBDIR) < (int)sizeof data_dir) module_dir = data_dir;
+    }
     w->dsp = g_api->create(module_dir);
 #else
     w->dsp = g_api->create(MODULE_DIR);

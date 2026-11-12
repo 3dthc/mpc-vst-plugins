@@ -139,7 +139,9 @@ static const char *field(char **f, int nf, const char *key) {
 static skin_t *skin_load(void) {
     char here[512], dir[700], path[760];
     if (!mpc_plugin_dir(here, sizeof here)) return NULL;
-    snprintf(dir, sizeof dir, "%s/../Resources/skin", here);
+    char flat[600];
+    if (flat_dir(here, flat, sizeof flat)) snprintf(dir, sizeof dir, "%s/skin", flat);   /* single-file Windows layout */
+    else snprintf(dir, sizeof dir, "%s/../Resources/skin", here);
     snprintf(path, sizeof path, "%s/desktop.skin", dir);
     FILE *f = fopen(path, "rb");
     if (!f) return NULL;

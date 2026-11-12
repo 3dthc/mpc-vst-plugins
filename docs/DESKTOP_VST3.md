@@ -55,6 +55,10 @@ name, uid and version, since every plugin in a process shares one class namespac
 (`tools/build_cairo_macos.sh <prefix>`, then `CAIRO_PREFIX=<prefix>`); without one the bundle has no editor.
 `VST3_DATA=<folder>` copies the engine's data into the bundle (any target).
 
+Windows layout (2026-11-12, user report: MPC 3 on Windows did not list bundle folders, while single-file VST3s in the
+same folder showed): releases ship `<name>.vst3` as one file, with a `<name>\` folder beside it for the skin and engine data
+(`flat_dir()` in vst3_wrap.c finds it; a bundle still works). build_vst3.sh writes it to `build/vst3/windows/`.
+
 Windows (2026-11-12): the same editor in a child HWND (`wrapper/vst3_editor_win.c`: WM_TIMER tick, SetDIBitsToDevice, window
 class named per plugin and version and unregistered with the last view), built when `CAIRO_PREFIX` points at a static
 mingw cairo (`tools/build_cairo_windows.sh <prefix>`, cross-built on Linux). `vst3_host_test` opens it in a real window under
