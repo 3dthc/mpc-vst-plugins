@@ -1018,7 +1018,12 @@ static v3_t *create(void) {
 #ifdef MODULE_SUBDIR
     char data_dir[600], here[512];
     const char *module_dir = MODULE_DIR;
-    if (mpc_plugin_dir(here, sizeof here) && snprintf(data_dir, sizeof data_dir, "%s/%s", here, MODULE_SUBDIR) < (int)sizeof data_dir)
+#ifdef __APPLE__   /* a macOS bundle keeps data in Contents/Resources: Contents/MacOS holds only signed code */
+    const char *data_fmt = "%s/../Resources/%s";
+#else
+    const char *data_fmt = "%s/%s";
+#endif
+    if (mpc_plugin_dir(here, sizeof here) && snprintf(data_dir, sizeof data_dir, data_fmt, here, MODULE_SUBDIR) < (int)sizeof data_dir)
         module_dir = data_dir;
     w->dsp = g_api->create(module_dir);
 #else
@@ -1119,6 +1124,10 @@ VST3_EXPORT void *GetPluginFactory(void) {
 /* Windows hosts call InitDll/ExitDll where Linux ones call ModuleEntry/ModuleExit. */
 VST3_EXPORT int InitDll(void) { init_tables(); return 1; }
 VST3_EXPORT int ExitDll(void) { return 1; }
+#elif defined(__APPLE__)
+/* macOS hosts call bundleEntry/bundleExit with the bundle's CFBundleRef. */
+VST3_EXPORT int bundleEntry(void *bundle) { (void)bundle; init_tables(); return 1; }
+VST3_EXPORT int bundleExit(void) { return 1; }
 #else
 VST3_EXPORT int ModuleEntry(void *handle) { (void)handle; init_tables(); return 1; }
 VST3_EXPORT int ModuleExit(void) { return 1; }
