@@ -189,6 +189,9 @@ static void eng_set(wrap_t *w, const char *k, const char *v) {
 static int eng_get(wrap_t *w, const char *k, char *buf, int n) {
     pthread_mutex_lock(&w->lock); int r = g_api->get_param(w->dsp, k, buf, n); pthread_mutex_unlock(&w->lock); return r;
 }
+static int st_get(void *w, const char *k, char *buf, int n) { return eng_get(w, k, buf, n); }
+static void st_set(void *w, const char *k, const char *v) { eng_set(w, k, v); }
+#include "state_text.h"
 static void eng_midi(wrap_t *w, const uint8_t *m, int n) {
     pthread_mutex_lock(&w->lock); g_api->midi(w->dsp, m, n); pthread_mutex_unlock(&w->lock);
 }
@@ -918,20 +921,21 @@ static intptr_t dispatcher(AEffect *e, int32_t op, int32_t idx, intptr_t v, void
     case effCanDo:
         return (!strcmp(p, "receiveVstEvents") || !strcmp(p, "receiveVstMidiEvent") ||
                 !strcmp(p, "receiveVstTimeInfo")) ? 1 : -1;
-    case effGetChunk: {
+    case effGetChunk: {   /* wrapper/state_text.h: the same text the desktop VST3 saves, so projects move between them */
         flush_pend0(e);
         int len = eng_get(w, "state", w->chunk, sizeof w->chunk);
-        if (len <= 0) return 0;
+        if (len > 0) w->chunk[sizeof w->chunk - 1] = 0;
+        else if (mpc_state_params_text(w, st_get, w->chunk, sizeof w->chunk) < 0) return 0;   /* no "state": every setting */
         *(void **)p = w->chunk;
         return (intptr_t)strlen(w->chunk) + 1;
     }
     case effSetChunk: {
-        if (v <= 0 || (size_t)v > sizeof w->chunk) return 0;
+        if (v <= 0 || (size_t)v >= sizeof w->chunk) return 0;
         memcpy(w->chunk, p, v);
-        w->chunk[v - 1] = 0;
         __atomic_store_n(&w->has_pend0, 0, __ATOMIC_RELEASE);   /* a restore sets parameter 0 too */
-        eng_set(w, "state", w->chunk);
-        return 1;
+        int ok;
+        mpc_state_restore(w, st_set, w->chunk, (int)v, &ok);
+        return ok;
     }
     default: return 0;
     }

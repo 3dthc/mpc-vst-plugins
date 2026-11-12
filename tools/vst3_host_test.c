@@ -368,6 +368,38 @@ static void test_state(plug_t *a) {
         printf("note: state saved again after a restore differs (%lld vs %lld bytes)\n", (long long)s2.len, (long long)s1.len);
     printf("state: %lld bytes, parameter %u round trip ok\n", (long long)s1.len, id);
     plug_free(&b);
+    /* A project saved on the device with the VST2 (wrapper/state_text.h): the chunk is the same text without this build's
+     * header and trailer, NUL-terminated, handed over raw or as a host wraps it (VstW + an fxBank "CcnK" block). */
+    char *txt = malloc((size_t)s1.len + 1);
+    memcpy(txt, s1.buf, (size_t)s1.len);
+    txt[s1.len] = 0;
+    char *body = txt;
+    if (!strncmp(body, "mpc-vst3 state\n", 15)) body += 15;
+    char *x1 = strchr(body, '\x01');
+    if (x1) { *x1 = 0; if (x1 > body && x1[-1] == '\n') x1[-1] = 0; }
+    int clen = (int)strlen(body) + 1;
+    for (int form = 0; form < 2; form++) {
+        mem_stream v2 = { &ms_vtbl, NULL, 0, 0, 0 };
+        if (form == 1) {
+            uint8_t h[8 + 12 + 160] = {0};
+            int hl = 12, at = 8 + hl;
+            memcpy(h, "VstW", 4); h[7] = (uint8_t)hl; h[11] = 1;
+            memcpy(h + at, "CcnK", 4); memcpy(h + at + 8, "FBCh", 4); h[at + 15] = 2;
+            h[at + 156] = (uint8_t)(clen >> 24); h[at + 157] = (uint8_t)(clen >> 16); h[at + 158] = (uint8_t)(clen >> 8); h[at + 159] = (uint8_t)clen;
+            ms_vtbl.write(&v2, h, at + 160, NULL);
+        }
+        ms_vtbl.write(&v2, body, clen, NULL);
+        v2.pos = 0;
+        plug_t c;
+        CHECK(plug_new(&c), "third instance");
+        CHECK(c.c->setState(c.comp, (IBStream *)&v2) == kResultOk, "setState with a VST2 chunk (%s)", form ? "VstW" : "raw");
+        double g2 = c.e->getParamNormalized(c.ctrl, id);
+        CHECK(fabs(g2 - want) < 1e-6, "state: VST2 chunk (%s): parameter %u restored as %g, not %g", form ? "VstW" : "raw", id, g2, want);
+        plug_free(&c);
+        free(v2.buf);
+    }
+    printf("state: a VST2 chunk (raw and host-wrapped) restores parameter %u\n", id);
+    free(txt);
     free(s1.buf); free(s2.buf);
 }
 
@@ -557,6 +589,9 @@ int main(int argc, char **argv) {
     memcpy(g_cid, ci.cid, 16);
     g_effect = !strncmp(ci.subCategories, "Fx", 2);
     printf("class: %s (%s) by %s, version %s\n", ci.name, ci.subCategories, ci.vendor, ci.version);
+    printf("class id:");
+    for (int i = 0; i < 16; i++) printf("%s%02X", i == 4 || i == 6 || i == 8 ? " " : "", (unsigned)(uint8_t)ci.cid[i]);
+    printf("%s\n", !memcmp(ci.cid, "VST", 3) ? " (replaces the VST2)" : "");
 
     plug_t pl;
     if (!plug_new(&pl)) { printf("FAIL: could not create an instance with all three interfaces\n"); return 1; }
