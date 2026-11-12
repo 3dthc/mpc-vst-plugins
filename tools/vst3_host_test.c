@@ -286,16 +286,44 @@ static void test_programs(plug_t *pl) {
     int m = n < 4096 ? n : 4096;
     for (int i = 0; i < m; i++) { ParameterInfo pi; pl->e->getParameterInfo(pl->ctrl, i, &pi); before[i] = pl->e->getParamNormalized(pl->ctrl, pi.id); }
     if (!setup(pl, 48000)) { CHECK(0, "programs: setup failed"); return; }
+    /* the last named program (an engine's bank can end in empty "-" slots), by its own name */
+    double pick = 1.0;
+    for (int k = prog.stepCount; k > 0; k--) {
+        char16 t[128];
+        char nm[128];
+        double v = (double)k / prog.stepCount;
+        pl->e->getParamStringByValue(pl->ctrl, prog.id, v, t);
+        ascii(nm, t, sizeof nm);
+        if (nm[0] && strcmp(nm, "-")) { pick = v; break; }
+    }
     changes_t pc, out_pc;
     changes_init(&pc); changes_init(&out_pc);
-    changes_set(&pc, prog.id, 1.0);
+    changes_set(&pc, prog.id, pick);
     float l[64] = {0}, r[64] = {0}, ol[64], orr[64];
     run(pl, l, r, ol, orr, 64, &pc, NULL, &out_pc);
     char16 txt[128];
     char name[128];
-    pl->e->getParamStringByValue(pl->ctrl, prog.id, 1.0, txt);
+    pl->e->getParamStringByValue(pl->ctrl, prog.id, pick, txt);
     ascii(name, txt, sizeof name);
-    CHECK(fabs(pl->e->getParamNormalized(pl->ctrl, prog.id) - 1.0) < 1e-9, "programs: the last program does not read back as picked");
+    CHECK(fabs(pl->e->getParamNormalized(pl->ctrl, prog.id) - pick) < 1e-9, "programs: \"%s\" does not read back as picked", name);
+    /* the program list a JUCE host (MPC Desktop) shows names from: IUnitInfo, same names as the parameter */
+    void *ui = NULL;
+    if (pl->e->queryInterface(pl->ctrl, iid_IUnitInfo, &ui) == kResultOk && ui) {
+        const UnitInfoVtbl *uv = *(const UnitInfoVtbl **)ui;
+        ProgramListInfo li;
+        CHECK(uv->getProgramListCount(ui) == 1 && uv->getProgramListInfo(ui, 0, &li) == kResultOk && li.programCount == prog.stepCount + 1,
+              "programs: IUnitInfo program list does not match the program parameter");
+        char16 t[128];
+        char nm[128];
+        CHECK(uv->getProgramName(ui, li.id, (int)lround(pick * prog.stepCount), t) == kResultOk, "programs: IUnitInfo getProgramName");
+        ascii(nm, t, sizeof nm);
+        char16 t2[128];
+        char nm2[128];
+        pl->e->getParamStringByValue(pl->ctrl, prog.id, pick, t2);
+        ascii(nm2, t2, sizeof nm2);
+        CHECK(!strcmp(nm, nm2), "programs: IUnitInfo names \"%s\", the parameter \"%s\"", nm, nm2);
+        uv->release(ui);
+    } else CHECK(0, "programs: no IUnitInfo (hosts show no program names)");
     int moved = 0;
     for (int i = 0; i < m; i++) {
         ParameterInfo pi;
@@ -559,7 +587,7 @@ static void test_editor(plug_t *pl, void *so, const char *shots) {
     {
         HWND parent = CreateWindowExA(0, "STATIC", "host", WS_OVERLAPPEDWINDOW, 0, 0, r.right, r.bottom, NULL, NULL,
                                       GetModuleHandleA(NULL), NULL);
-        CHECK(parent != NULL, "editor: no parent window");
+        if (!parent) { printf("editor window: not tried (no window station: Wine without a display)\n"); goto no_window; }
         CHECK(v->attached(view, parent, "HWND") == kResultOk, "editor: attached(HWND) failed");
         HWND child = GetWindow(parent, GW_CHILD);
         CHECK(child != NULL, "editor: no child window after attached()");
@@ -583,6 +611,7 @@ static void test_editor(plug_t *pl, void *so, const char *shots) {
         DestroyWindow(parent);
         printf("editor: opened in a window, painted, clicked, closed\n");
     }
+no_window:
 #endif
     CHECK(v->release(view) == 0, "editor: view still referenced after release");
     int (*snap)(void *, int, const char *) = (int (*)(void *, int, const char *))dlsym(so, "mpc_vst3_snapshot");

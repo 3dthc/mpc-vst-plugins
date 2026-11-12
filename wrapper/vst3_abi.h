@@ -20,6 +20,7 @@ static const TUID iid_IPluginFactory2 = IID(0x0007B650u, 0xF24B4C0Bu, 0xA464EDB9
 static const TUID iid_IComponent = IID(0xE831FF31u, 0xF2D54301u, 0x928EBBEEu, 0x25697802u);
 static const TUID iid_IAudioProcessor = IID(0x42043F99u, 0xB7DA453Cu, 0xA569E79Du, 0x9AAEC33Du);
 static const TUID iid_IEditController = IID(0xDCD7BBE3u, 0x7742448Du, 0xA874AACCu, 0x979C759Eu);
+static const TUID iid_IUnitInfo = IID(0x3D4BD6B5u, 0x913A4FD2u, 0xA886E768u, 0xA5EB92C1u);
 static const TUID iid_IMidiMapping = IID(0xDF0FF9F7u, 0x49B74669u, 0xB63AB732u, 0x7ADBF5E5u);
 static const TUID iid_IProcessContextRequirements = IID(0x2A654303u, 0xEF764E3Du, 0x95B5FE83u, 0x730EF6D0u);
 
@@ -176,6 +177,28 @@ typedef struct {
     FUNKNOWN_SLOTS(void)
     tresult (*getMidiControllerAssignment)(void *self, int32_t bus, int16_t channel, int16_t ctrl, uint32_t *id);
 } MidiMappingVtbl;
+
+/* IUnitInfo: one root unit with one program list, so hosts (JUCE ones like MPC Desktop) list the programs by name and
+ * show the current one. */
+typedef struct { int32_t id, parentUnitId; char16 name[128]; int32_t programListId; } UnitInfo;
+typedef struct { int32_t id; char16 name[128]; int32_t programCount; } ProgramListInfo;
+typedef struct {
+    tresult (*queryInterface)(void *self, const TUID iid, void **obj);
+    uint32_t (*addRef)(void *self);
+    uint32_t (*release)(void *self);
+    int32_t (*getUnitCount)(void *self);
+    tresult (*getUnitInfo)(void *self, int32_t unitIndex, UnitInfo *info);
+    int32_t (*getProgramListCount)(void *self);
+    tresult (*getProgramListInfo)(void *self, int32_t listIndex, ProgramListInfo *info);
+    tresult (*getProgramName)(void *self, int32_t listId, int32_t programIndex, char16 *name);
+    tresult (*getProgramInfo)(void *self, int32_t listId, int32_t programIndex, const char *attributeId, char16 *value);
+    tresult (*hasProgramPitchNames)(void *self, int32_t listId, int32_t programIndex);
+    tresult (*getProgramPitchName)(void *self, int32_t listId, int32_t programIndex, int16_t midiPitch, char16 *name);
+    int32_t (*getSelectedUnit)(void *self);
+    tresult (*selectUnit)(void *self, int32_t unitId);
+    tresult (*getUnitByBus)(void *self, int32_t type, int32_t dir, int32_t busIndex, int32_t channel, int32_t *unitId);
+    tresult (*setUnitProgramData)(void *self, int32_t listOrUnitId, int32_t programIndex, void *data);
+} UnitInfoVtbl;
 typedef struct {
     FUNKNOWN_SLOTS(void)
     uint32_t (*getProcessContextRequirements)(void *self);

@@ -69,7 +69,7 @@
 #define ENGINE_RATE 44100.0
 #define MAX_EVENTS 512       /* MIDI messages per host block (notes and controller parameters); more are dropped */
 #define STATE_MAX 65536
-#define PROG_ID 0x7FFF0000u  /* NPRESETS: the program-change parameter */
+#define PROG_ID 0x7FFF0000u  /* the program-change parameter (NPRESETS or PROG_PARAM) */
 #define BYPASS_ID 0x7FFF0001u
 #define MIDI_ID 0x40000000u  /* + channel * 130 + controller (0-127 CC, 128 channel pressure, 129 pitch bend) */
 #define MIDI_CTRLS 130
@@ -88,6 +88,7 @@ typedef struct {
     const ControllerVtbl *ctrl;
     const MidiMappingVtbl *midimap;
     const CtxReqVtbl *ctxreq;
+    const UnitInfoVtbl *unitinfo;
     uint32_t refs;
     void *dsp;
     pthread_mutex_t lock;             /* one engine call at a time (vst2_wrap.c eng_set) */
@@ -102,6 +103,7 @@ typedef struct {
     float *ofifo[2];                  /* effect: host-rate output waiting to go out (latency-padded) */
     int olen, ocap;
     int prog;                         /* NPRESETS: the program last picked (-1: none yet, so picking 0 loads it) */
+    double prog_reported;             /* the program parameter's value last sent to the host (-1: not yet) */
     int bypass;                       /* the host's bypass: an effect passes its input through, delayed like its output */
     float *dry[2];                    /* effect: the input, delayed by the latency (a ring of `latency` frames) */
     int drypos;
@@ -158,13 +160,17 @@ static void from_utf16(char *dst, const char16 *src, int max) {
 static int g_nvis;                           /* visible PARAMS */
 static int g_vis[NPARAMS > 0 ? NPARAMS : 1]; /* host list position -> PARAMS index */
 
-static int has_programs(void) {
-#ifdef NPRESETS
-    return NPRESETS > 0;
+/* Programs: vst.json "presets" (NPRESETS, the wrapper's list) or "programs" (PROG_PARAM: the engine's own preset
+ * parameter, NPROGRAMS of them, named by the engine), as vst2_wrap.c. Either way the host gets one program-change
+ * parameter (PROG_ID) and a program list (IUnitInfo), and hears when the current program changes, so it can show its name. */
+#if defined(NPRESETS)
+#define NUM_PROGS NPRESETS
+#elif defined(PROG_PARAM)
+#define NUM_PROGS NPROGRAMS
 #else
-    return 0;
+#define NUM_PROGS 0
 #endif
-}
+static int has_programs(void) { return NUM_PROGS > 0; }
 static int param_count(void) { return g_nvis + 1 + has_programs() + MIDI_PARAMS; }
 
 static int is_param(uint32_t id) { return id < (uint32_t)NPARAMS && !popup_is((int)id); }
@@ -213,16 +219,58 @@ static double get_norm(v3_t *w, int i) {
 }
 
 /* ---- programs ------------------------------------------------------------- */
-#ifdef NPRESETS
+static int cur_program(v3_t *w) {
+#if defined(NPRESETS)
+    return w->prog > 0 ? w->prog : 0;
+#elif defined(PROG_PARAM)
+    const param_t *pp = &PARAMS[PROG_PARAM];
+    double span = pp->nopts > 1 ? pp->nopts - 1 : pp->max - pp->min;
+    int i = (int)lround(get_norm(w, PROG_PARAM) * span);
+    return i < 0 ? 0 : i >= NUM_PROGS ? NUM_PROGS - 1 : i;
+#else
+    (void)w;
+    return 0;
+#endif
+}
+static double prog_norm(int idx) { return NUM_PROGS > 1 ? (double)idx / (NUM_PROGS - 1) : 0; }
+static int prog_index(double v) { return (int)lround(clamp01(v) * (NUM_PROGS > 1 ? NUM_PROGS - 1 : 0)); }
+
+static void program_name(v3_t *w, int idx, char *out, int len) {
+    out[0] = 0;
+    if (idx < 0 || idx >= NUM_PROGS) return;
+#if defined(NPRESETS)
+    (void)w;
+    snprintf(out, len, "%s", PRESETS[idx].name);
+#elif defined(PROG_PARAM)
+    char k2[96], buf[96];
+    const param_t *pp = &PARAMS[PROG_PARAM];
+    if (pp->nopts > 1) { snprintf(out, len, "%s", pp->opts[idx]); return; }
+    snprintf(k2, sizeof k2, "%s:%d", pp->key, (int)lroundf(pp->min) + idx);   /* the engine names it without loading it */
+    if (eng_get(w, k2, buf, sizeof buf) > 0) { buf[sizeof buf - 1] = 0; snprintf(out, len, "%s", buf); }
+    else snprintf(out, len, "%s %d", pp->name, (int)lroundf(pp->min) + idx);
+#else
+    (void)w; (void)len;
+#endif
+}
+
 static void set_program(v3_t *w, int idx) {
-    if (idx < 0 || idx >= NPRESETS) return;
+    if (idx < 0 || idx >= NUM_PROGS) return;
+#if defined(NPRESETS)
     for (int i = 0; i < PRESETS[idx].n; i++) {
         eng_set(w, PARAMS[PRESETS[idx].values[i].param].key, PRESETS[idx].values[i].value);
         w->changed[PRESETS[idx].values[i].param] = 1;
     }
     w->prog = idx;
-}
+#elif defined(PROG_PARAM)
+    char buf[32];
+    const param_t *pp = &PARAMS[PROG_PARAM];
+    snprintf(buf, sizeof buf, "%d", pp->nopts > 1 ? idx : (int)lroundf(pp->min) + idx);
+    eng_set(w, pp->key, buf);
+    for (int i = 0; i < NPARAMS; i++) w->changed[i] = 1;   /* a preset may change anything */
+#else
+    (void)w;
 #endif
+}
 
 /* ---- applying host values ------------------------------------------------ */
 static void apply_param(v3_t *w, int i, double n) {
@@ -497,6 +545,16 @@ static void report(v3_t *w, ProcessData *d) {
         IParamValueQueue *q = out->v->addParameterData(out, &id, &qi);
         if (q) q->v->addPoint(q, 0, v, &pi);
     }
+    if (has_programs()) {   /* a program picked on the page (or by the engine) moves the host's program too: its name */
+        double v = prog_norm(cur_program(w));
+        if (fabs(v - w->prog_reported) > 1e-9) {
+            w->prog_reported = v;
+            uint32_t id = PROG_ID;
+            int32_t qi = 0, pi = 0;
+            IParamValueQueue *q = out->v->addParameterData(out, &id, &qi);
+            if (q) q->v->addPoint(q, 0, v, &pi);
+        }
+    }
 }
 
 /* ---- state ------------------------------------------------------------------ */
@@ -542,6 +600,7 @@ static tresult load_state(v3_t *w, IBStream *s) {
         if (!strncmp(l, "bypass=", 7)) w->bypass = atoi(l + 7) != 0;
     }
     for (int i = 0; i < NPARAMS; i++) { w->changed[i] = 1; w->reported[i] = -1; }
+    w->prog_reported = -1;   /* the restored program goes to the host too */
     return kResultOk;
 }
 
@@ -591,6 +650,7 @@ static tresult query(v3_t *w, const TUID iid, void **obj) {
     else if (iid_eq(iid, iid_IEditController)) p = &w->ctrl;
     else if (iid_eq(iid, iid_IMidiMapping)) p = &w->midimap;
     else if (iid_eq(iid, iid_IProcessContextRequirements)) p = &w->ctxreq;
+    else if (iid_eq(iid, iid_IUnitInfo) && has_programs()) p = &w->unitinfo;
     if (!p) { *obj = NULL; return kNoInterface; }
     __atomic_add_fetch(&w->refs, 1, __ATOMIC_ACQ_REL);
     *obj = p;
@@ -611,6 +671,7 @@ UNKNOWN_FUNCS(proc, proc)
 UNKNOWN_FUNCS(ctrl, ctrl)
 UNKNOWN_FUNCS(mm, midimap)
 UNKNOWN_FUNCS(cr, ctxreq)
+UNKNOWN_FUNCS(ui, unitinfo)
 
 static tresult base_initialize(void *s, FUnknown *ctx) { (void)s; (void)ctx; return kResultOk; }
 static tresult base_terminate(void *s) { (void)s; return kResultOk; }
@@ -712,10 +773,13 @@ static tresult proc_process(void *s, ProcessData *d) {
             } else if (id == BYPASS_ID) {
                 w->bypass = v > 0.5;
             } else if (id == PROG_ID && has_programs()) {
-#ifdef NPRESETS
-                int idx = (int)lround(clamp01(v) * (NPRESETS > 1 ? NPRESETS - 1 : 0));
+                int idx = prog_index(v);
+#if defined(NPRESETS)
                 if (idx != w->prog) set_program(w, idx);   /* a re-pick of the current one keeps any edits (vst2_wrap.c) */
+#else
+                if (idx != cur_program(w)) set_program(w, idx);
 #endif
+                w->prog_reported = prog_norm(idx);   /* the host's own pick: no need to send it back */
             } else if (is_param(id)) {
                 apply_param(w, (int)id, clamp01(v));
                 w->reported[id] = clamp01(v);
@@ -838,12 +902,11 @@ static tresult ctrl_param_info(void *s, int32_t index, ParameterInfo *pi) {
         return kResultOk;
     }
     if (pi->id == PROG_ID) {
-#ifdef NPRESETS
         to_utf16(pi->title, "Program", 128);
         to_utf16(pi->shortTitle, "Program", 128);
-        pi->stepCount = NPRESETS > 1 ? NPRESETS - 1 : 1;
+        pi->stepCount = NUM_PROGS > 1 ? NUM_PROGS - 1 : 1;
         pi->flags = kCanAutomate | kIsList | kIsProgramChange;
-#endif
+        pi->unitId = 0;   /* the root unit, whose program list is 1 (IUnitInfo) */
         return kResultOk;
     }
     if (pi->id >= MIDI_ID) {
@@ -873,13 +936,7 @@ static tresult ctrl_param_info(void *s, int32_t index, ParameterInfo *pi) {
 static void value_text(v3_t *w, uint32_t id, double v, char *buf, size_t len) {
     buf[0] = 0;
     if (id == BYPASS_ID) { snprintf(buf, len, "%s", v > 0.5 ? "On" : "Off"); return; }
-    if (id == PROG_ID) {
-#ifdef NPRESETS
-        int idx = (int)lround(clamp01(v) * (NPRESETS > 1 ? NPRESETS - 1 : 0));
-        snprintf(buf, len, "%s", PRESETS[idx].name);
-#endif
-        return;
-    }
+    if (id == PROG_ID) { program_name(w, prog_index(v), buf, (int)len); return; }
     if (id >= MIDI_ID) {
         if ((id - MIDI_ID) % MIDI_CTRLS == 129) snprintf(buf, len, "%ld", lround(clamp01(v) * 16383) - 8192);
         else snprintf(buf, len, "%ld", lround(clamp01(v) * 127));
@@ -910,13 +967,14 @@ static tresult ctrl_value_by_string(void *s, uint32_t id, char16 *str, double *v
     char buf[128];
     from_utf16(buf, str, sizeof buf);
     if (id == BYPASS_ID) { *v = !strcasecmp(buf, "On") || atoi(buf) ? 1 : 0; return kResultOk; }
-#ifdef NPRESETS
-    if (id == PROG_ID) {
-        for (int i = 0; i < NPRESETS; i++)
-            if (!strcasecmp(buf, PRESETS[i].name)) { *v = NPRESETS > 1 ? (double)i / (NPRESETS - 1) : 0; return kResultOk; }
+    if (id == PROG_ID && has_programs()) {
+        char name[128];
+        for (int i = 0; i < NUM_PROGS; i++) {
+            program_name(FROM(s, ctrl), i, name, sizeof name);
+            if (!strcasecmp(buf, name)) { *v = prog_norm(i); return kResultOk; }
+        }
         return kResultFalse;
     }
-#endif
     if (id >= MIDI_ID && id < MIDI_ID + MIDI_PARAMS) {
         if ((id - MIDI_ID) % MIDI_CTRLS == 129) *v = clamp01((atof(buf) + 8192) / 16383);
         else *v = clamp01(atof(buf) / 127);
@@ -946,9 +1004,7 @@ static double ctrl_get_norm(void *s, uint32_t id) {
     v3_t *w = FROM(s, ctrl);
     if (is_param(id)) return get_norm(w, (int)id);
     if (id == BYPASS_ID) return w->bypass;
-#ifdef NPRESETS
-    if (id == PROG_ID) return NPRESETS > 1 && w->prog > 0 ? (double)w->prog / (NPRESETS - 1) : 0;
-#endif
+    if (id == PROG_ID && has_programs()) return prog_norm(cur_program(w));
     if (id >= MIDI_ID && id < MIDI_ID + MIDI_PARAMS) return (id - MIDI_ID) % MIDI_CTRLS == 129 ? 0.5 : 0;
     return 0;
 }
@@ -989,6 +1045,48 @@ static tresult mm_assign(void *s, int32_t bus, int16_t ch, int16_t ctrl, uint32_
     return kResultOk;
 }
 static const MidiMappingVtbl mm_vtbl = { mm_query, mm_addref, mm_release, mm_assign };
+
+/* ---- IUnitInfo: the root unit and its program list (1) ------------------------------------ */
+static int32_t ui_unit_count(void *s) { (void)s; return 1; }
+static tresult ui_unit_info(void *s, int32_t i, UnitInfo *u) {
+    (void)s;
+    if (i != 0 || !u) return kInvalidArgument;
+    u->id = 0;
+    u->parentUnitId = -1;
+    to_utf16(u->name, "Root", 128);
+    u->programListId = 1;
+    return kResultOk;
+}
+static int32_t ui_list_count(void *s) { (void)s; return 1; }
+static tresult ui_list_info(void *s, int32_t i, ProgramListInfo *l) {
+    (void)s;
+    if (i != 0 || !l) return kInvalidArgument;
+    l->id = 1;
+    to_utf16(l->name, "Programs", 128);
+    l->programCount = NUM_PROGS;
+    return kResultOk;
+}
+static tresult ui_program_name(void *s, int32_t list, int32_t idx, char16 *name) {
+    if (list != 1 || idx < 0 || idx >= NUM_PROGS || !name) return kInvalidArgument;
+    char buf[128];
+    program_name(FROM(s, unitinfo), idx, buf, sizeof buf);
+    to_utf16(name, buf, 128);
+    return kResultOk;
+}
+static tresult ui_program_info(void *s, int32_t l, int32_t i, const char *a, char16 *v) { (void)s; (void)l; (void)i; (void)a; (void)v; return kResultFalse; }
+static tresult ui_has_pitch(void *s, int32_t l, int32_t i) { (void)s; (void)l; (void)i; return kResultFalse; }
+static tresult ui_pitch_name(void *s, int32_t l, int32_t i, int16_t p, char16 *n) { (void)s; (void)l; (void)i; (void)p; (void)n; return kResultFalse; }
+static int32_t ui_selected(void *s) { (void)s; return 0; }
+static tresult ui_select(void *s, int32_t u) { (void)s; return u == 0 ? kResultOk : kResultFalse; }
+static tresult ui_by_bus(void *s, int32_t t, int32_t d, int32_t b, int32_t c, int32_t *u) {
+    (void)s; (void)t; (void)d; (void)b; (void)c;
+    if (u) *u = 0;
+    return kResultOk;
+}
+static tresult ui_program_data(void *s, int32_t l, int32_t i, void *d) { (void)s; (void)l; (void)i; (void)d; return kResultFalse; }
+static const UnitInfoVtbl ui_vtbl = { ui_query, ui_addref, ui_release, ui_unit_count, ui_unit_info, ui_list_count, ui_list_info,
+                                      ui_program_name, ui_program_info, ui_has_pitch, ui_pitch_name, ui_selected, ui_select,
+                                      ui_by_bus, ui_program_data };
 
 static uint32_t cr_requirements(void *s) { (void)s; return (1 << 2) | (1 << 6) | (1 << 10); }   /* project time, tempo, transport */
 static const CtxReqVtbl cr_vtbl = { cr_query, cr_addref, cr_release, cr_requirements };
@@ -1034,6 +1132,8 @@ static v3_t *create(void) {
     w->proc = &proc_vtbl;
     w->ctrl = &ctrl_vtbl;
     w->midimap = &mm_vtbl;
+    w->unitinfo = &ui_vtbl;
+    w->prog_reported = -1;
     w->ctxreq = &cr_vtbl;
     w->refs = 1;
     w->rate = ENGINE_RATE;

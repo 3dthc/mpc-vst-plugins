@@ -60,6 +60,12 @@ class named per plugin and version and unregistered with the last view), built w
 mingw cairo (`tools/build_cairo_windows.sh <prefix>`, cross-built on Linux). `vst3_host_test` opens it in a real window under
 Wine (paint, click, drag, wheel, close).
 
+Programs (2026-11-12): both "presets" (NPRESETS) and "programs" (PROG_PARAM, the engine's preset parameter) ports get the
+program-change parameter and an IUnitInfo program list (one root unit, list 1), and a program picked on the page or by the
+engine is sent to the host through outputParameterChanges. Before, PROG_PARAM ports had no program parameter, so MPC
+Desktop showed "*" for the program name, and NPRESETS ports had no IUnitInfo (user report on macOS: OB-Xd and Sonix showed
+"*", OxZygen kept "Init" after a preset change). `vst3_host_test` checks the list's names against the parameter's.
+
 Gatekeeper: a bundle downloaded in a browser is quarantined, and without Apple notarization macOS refuses it ("can't be
 verified"). `tools/install_mac_vst3.sh` installs with curl (no quarantine) and clears the flag from copies already downloaded;
 each macOS zip's README gives its one-line command. With the optional workflow secrets `MACOS_CERT_P12`, `MACOS_CERT_PASSWORD`,

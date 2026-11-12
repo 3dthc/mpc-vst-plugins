@@ -360,7 +360,7 @@ jobs:
         run: '[ -f ~/cairo-macos/lib/libcairo.a ] || mpc-vst-plugins/tools/build_cairo_macos.sh ~/cairo-macos'
       - name: Install mingw-w64 and Wine (Windows)
         if: ${{ matrix.os == 'windows' }}
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq mingw-w64 wine64 >/dev/null
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq mingw-w64 wine64 xvfb >/dev/null
       - name: Cache cairo (Windows editor)
         if: ${{ matrix.os == 'windows' }}
         uses: actions/cache@v4
