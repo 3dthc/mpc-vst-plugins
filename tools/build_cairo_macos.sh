@@ -9,7 +9,7 @@
 set -euo pipefail
 PREFIX="$(mkdir -p "$1" && cd "$1" && pwd)"
 CAIRO_VERSION=1.18.4
-CAIRO_SHA256=PIN_ME
+CAIRO_SHA256=445ed8208a6e4823de1226a74ca319d3600e83f6369f99b14265006599c32ccb
 WORK="${CAIRO_WORK:-$(mktemp -d)}"
 if ! command -v meson >/dev/null || ! command -v ninja >/dev/null; then   # a venv of its own: Homebrew's Python is externally managed
   python3 -m venv "$WORK/venv"
@@ -19,7 +19,6 @@ fi
 cd "$WORK"
 if [ ! -d "cairo-$CAIRO_VERSION" ]; then
   curl -fsSL -o cairo.tar.xz "https://cairographics.org/releases/cairo-$CAIRO_VERSION.tar.xz"
-  shasum -a 256 cairo.tar.xz
   echo "$CAIRO_SHA256  cairo.tar.xz" | shasum -a 256 -c -
   tar xf cairo.tar.xz
 fi
