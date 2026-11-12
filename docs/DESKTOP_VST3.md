@@ -45,6 +45,25 @@ What is not done:
   (the Maschine engine does) needs those parts guarded for `_WIN32` first. Self-contained engines such as the probes build as is.
 - No installer or catalog entry for Windows binaries.
 
+## macOS and releases (2026-11-12)
+
+`VST3_TARGET=macos tools/build_vst3.sh <port>/vst.json` (on a Mac) builds a universal bundle (arm64 + x86_64, macOS 10.13+):
+`Contents/MacOS/<name>`, `Info.plist`, engine data (`MODULE_SUBDIR`) in `Contents/Resources/<subdir>` (Contents/MacOS holds
+only code, for signing), ad-hoc signed. The editor is `wrapper/vst3_editor_mac.m`: an NSView that shows the page cairo draws,
+at the screen's pixel density, with a 33 ms NSTimer on the main run loop; its Objective-C class name carries the plugin's
+name, uid and version, since every plugin in a process shares one class namespace. It needs a static universal cairo
+(`tools/build_cairo_macos.sh <prefix>`, then `CAIRO_PREFIX=<prefix>`); without one the bundle has no editor.
+`VST3_DATA=<folder>` copies the engine's data into the bundle (any target).
+
+Releases: `vst-release.yml` with `desktop: true` (and `desktop_data: <data folder>`, `desktop_targets` default
+`["macos", "windows"]`) runs `tools/release_vst3.sh` after the device zip, on a macOS runner and on Linux (mingw, tested under
+Wine), and attaches `<Name>-<version>-macos-vst3.zip` / `-windows-vst3.zip` to the same draft. The macOS job also uploads the
+editor's pages as drawn by the bundle (`shots/`) for review. Windows builds force-include `wrapper/win_compat.h` (`mkdir`).
+
+Why: MPC Desktop's controller mode opens the device's projects on the computer, and a desktop host can't load the device's
+ARM VST2, so without a desktop build of the same identity the track comes up empty. Status: offline (Linux host test,
+Windows under Wine); the macOS build runs in CI; **not yet opened in MPC Desktop with a device project** (docs/NOTES.md when it is).
+
 ## How it maps onto VST3
 
 `wrapper/vst3_wrap.c` drives the same `mpc_engine_t` as `vst2_wrap.c`, from the same generated `params.h`. The VST3 ABI is
@@ -78,7 +97,15 @@ repository.
 - **State.** The engine's `"state"` text when it has one. Otherwise every setting is saved as `key=value` lines, leaving
   out `"live"` values. Program and bypass come after them.
 - **Identity.** The class ID is `MPC3`, then the four-character `uid`, then a hash of vendor and name. It is stable across
-  builds, so saved projects find the plugin again.
+  builds, so saved projects find the plugin again. With `"VST3_REPLACES_VST2": 1` in `defines` it is instead the ID
+  Steinberg's VST2 compatibility gives a VST3 that replaces a VST2 (`"VST"`, the VST2 `uniqueID`, the first nine characters
+  of the name in lower case; COM byte order on Windows), the same one JUCE's `JUCE_VST3_CAN_REPLACE_VST2` makes. A host
+  that has a project saved with the device VST2 then uses this VST3 for it (below).
+- **The same state as the device.** `wrapper/state_text.h` is shared by both wrappers: the VST2 chunk and the VST3 state
+  hold the same text, and `setState` also takes a VST2 chunk as a host hands it over (raw, or wrapped as `VstW` + a `CcnK`
+  fxBank/fxProgram block). An engine without `"state"` now saves its settings in the VST2 chunk too (2026-11-12; before,
+  its chunk was empty and a saved MPC project brought it back at its defaults). `tools/vst3_host_test.c` checks both
+  chunk forms (offline).
 - **MPC-specific behaviour is left out:** the parameter-0 hold, Q-Link tick counting and settling, button debounce, and the
   UpdateDisplay throttling.
 - **`MPC_DESKTOP`.** Every source is compiled with `-DMPC_DESKTOP=1`, so an engine can leave out what only works on a device,
