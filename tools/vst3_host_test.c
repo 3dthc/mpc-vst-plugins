@@ -600,7 +600,11 @@ int main(int argc, char **argv) {
     printf("class: %s (%s) by %s, version %s\n", ci.name, ci.subCategories, ci.vendor, ci.version);
     printf("class id:");
     for (int i = 0; i < 16; i++) printf("%s%02X", i == 4 || i == 6 || i == 8 ? " " : "", (unsigned)(uint8_t)ci.cid[i]);
+#ifdef _WIN32   /* COM order: the first four bytes reversed */
+    printf("%s\n", ci.cid[3] == 'V' && ci.cid[2] == 'S' && ci.cid[1] == 'T' ? " (replaces the VST2)" : "");
+#else
     printf("%s\n", !memcmp(ci.cid, "VST", 3) ? " (replaces the VST2)" : "");
+#endif
 
     plug_t pl;
     if (!plug_new(&pl)) { printf("FAIL: could not create an instance with all three interfaces\n"); return 1; }
