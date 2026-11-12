@@ -20,7 +20,7 @@
 
 /* vst3_editor.c */
 void mpc_ed_tick(void *ctx);
-void mpc_ed_mouse(void *ctx, int kind, double x, double y);   /* 0 down, 1 drag, 2 up, 3 wheel up, 4 wheel down */
+void mpc_ed_mouse(void *ctx, int kind, double x, double y);   /* 0 down, 1 drag, 2 up, 3 wheel up, 4 wheel down, 5 menu */
 
 typedef struct {
     HWND hwnd;
@@ -91,6 +91,9 @@ static LRESULT CALLBACK wnd_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             if (msg == WM_LBUTTONUP) ReleaseCapture();
             mpc_ed_mouse(m->ctx, 2, GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
         }
+        return 0;
+    case WM_RBUTTONUP:
+        if (m && m->ctx) mpc_ed_mouse(m->ctx, 5, GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
         return 0;
     case WM_MOUSEWHEEL:
         if (m && m->ctx) {
@@ -167,4 +170,18 @@ void mpc_plat_present(void *p, const unsigned char *data, int stride, int w, int
     memcpy(m->px, data, n);
     m->pw = w; m->ph = h; m->stride = stride;
     InvalidateRect(m->hwnd, NULL, FALSE);
+}
+
+/* A small menu at the pointer (right-click); returns the picked item, or -1. */
+int mpc_plat_menu(void *p, const char *const *items, int n, int checked, double x, double y) {
+    win_view_t *m = p;
+    if (!m) return -1;
+    HMENU menu = CreatePopupMenu();
+    if (!menu) return -1;
+    for (int i = 0; i < n; i++) AppendMenuA(menu, MF_STRING | (i == checked ? MF_CHECKED : 0), (UINT_PTR)(i + 1), items[i]);
+    POINT pt = { (LONG)x, (LONG)y };
+    ClientToScreen(m->hwnd, &pt);
+    int cmd = (int)TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY, pt.x, pt.y, 0, m->hwnd, NULL);
+    DestroyMenu(menu);
+    return cmd > 0 ? cmd - 1 : -1;
 }

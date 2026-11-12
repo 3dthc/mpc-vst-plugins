@@ -28,6 +28,7 @@ void mpc_plat_close(void *m);
 void mpc_plat_size(void *m, int w, int h);
 double mpc_plat_backing_scale(void *m);
 void mpc_plat_present(void *m, const unsigned char *data, int stride, int w, int h);
+int mpc_plat_menu(void *m, const char *const *items, int n, int checked, double x, double y);   /* -1: none picked */
 #else
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -354,6 +355,7 @@ typedef struct {
     v3_t *w;
     skin_t *skin;
     void *frame;
+    int last_prog;         /* the program the host was last told about (-1: not looked yet) */
     void *loop;            /* IRunLoop, or NULL: our own thread */
     pthread_t thread;
     pthread_mutex_t lock;  /* the window and its size: our own thread's tick() against the host's onSize() */
@@ -382,6 +384,42 @@ static void ui_set(view_t *v, int p, double val, int phase);
 
 static int page_w(view_t *v) { return v->skin->w; }
 static int page_h(view_t *v) { return v->skin->h + TAB_H; }
+
+/* The window's size on a desktop, as a share of the MPC page (1280 wide): one setting for every plugin built with this
+ * wrapper, kept in a small file in the user's settings folder. Picked from the window's right-click (Control-click) menu. */
+static const double UI_SCALES[] = { 0.5, 0.6, 0.75, 0.9, 1.0, 1.25 };
+static const char *const UI_SCALE_NAMES[] = { "Window size: 50%", "Window size: 60%", "Window size: 75%", "Window size: 90%",
+                                              "Window size: 100%", "Window size: 125%" };
+#define N_UI_SCALES 6
+#define UI_SCALE_DEFAULT 0.75   /* the MPC page at full size fills most of a laptop screen */
+static int ui_scale_path(char *out, size_t n) {
+#ifdef _WIN32
+    const char *base = getenv("APPDATA");
+    return base && snprintf(out, n, "%s\\mpc-vst3-window-size.txt", base) < (int)n;
+#elif defined(__APPLE__)
+    const char *base = getenv("HOME");
+    return base && snprintf(out, n, "%s/Library/Preferences/mpc-vst3-window-size.txt", base) < (int)n;
+#else
+    const char *base = getenv("HOME");
+    return base && snprintf(out, n, "%s/.config/mpc-vst3-window-size.txt", base) < (int)n;
+#endif
+}
+static double ui_scale_load(void) {
+    char path[600];
+    double sc = UI_SCALE_DEFAULT;
+    FILE *f = ui_scale_path(path, sizeof path) ? fopen(path, "rb") : NULL;
+    if (f) {
+        double x = 0;
+        if (fscanf(f, "%lf", &x) == 1 && x >= 0.3 && x <= 2.0) sc = x;
+        fclose(f);
+    }
+    return sc;
+}
+__attribute__((unused)) static void ui_scale_save(double sc) {
+    char path[600];
+    FILE *f = ui_scale_path(path, sizeof path) ? fopen(path, "wb") : NULL;
+    if (f) { fprintf(f, "%.2f\n", sc); fclose(f); }
+}
 
 /* The page is drawn into an image the window's size, then copied to the window in one paint. Drawing the skin's images
  * straight onto the X surface would leave an uploaded copy cached on each of them, holding the X connection open past
@@ -551,9 +589,34 @@ static void handle_events(view_t *v) {
 }
 #endif
 
+/* A program picked on the page (the engine's own browser, or a preset list on the screen) changes the host's program
+ * parameter like a person picking it in the host would: an edit on the UI thread, then a "values changed" restart, which is
+ * what makes a JUCE host (MPC 3) show the new name. Output parameter changes alone moved the value but not the name. */
+static void notify_program(view_t *v) {
+    v3_t *w = v->w;
+    IComponentHandler *h = w->handler;
+#ifdef MPC_IMG_PLATFORM
+    int on_ui = 1;
+#else
+    int on_ui = v->loop != NULL;
+#endif
+    if (!has_programs() || !h || !on_ui) return;
+    int cp = cur_program(w);
+    if (v->last_prog < 0) { v->last_prog = cp; return; }   /* the first look: nothing changed yet */
+    if (cp == v->last_prog) return;
+    v->last_prog = cp;
+    if (w->host_prog == cp) return;   /* the host picked it: it already knows */
+    w->host_prog = cp;
+    h->v->beginEdit(h, PROG_ID);
+    h->v->performEdit(h, PROG_ID, prog_norm(cp));
+    h->v->endEdit(h, PROG_ID);
+    h->v->restartComponent(h, 4 /* kParamValuesChanged */);
+}
+
 static void tick(view_t *v) {
     pthread_mutex_lock(&v->lock);
     handle_events(v);
+    notify_program(v);
     uint64_t h = page_hash(v->skin, v->w, v->tab);   /* once a tick: each one reads every value under the engine lock */
     if (v->dirty || h != v->last_hash) { redraw(v); v->last_hash = h; }
     pthread_mutex_unlock(&v->lock);
@@ -625,6 +688,21 @@ static const EventHandlerVtbl ev_vtbl = { pe_q, pe_ref, pe_rel, ev_fd };
 static const TimerHandlerVtbl tm_vtbl = { pt_q, pt_ref, pt_rel, tm_timer };
 
 #ifdef MPC_IMG_PLATFORM
+static tresult pv_on_size(void *s, ViewRect *r);
+/* The right-click menu: the window size for every plugin; the host is asked to resize the window to match. */
+static void size_menu(view_t *v, double x, double y) {
+    double cur = ui_scale_load();
+    int checked = -1;
+    for (int i = 0; i < N_UI_SCALES; i++) if (fabs(UI_SCALES[i] - cur) < 0.01) checked = i;
+    int pick = mpc_plat_menu(v->plat, UI_SCALE_NAMES, N_UI_SCALES, checked, x, y);
+    if (pick < 0 || pick >= N_UI_SCALES) return;
+    ui_scale_save(UI_SCALES[pick]);
+    ViewRect r = { 0, 0, (int)lround(page_w(v) * UI_SCALES[pick]), (int)lround(page_h(v) * UI_SCALES[pick]) };
+    void *fr = v->frame;
+    if (!fr || (*(const PlugFrameVtbl **)fr)->resizeView(fr, &v->vt, &r) != kResultOk)
+        pv_on_size(&v->vt, &r);   /* a host that won't resize: draw at the new size inside its window */
+}
+
 /* the window layer's callbacks (vst3_editor_mac.m, vst3_editor_win.c), on the host's UI thread */
 void mpc_ed_tick(void *ctx) { tick(ctx); }
 void mpc_ed_mouse(void *ctx, int kind, double x, double y) {
@@ -636,6 +714,7 @@ void mpc_ed_mouse(void *ctx, int kind, double x, double y) {
     case 1: motion(v, y / s); break;
     case 2: unpress(v); break;
     case 3: case 4: wheel(v, x / s, y / s, kind == 3); break;
+    case 5: size_menu(v, x, y); break;
     }
     if (v->dirty) redraw(v);
     pthread_mutex_unlock(&v->lock);
@@ -784,10 +863,12 @@ static void *editor_create(v3_t *w, const char *name) {
     v->w = w;
     add_ref(w);
     v->skin = s;
-    v->width = page_w(v);
-    v->height = page_h(v);
-    v->scale = 1;
+    double sc = ui_scale_load();
+    v->width = (int)lround(page_w(v) * sc);
+    v->height = (int)lround(page_h(v) * sc);
+    v->scale = sc;
     v->drag_param = v->press_param = -1;
+    v->last_prog = -1;
     return &v->vt;
 }
 
