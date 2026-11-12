@@ -49,9 +49,7 @@ cpu = '$arch'
 endian = 'little'
 INI
   rm -rf "build-$arch" "inst-$arch"
-  extra=()
-  [ "$arch" = arm64 ] || extra=(-Dpixman:a64-neon=disabled)
-  meson setup "build-$arch" "$SRC" --cross-file "cross-$arch.ini" --prefix "$WORK/inst-$arch" "${OPTS[@]}" "${extra[@]}"
+  meson setup "build-$arch" "$SRC" --cross-file "cross-$arch.ini" --prefix "$WORK/inst-$arch" "${OPTS[@]}"
   meson compile -C "build-$arch"
   meson install -C "build-$arch" --quiet
 done
