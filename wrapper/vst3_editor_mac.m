@@ -17,13 +17,14 @@
 
 /* vst3_editor.c */
 void mpc_ed_tick(void *ctx);
-void mpc_ed_mouse(void *ctx, int kind, double x, double y);   /* 0 down, 1 drag, 2 up, 3 wheel up, 4 wheel down */
+void mpc_ed_mouse(void *ctx, int kind, double x, double y);   /* 0 down, 1 drag, 2 up, 3 wheel up, 4 wheel down, 5 menu */
 
 @interface MPC_VIEW_CLASS : NSView {
 @public
     void *ctx;
     CGImageRef image;
     double wheel_acc;
+    BOOL ctl_click;
 }
 @end
 
@@ -45,9 +46,16 @@ void mpc_ed_mouse(void *ctx, int kind, double x, double y);   /* 0 down, 1 drag,
     CGContextRestoreGState(cg);
 }
 - (NSPoint)at:(NSEvent *)e { return [self convertPoint:[e locationInWindow] fromView:nil]; }
-- (void)mouseDown:(NSEvent *)e { if (ctx) { NSPoint p = [self at:e]; mpc_ed_mouse(ctx, 0, p.x, p.y); } }
-- (void)mouseDragged:(NSEvent *)e { if (ctx) { NSPoint p = [self at:e]; mpc_ed_mouse(ctx, 1, p.x, p.y); } }
-- (void)mouseUp:(NSEvent *)e { if (ctx) { NSPoint p = [self at:e]; mpc_ed_mouse(ctx, 2, p.x, p.y); } }
+- (void)mouseDown:(NSEvent *)e {
+    if (!ctx) return;
+    NSPoint p = [self at:e];
+    if ([e modifierFlags] & NSEventModifierFlagControl) { ctl_click = YES; mpc_ed_mouse(ctx, 5, p.x, p.y); return; }
+    ctl_click = NO;
+    mpc_ed_mouse(ctx, 0, p.x, p.y);
+}
+- (void)rightMouseDown:(NSEvent *)e { if (ctx) { NSPoint p = [self at:e]; mpc_ed_mouse(ctx, 5, p.x, p.y); } }
+- (void)mouseDragged:(NSEvent *)e { if (ctx && !ctl_click) { NSPoint p = [self at:e]; mpc_ed_mouse(ctx, 1, p.x, p.y); } }
+- (void)mouseUp:(NSEvent *)e { if (ctx && !ctl_click) { NSPoint p = [self at:e]; mpc_ed_mouse(ctx, 2, p.x, p.y); } }
 - (void)scrollWheel:(NSEvent *)e {
     if (!ctx) return;
     /* trackpads send many small deltas: one nudge per whole line's worth */
@@ -65,11 +73,14 @@ void mpc_ed_mouse(void *ctx, int kind, double x, double y);   /* 0 down, 1 drag,
 @interface MPC_TIMER_CLASS : NSObject {
 @public
     void *ctx;
+    int picked;
 }
 - (void)fire:(NSTimer *)t;
+- (void)pick:(NSMenuItem *)item;
 @end
 @implementation MPC_TIMER_CLASS
 - (void)fire:(NSTimer *)t { (void)t; if (ctx) mpc_ed_tick(ctx); }
+- (void)pick:(NSMenuItem *)item { picked = (int)[item tag]; }
 @end
 
 typedef struct {
@@ -141,4 +152,26 @@ void mpc_plat_present(void *h, const unsigned char *data, int stride, int w, int
     if (m->view->image) CGImageRelease(m->view->image);
     m->view->image = im;
     [m->view setNeedsDisplay:YES];
+}
+
+/* A small menu at the pointer (right-click or Control-click); returns the picked item, or -1. */
+int mpc_plat_menu(void *h, const char *const *items, int n, int checked, double x, double y) {
+    mac_view_t *m = h;
+    if (!m) return -1;
+    @autoreleasepool {
+        NSMenu *menu = [[[NSMenu alloc] initWithTitle:@""] autorelease];
+        [menu setAutoenablesItems:NO];
+        m->target->picked = -1;
+        for (int i = 0; i < n; i++) {
+            NSMenuItem *it = [[[NSMenuItem alloc] initWithTitle:[NSString stringWithUTF8String:items[i]]
+                                                         action:@selector(pick:) keyEquivalent:@""] autorelease];
+            [it setTarget:m->target];
+            [it setTag:i];
+            [it setEnabled:YES];
+            if (i == checked) [it setState:NSControlStateValueOn];
+            [menu addItem:it];
+        }
+        [menu popUpMenuPositioningItem:nil atLocation:NSMakePoint(x, y) inView:m->view];
+        return m->target->picked;
+    }
 }

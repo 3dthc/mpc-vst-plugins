@@ -70,6 +70,15 @@ engine is sent to the host through outputParameterChanges. Before, PROG_PARAM po
 Desktop showed "*" for the program name, and NPRESETS ports had no IUnitInfo (user report on macOS: OB-Xd and Sonix showed
 "*", OxZygen kept "Init" after a preset change). `vst3_host_test` checks the list's names against the parameter's.
 
+Program names, follow-up (2026-11-12, user video, MPC 3 on macOS with Sonix): a program picked in the host showed, but one
+picked on the page (the engine's own browser) left the host's Preset field on the old name. The editor now tells the host
+from its UI-thread tick: beginEdit/performEdit/endEdit on the program parameter, then restartComponent(kParamValuesChanged).
+A program set on the controller (setParamNormalized) also reads back at once, before process() applies it.
+
+Window size (2026-11-12): right-click (Control-click on macOS) the window for 50-125%; one setting for every plugin built with
+this wrapper (`mpc-vst3-window-size.txt` in ~/Library/Preferences, %APPDATA% or ~/.config), default 75%; the host is asked
+to resize with IPlugFrame::resizeView.
+
 Gatekeeper: a bundle downloaded in a browser is quarantined, and without Apple notarization macOS refuses it ("can't be
 verified"). `tools/install_mac_vst3.sh` installs with curl (no quarantine) and clears the flag from copies already downloaded;
 each macOS zip's README gives its one-line command. With the optional workflow secrets `MACOS_CERT_P12`, `MACOS_CERT_PASSWORD`,

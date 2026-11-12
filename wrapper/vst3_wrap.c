@@ -103,6 +103,8 @@ typedef struct {
     float *ofifo[2];                  /* effect: host-rate output waiting to go out (latency-padded) */
     int olen, ocap;
     int prog;                         /* NPRESETS: the program last picked (-1: none yet, so picking 0 loads it) */
+    int host_pick_pending;            /* the host set the program on the controller; process() hasn't applied it yet */
+    int host_prog;                    /* the program the host itself last picked or was told about (-1: none) */
     double prog_reported;             /* the program parameter's value last sent to the host (-1: not yet) */
     int bypass;                       /* the host's bypass: an effect passes its input through, delayed like its output */
     float *dry[2];                    /* effect: the input, delayed by the latency (a ring of `latency` frames) */
@@ -601,6 +603,7 @@ static tresult load_state(v3_t *w, IBStream *s) {
     }
     for (int i = 0; i < NPARAMS; i++) { w->changed[i] = 1; w->reported[i] = -1; }
     w->prog_reported = -1;   /* the restored program goes to the host too */
+    w->host_prog = -1;
     return kResultOk;
 }
 
@@ -795,6 +798,8 @@ static tresult proc_process(void *s, ProcessData *d) {
                 if (idx != cur_program(w)) set_program(w, idx);
 #endif
                 w->prog_reported = prog_norm(idx);   /* the host's own pick: no need to send it back */
+                w->host_prog = idx;
+                w->host_pick_pending = 0;
             } else if (is_param(id)) {
                 apply_param(w, (int)id, clamp01(v));
                 w->reported[id] = clamp01(v);
@@ -1019,7 +1024,7 @@ static double ctrl_get_norm(void *s, uint32_t id) {
     v3_t *w = FROM(s, ctrl);
     if (is_param(id)) return get_norm(w, (int)id);
     if (id == BYPASS_ID) return w->bypass;
-    if (id == PROG_ID && has_programs()) return prog_norm(cur_program(w));
+    if (id == PROG_ID && has_programs()) return prog_norm(w->host_prog >= 0 && w->host_pick_pending ? w->host_prog : cur_program(w));
     if (id >= MIDI_ID && id < MIDI_ID + MIDI_PARAMS) return (id - MIDI_ID) % MIDI_CTRLS == 129 ? 0.5 : 0;
     return 0;
 }
@@ -1028,6 +1033,7 @@ static tresult ctrl_set_norm(void *s, uint32_t id, double v) {
     if (is_param(id) && (PARAMS[id].momentary || PARAMS[id].step_target >= 0)) return kResultOk;   /* process() owns their state */
     if (is_param(id)) w->hostval[id] = clamp01(v);
     if (id == BYPASS_ID) w->bypass = v > 0.5;
+    if (id == PROG_ID && has_programs()) { w->host_prog = prog_index(v); w->host_pick_pending = 1; }   /* reads back at once */
     return kResultOk;
 }
 static tresult ctrl_set_handler(void *s, IComponentHandler *h) {
@@ -1152,6 +1158,7 @@ static v3_t *create(void) {
     w->midimap = &mm_vtbl;
     w->unitinfo = &ui_vtbl;
     w->prog_reported = -1;
+    w->host_prog = -1;
     w->ctxreq = &cr_vtbl;
     w->refs = 1;
     w->rate = ENGINE_RATE;
