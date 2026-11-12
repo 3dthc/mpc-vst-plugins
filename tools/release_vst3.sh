@@ -21,14 +21,10 @@ if [ -n "${DATA:-}" ]; then
   VST3_DATA="$(cd "$DATA" && pwd)"; export VST3_DATA
 fi
 export VST3_TARGET="$OS"
-[ "$OS" != macos ] || export CAIRO_PREFIX="${CAIRO_PREFIX:-$HOME/cairo-macos}"
+export CAIRO_PREFIX="${CAIRO_PREFIX:-$HOME/cairo-$OS}"   # the editor's static cairo (tools/build_cairo_<os>.sh)
 mkdir -p "$OUT/shots"
 LOG="$OUT/host-test.txt"
-if [ "$OS" = macos ]; then
-  "$MV/tools/test_vst3.sh" "$CFG" --shots "$OUT/shots" 2>&1 | tee "$LOG" || true
-else
-  "$MV/tools/test_vst3.sh" "$CFG" 2>&1 | tee "$LOG" || true
-fi
+"$MV/tools/test_vst3.sh" "$CFG" --shots "$OUT/shots" 2>&1 | tee "$LOG" || true
 # Blocking: the bundle must load and restore a device project (its VST2 chunk). Other host-test findings are shown, since
 # some ports have known ones that don't touch the desktop build (a page selector left out of the state on purpose, say).
 grep -q '^class: ' "$LOG" || { echo "::error::the VST3 did not load in the host test" >&2; exit 1; }
@@ -54,10 +50,6 @@ $NAME $VERSION, VST3 for macOS (Apple Silicon and Intel, macOS 10.13 or later)
 Install: copy $NAME.vst3 into /Library/Audio/Plug-Ins/VST3 (all users) or ~/Library/Audio/Plug-Ins/VST3 (just you),
 then rescan plugins in MPC Desktop (Preferences > Plugins) or your DAW.
 
-The plugin is not notarized. If macOS says it "can't be opened" or the host skips it, run once in Terminal:
-  xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/$NAME.vst3
-(or the /Library path, with sudo).
-
 It is the same instrument as the MPC VST2: a project saved on the MPC opens with it in MPC Desktop
 (controller mode) with the same sound, and a project saved with it opens on the MPC.
 TXT
@@ -66,7 +58,7 @@ else
 $NAME $VERSION, VST3 for Windows (64-bit)
 
 Install: copy the $NAME.vst3 folder into C:\\Program Files\\Common Files\\VST3, then rescan plugins in MPC Desktop or
-your DAW. No editor window yet on Windows: the host shows the plugin's parameters.
+your DAW. The plugin window shows the same skin as on the MPC.
 
 It is the same instrument as the MPC VST2: a project saved on the MPC opens with it in MPC Desktop with the same sound.
 TXT
@@ -74,6 +66,32 @@ fi
 ZIP="$OUT/$NAME-${VERSION:-dev}-$OS-vst3.zip"
 ZIP="${ZIP// /-}"
 rm -f "$ZIP"
+NOTARIZED=""
+if [ "$OS" = macos ] && [ -n "${MACOS_SIGN_IDENTITY:-}" ]; then   # Developer ID + notarization: opens without a prompt
+  codesign --force --timestamp --options runtime --sign "$MACOS_SIGN_IDENTITY" "$STAGE/$NAME.vst3"
+  codesign --verify --strict --verbose=2 "$STAGE/$NAME.vst3"
+  if [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ] && [ -n "${APPLE_APP_PASSWORD:-}" ]; then
+    N="$(mktemp -d)/notarize.zip"
+    ditto -c -k --keepParent "$STAGE/$NAME.vst3" "$N"
+    xcrun notarytool submit "$N" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+    xcrun stapler staple "$STAGE/$NAME.vst3"
+    spctl --assess --type install -vv "$STAGE/$NAME.vst3" || true
+    NOTARIZED=1
+    echo "notarized: $NAME.vst3"
+  else
+    echo "::warning::signed with $MACOS_SIGN_IDENTITY but not notarized (APPLE_ID / APPLE_TEAM_ID / APPLE_APP_PASSWORD missing)"
+  fi
+fi
+if [ "$OS" = macos ] && [ -z "$NOTARIZED" ]; then   # say how to get past Gatekeeper in the README
+  cat >> "$STAGE/README.txt" <<TXT
+
+If macOS says the plugin "can't be opened" or "can't be verified" (it isn't notarized by Apple), install it with this
+Terminal command instead. It installs every plugin's latest Mac VST3 and clears the block:
+  curl -fsSL https://raw.githubusercontent.com/3dthc/mpc-vst-plugins/desktop-vst3/tools/install_mac_vst3.sh | bash -s -- --all
+Or, for a copy you already downloaded and installed, just:
+  curl -fsSL https://raw.githubusercontent.com/3dthc/mpc-vst-plugins/desktop-vst3/tools/install_mac_vst3.sh | bash
+TXT
+fi
 if [ "$OS" = macos ]; then
   (cd "$STAGE" && ditto -c -k --sequesterRsrc . "$ZIP")   # ditto keeps the bundle's signature intact
 else

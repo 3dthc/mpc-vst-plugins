@@ -13,13 +13,21 @@
  * changed is redrawn.
  *
  * mpc_vst3_snapshot() renders a page to a PNG without any window (tools/vst3_host_test.c --shots). */
-#ifdef __APPLE__   /* the window layer is vst3_editor_mac.m: an NSView the page image is shown in */
+#if defined(__APPLE__) || defined(_WIN32)
+/* The window layer is vst3_editor_mac.m (an NSView) or vst3_editor_win.c (a child HWND): the page is drawn with cairo into
+ * an image, which that layer shows; it calls mpc_ed_mouse()/mpc_ed_tick() back on the host's UI thread. */
+#define MPC_IMG_PLATFORM 1
+#ifdef __APPLE__
+#define MPC_PLATFORM_TYPE "NSView"
+#else
+#define MPC_PLATFORM_TYPE "HWND"
+#endif
 #include <cairo.h>
-void *mpc_mac_open(void *parent, int w, int h, void *ctx);
-void mpc_mac_close(void *m);
-void mpc_mac_size(void *m, int w, int h);
-double mpc_mac_backing_scale(void *m);
-void mpc_mac_present(void *m, const unsigned char *data, int stride, int w, int h);
+void *mpc_plat_open(void *parent, int w, int h, void *ctx);
+void mpc_plat_close(void *m);
+void mpc_plat_size(void *m, int w, int h);
+double mpc_plat_backing_scale(void *m);
+void mpc_plat_present(void *m, const unsigned char *data, int stride, int w, int h);
 #else
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -29,8 +37,10 @@ void mpc_mac_present(void *m, const unsigned char *data, int stride, int w, int 
 #include <cairo-ft.h>
 #include <ft2build.h>
 #include FT_FREETYPE_H
+#ifndef MPC_IMG_PLATFORM
 #include <poll.h>
 #include <unistd.h>
+#endif
 #include "plugin_dir.h"
 
 #define TAB_H 44          /* the tab strip above the page, in skin pixels */
@@ -131,7 +141,7 @@ static skin_t *skin_load(void) {
     if (!mpc_plugin_dir(here, sizeof here)) return NULL;
     snprintf(dir, sizeof dir, "%s/../Resources/skin", here);
     snprintf(path, sizeof path, "%s/desktop.skin", dir);
-    FILE *f = fopen(path, "r");
+    FILE *f = fopen(path, "rb");
     if (!f) return NULL;
     skin_t *s = calloc(1, sizeof *s);
     s->items = calloc(MAX_ITEMS, sizeof *s->items);
@@ -347,8 +357,8 @@ typedef struct {
     pthread_mutex_t lock;  /* the window and its size: our own thread's tick() against the host's onSize() */
     volatile int stop;
     int thread_on;
-#ifdef __APPLE__
-    void *mac;             /* the NSView (vst3_editor_mac.m), or NULL when not attached */
+#ifdef MPC_IMG_PLATFORM
+    void *plat;            /* the NSView / HWND layer, or NULL when not attached */
     double bs;             /* backing pixels per point */
 #else
     Display *dpy;
@@ -374,10 +384,10 @@ static int page_h(view_t *v) { return v->skin->h + TAB_H; }
 /* The page is drawn into an image the window's size, then copied to the window in one paint. Drawing the skin's images
  * straight onto the X surface would leave an uploaded copy cached on each of them, holding the X connection open past
  * removed(); only this backbuffer gets one, and view_detach() frees it first. */
-#ifdef __APPLE__
-static void redraw(view_t *v) {   /* the page at the screen's pixel density, handed to the NSView as an image */
-    if (!v->mac) return;
-    v->bs = mpc_mac_backing_scale(v->mac);
+#ifdef MPC_IMG_PLATFORM
+static void redraw(view_t *v) {   /* the page at the screen's pixel density, handed to the window layer as an image */
+    if (!v->plat) return;
+    v->bs = mpc_plat_backing_scale(v->plat);
     int pw = (int)lround(v->width * v->bs), ph = (int)lround(v->height * v->bs);
     if (pw < 1 || ph < 1) return;
     if (!v->back || cairo_image_surface_get_width(v->back) != pw || cairo_image_surface_get_height(v->back) != ph) {
@@ -393,7 +403,7 @@ static void redraw(view_t *v) {   /* the page at the screen's pixel density, han
     draw_page(v->skin, v->w, cr, v->tab);
     cairo_destroy(cr);
     cairo_surface_flush(v->back);
-    mpc_mac_present(v->mac, cairo_image_surface_get_data(v->back), cairo_image_surface_get_stride(v->back), pw, ph);
+    mpc_plat_present(v->plat, cairo_image_surface_get_data(v->back), cairo_image_surface_get_stride(v->back), pw, ph);
     v->dirty = 0;
 }
 #else
@@ -509,8 +519,8 @@ static void wheel(view_t *v, double px, double py, int up) {
     ui_set(v, p, val, 3);
 }
 
-#ifdef __APPLE__
-static void handle_events(view_t *v) { (void)v; }   /* the NSView calls mpc_ed_mouse() itself */
+#ifdef MPC_IMG_PLATFORM
+static void handle_events(view_t *v) { (void)v; }   /* the window layer calls mpc_ed_mouse() itself */
 #else
 static void handle_events(view_t *v) {
     if (!v->dpy) return;
@@ -553,8 +563,8 @@ static void tick(view_t *v) {
 static void ui_set(view_t *v, int p, double val, int phase) {
     v3_t *w = v->w;
     IComponentHandler *h = w->handler;
-#ifdef __APPLE__
-    int on_ui = 1;          /* a macOS host calls the view, and our timer fires, on the main thread */
+#ifdef MPC_IMG_PLATFORM
+    int on_ui = 1;          /* the host calls the view, and our timer fires, on its UI thread */
 #else
     int on_ui = v->loop != NULL;
 #endif
@@ -612,8 +622,8 @@ static void tm_timer(void *s) { tick(VIEW(s, tm)); }
 static const EventHandlerVtbl ev_vtbl = { pe_q, pe_ref, pe_rel, ev_fd };
 static const TimerHandlerVtbl tm_vtbl = { pt_q, pt_ref, pt_rel, tm_timer };
 
-#ifdef __APPLE__
-/* vst3_editor_mac.m's callbacks, on the main thread */
+#ifdef MPC_IMG_PLATFORM
+/* the window layer's callbacks (vst3_editor_mac.m, vst3_editor_win.c), on the host's UI thread */
 void mpc_ed_tick(void *ctx) { tick(ctx); }
 void mpc_ed_mouse(void *ctx, int kind, double x, double y) {
     view_t *v = ctx;
@@ -629,20 +639,20 @@ void mpc_ed_mouse(void *ctx, int kind, double x, double y) {
     pthread_mutex_unlock(&v->lock);
 }
 
-static tresult pv_platform(void *s, const char *type) { (void)s; return type && !strcmp(type, "NSView") ? kResultOk : kResultFalse; }
+static tresult pv_platform(void *s, const char *type) { (void)s; return type && !strcmp(type, MPC_PLATFORM_TYPE) ? kResultOk : kResultFalse; }
 
 static tresult pv_attached(void *s, void *parent, const char *type) {
     view_t *v = VIEW(s, vt);
-    if (!type || strcmp(type, "NSView") || v->mac) return kResultFalse;
-    v->mac = mpc_mac_open(parent, v->width, v->height, v);
-    if (!v->mac) return kResultFalse;
+    if (!type || strcmp(type, MPC_PLATFORM_TYPE) || v->plat) return kResultFalse;
+    v->plat = mpc_plat_open(parent, v->width, v->height, v);
+    if (!v->plat) return kResultFalse;
     v->dirty = 1;
     tick(v);
     return kResultOk;
 }
 
 static void view_detach(view_t *v) {
-    if (v->mac) { mpc_mac_close(v->mac); v->mac = NULL; }
+    if (v->plat) { mpc_plat_close(v->plat); v->plat = NULL; }
     if (v->back) { cairo_surface_destroy(v->back); v->back = NULL; }
     close_popups(v, -1);
 }
@@ -727,8 +737,8 @@ static tresult pv_on_size(void *s, ViewRect *r) {
     pthread_mutex_lock(&v->lock);
     v->width = r->right - r->left;
     v->height = r->bottom - r->top;
-#ifdef __APPLE__
-    if (v->mac) { mpc_mac_size(v->mac, v->width, v->height); v->dirty = 1; }
+#ifdef MPC_IMG_PLATFORM
+    if (v->plat) { mpc_plat_size(v->plat, v->width, v->height); v->dirty = 1; }
 #else
     if (v->dpy) {
         XResizeWindow(v->dpy, v->win, (unsigned)v->width, (unsigned)v->height);
@@ -781,7 +791,12 @@ static void *editor_create(v3_t *w, const char *name) {
 
 /* Test hook (tools/vst3_host_test.c): render page `tab` of the instance whose IComponent is `component` into a PNG, as the
  * window would show it now. Returns 1 on success, 0 without a skin. */
-__attribute__((visibility("default"))) int mpc_vst3_snapshot(void *component, int tab, const char *png) {
+#ifdef _WIN32
+__declspec(dllexport)
+#else
+__attribute__((visibility("default")))
+#endif
+int mpc_vst3_snapshot(void *component, int tab, const char *png) {
     v3_t *w = FROM(component, comp);
     skin_t *s = skin_load();
     if (!s) return 0;

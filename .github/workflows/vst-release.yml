@@ -9,6 +9,20 @@ name: VST draft release
 
 on:
   workflow_call:
+    secrets:   # optional: with all five, the macOS VST3 is Developer ID signed and notarized (no Gatekeeper prompt)
+      MACOS_CERT_P12:
+        description: Base64 of a "Developer ID Application" certificate + key exported as .p12
+        required: false
+      MACOS_CERT_PASSWORD:
+        required: false
+      APPLE_ID:
+        description: The Apple ID email of the developer account (notarytool)
+        required: false
+      APPLE_TEAM_ID:
+        required: false
+      APPLE_APP_PASSWORD:
+        description: An app-specific password for that Apple ID (appleid.apple.com)
+        required: false
     inputs:
       tag:
         description: Release tag, e.g. maze-voice-vst-v1.2.0
@@ -368,10 +382,41 @@ jobs:
       - name: Install mingw-w64 and Wine (Windows)
         if: ${{ matrix.os == 'windows' }}
         run: sudo apt-get update -qq && sudo apt-get install -y -qq mingw-w64 wine64 >/dev/null
+      - name: Cache cairo (Windows editor)
+        if: ${{ matrix.os == 'windows' }}
+        uses: actions/cache@v4
+        with:
+          path: ~/cairo-windows
+          key: cairo-windows-${{ hashFiles('mpc-vst-plugins/tools/build_cairo_windows.sh') }}
+      - name: Build cairo (Windows editor)
+        if: ${{ matrix.os == 'windows' }}
+        run: '[ -f ~/cairo-windows/lib/libcairo.a ] || mpc-vst-plugins/tools/build_cairo_windows.sh ~/cairo-windows'
+      - name: Developer ID certificate (macOS, when the secrets are set)
+        if: ${{ matrix.os == 'macos' }}
+        env:
+          P12: ${{ secrets.MACOS_CERT_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          [ -n "$P12" ] || { echo "no MACOS_CERT_P12 secret: ad-hoc signed, not notarized"; exit 0; }
+          KC="$RUNNER_TEMP/sign.keychain-db"; KP="$(uuidgen)"
+          security create-keychain -p "$KP" "$KC"
+          security set-keychain-settings -lut 3600 "$KC"
+          security unlock-keychain -p "$KP" "$KC"
+          printf '%s' "$P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KP" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          ID="$(security find-identity -v -p codesigning "$KC" | grep -o '"Developer ID Application[^"]*"' | head -1 | tr -d '"')"
+          [ -n "$ID" ] || { echo "::error::no Developer ID Application identity in MACOS_CERT_P12"; exit 1; }
+          echo "MACOS_SIGN_IDENTITY=$ID" >> "$GITHUB_ENV"
       - name: Build, test and package
         id: pkg
         env:
           OS: ${{ matrix.os }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: bash -euo pipefail "$MPC_VST/tools/release_vst3.sh" "$OS" "port/$VST_DIR/vst.json" "$GITHUB_WORKSPACE/skin" "$GITHUB_WORKSPACE/dist-$OS"
       - uses: actions/upload-artifact@v4
         with:

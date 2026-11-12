@@ -539,16 +539,51 @@ static void test_editor(plug_t *pl, void *so, const char *shots) {
     const PlugViewVtbl *v = VT(PlugViewVtbl, view);
 #ifdef __APPLE__
     CHECK(v->isPlatformTypeSupported(view, "NSView") == kResultOk, "editor: NSView not supported");
+#elif defined(_WIN32)
+    CHECK(v->isPlatformTypeSupported(view, "HWND") == kResultOk, "editor: HWND not supported");
 #else
     CHECK(v->isPlatformTypeSupported(view, "X11EmbedWindowID") == kResultOk, "editor: X11EmbedWindowID not supported");
 #endif
+#ifdef _WIN32
+    CHECK(v->isPlatformTypeSupported(view, "NSView") != kResultOk, "editor: claims NSView");
+#else
     CHECK(v->isPlatformTypeSupported(view, "HWND") != kResultOk, "editor: claims HWND");
+#endif
     ViewRect r = {0, 0, 0, 0};
     CHECK(v->getSize(view, &r) == kResultOk && r.right > 0 && r.bottom > 0, "editor: getSize");
     ViewRect half = {0, 0, r.right / 2, r.bottom};
     CHECK(v->checkSizeConstraint(view, &half) == kResultOk && labs((long)half.bottom * r.right - (long)r.bottom * half.right) <= r.right,
           "editor: checkSizeConstraint does not keep the shape (%dx%d for %dx%d)", half.right, half.bottom, r.right, r.bottom);
     printf("editor: %dx%d\n", r.right, r.bottom);
+#ifdef _WIN32   /* open it in a real window: its child window, timer, paint and a click on the page */
+    {
+        HWND parent = CreateWindowExA(0, "STATIC", "host", WS_OVERLAPPEDWINDOW, 0, 0, r.right, r.bottom, NULL, NULL,
+                                      GetModuleHandleA(NULL), NULL);
+        CHECK(parent != NULL, "editor: no parent window");
+        CHECK(v->attached(view, parent, "HWND") == kResultOk, "editor: attached(HWND) failed");
+        HWND child = GetWindow(parent, GW_CHILD);
+        CHECK(child != NULL, "editor: no child window after attached()");
+        DWORD t0 = GetTickCount();
+        int clicked = 0;
+        while (GetTickCount() - t0 < 400) {
+            MSG msg;
+            while (PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) { TranslateMessage(&msg); DispatchMessageA(&msg); }
+            if (!clicked && GetTickCount() - t0 > 150) {
+                LPARAM at = MAKELPARAM(r.right / 2, r.bottom / 2);
+                SendMessageA(child, WM_LBUTTONDOWN, MK_LBUTTON, at);
+                SendMessageA(child, WM_MOUSEMOVE, MK_LBUTTON, MAKELPARAM(r.right / 2, r.bottom / 2 - 20));
+                SendMessageA(child, WM_LBUTTONUP, 0, at);
+                SendMessageA(child, WM_MOUSEWHEEL, MAKEWPARAM(0, WHEEL_DELTA), at);
+                clicked = 1;
+            }
+            Sleep(10);
+        }
+        CHECK(v->removed(view) == kResultOk, "editor: removed() failed");
+        CHECK(GetWindow(parent, GW_CHILD) == NULL, "editor: child window left after removed()");
+        DestroyWindow(parent);
+        printf("editor: opened in a window, painted, clicked, closed\n");
+    }
+#endif
     CHECK(v->release(view) == 0, "editor: view still referenced after release");
     int (*snap)(void *, int, const char *) = (int (*)(void *, int, const char *))dlsym(so, "mpc_vst3_snapshot");
     if (!shots || !snap) return;
