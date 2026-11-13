@@ -47,12 +47,26 @@ if [ -n "${VST3_DATA:-}" ]; then   # every data file made it into the bundle (a 
 fi
 STAGE="$(mktemp -d)"
 if [ "$OS" = windows ]; then cp -R "$B"/. "$STAGE/"; else cp -R "$B" "$STAGE/"; fi
+COMP="$ROOT/$PORT/build/vst3/$NAME.component"
+if [ "$OS" = macos ]; then   # the Audio Unit (Logic Pro, GarageBand) goes in the same zip, checked by Apple's auval first
+  [ -d "$COMP" ] || { echo "::error::no Audio Unit at $COMP" >&2; exit 1; }
+  CD="$HOME/Library/Audio/Plug-Ins/Components"
+  mkdir -p "$CD"; rm -rf "$CD/$NAME.component"; cp -R "$COMP" "$CD/"
+  killall -9 AudioComponentRegistrar 2>/dev/null || true
+  sleep 2
+  read -r T S M < <(/usr/bin/python3 -c '
+import plistlib,sys; c=plistlib.load(open(sys.argv[1],"rb"))["AudioComponents"][0]; print(c["type"],c["subtype"],c["manufacturer"])' "$COMP/Contents/Info.plist")
+  auval -a | grep -F "$T $S $M" || echo "::warning::auval -a does not list $T $S $M yet"
+  if auval -strict -v "$T" "$S" "$M" > "$OUT/auval-$NAME.log" 2>&1; then echo "auval: PASS ($T $S $M)"
+  else tail -40 "$OUT/auval-$NAME.log"; echo "::error::auval failed for $NAME ($T $S $M)" >&2; exit 1; fi
+  cp -R "$COMP" "$STAGE/"
+fi
 if [ "$OS" = macos ]; then
   cat > "$STAGE/README.txt" <<TXT
-$NAME $VERSION, VST3 for macOS (Apple Silicon and Intel, macOS 10.13 or later)
+$NAME $VERSION, VST3 and Audio Unit for macOS (Apple Silicon and Intel, macOS 10.13 or later)
 
-Install: copy $NAME.vst3 into /Library/Audio/Plug-Ins/VST3 (all users) or ~/Library/Audio/Plug-Ins/VST3 (just you),
-then rescan plugins in MPC Desktop (Preferences > Plugins) or your DAW.
+Install: copy $NAME.vst3 into ~/Library/Audio/Plug-Ins/VST3 (MPC Desktop and VST3 hosts) and $NAME.component into
+~/Library/Audio/Plug-Ins/Components (Logic Pro, GarageBand), then rescan plugins.
 
 It is the same instrument as the MPC VST2: a project saved on the MPC opens with it in MPC Desktop
 (controller mode) with the same sound, and a project saved with it opens on the MPC.
@@ -74,13 +88,13 @@ ZIP="${ZIP// /-}"
 rm -f "$ZIP"
 NOTARIZED=""
 if [ "$OS" = macos ] && [ -n "${MACOS_SIGN_IDENTITY:-}" ]; then   # Developer ID + notarization: opens without a prompt
-  codesign --force --timestamp --options runtime --sign "$MACOS_SIGN_IDENTITY" "$STAGE/$NAME.vst3"
-  codesign --verify --strict --verbose=2 "$STAGE/$NAME.vst3"
+  codesign --force --timestamp --options runtime --sign "$MACOS_SIGN_IDENTITY" "$STAGE/$NAME.vst3" "$STAGE/$NAME.component"
+  codesign --verify --strict --verbose=2 "$STAGE/$NAME.vst3" "$STAGE/$NAME.component"
   if [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ] && [ -n "${APPLE_APP_PASSWORD:-}" ]; then
     N="$(mktemp -d)/notarize.zip"
-    ditto -c -k --keepParent "$STAGE/$NAME.vst3" "$N"
+    (cd "$STAGE" && ditto -c -k . "$N")
     xcrun notarytool submit "$N" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
-    xcrun stapler staple "$STAGE/$NAME.vst3"
+    xcrun stapler staple "$STAGE/$NAME.vst3"; xcrun stapler staple "$STAGE/$NAME.component"
     spctl --assess --type install -vv "$STAGE/$NAME.vst3" || true
     NOTARIZED=1
     echo "notarized: $NAME.vst3"

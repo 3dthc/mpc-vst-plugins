@@ -133,7 +133,11 @@ if [ -n "$MAC" ] && [ -n "$EDITOR_CF" ]; then   # the NSView, its Objective-C cl
   $CC $OPT -fno-objc-arc -DMPC_VIEW_CLASS="$VIEW_CLASS" -c "$MV/wrapper/vst3_editor_mac.m" -o "$OBJ/vst3_editor_mac.o"
   OBJS="$OBJS $OBJ/vst3_editor_mac.o"
 fi
-if [ -n "$MAC" ]; then
+if [ -n "$MAC" ]; then   # the Audio Unit lives in the same binary and drives the VST3 (wrapper/au_wrap.m)
+  AU_TAG="$(printf '%s_%s_%s' "$NAME" "$UID4" "$VERSION" | tr -c 'A-Za-z0-9_' '_')"
+  $CC $OPT -fno-objc-arc -Wno-deprecated-declarations -DMPC_AU_TAG="$AU_TAG" -I"$MV/wrapper" -I"$PORT/build" -c "$MV/wrapper/au_wrap.m" -o "$OBJ/au_wrap.o"
+  OBJS="$OBJS $OBJ/au_wrap.o"
+  EDITOR_LIBS="$EDITOR_LIBS -framework AudioToolbox -framework AudioUnit -framework CoreAudio -framework CoreFoundation -framework Cocoa"
   SO="$BUNDLE/Contents/MacOS/$NAME"
   WEAK="$(grep -ho '[a-z_0-9]*([^()]*) __attribute__((weak))' "$MV"/wrapper/*.h | sed -E 's/^([a-z_0-9]*)\(.*/-Wl,-U,_\1/' | sort -u | tr '\n' ' ')"
   $CXX -bundle $LDSAN $OBJS $LIBS $EDITOR_LIBS -lpthread $WEAK -o "$SO"   # -U: the engine's optional weak hooks may be absent
@@ -180,6 +184,54 @@ if [ -n "$MAC" ]; then   # Info.plist, PkgInfo, an ad-hoc signature (Apple Silic
 PLIST
   printf 'BNDL????' > "$BUNDLE/Contents/PkgInfo"
   codesign --force --sign - "$BUNDLE"
+  # <name>.component: the same bundle for Audio Unit hosts (Logic Pro, GarageBand): its own Info.plist names the AU
+  COMP="$OUTDIR/$NAME.component"
+  rm -rf "$COMP"; cp -R "$BUNDLE" "$COMP"; rm -rf "$COMP/Contents/_CodeSignature"
+  AUTYPE=aumu; AUTAG=Synthesizer
+  if grep -q '^#define PLUG_EFFECT' "$PORT/build/params.h"; then AUTYPE=aufx; AUTAG=Effects; fi
+  AUMAN="$(python3 -c '
+import json,re,sys
+d=json.load(open(sys.argv[1])); m=d.get("au_manufacturer")
+if not m:
+    v=re.sub("[^A-Za-z0-9]","",str(d.get("vendor","mpc"))) or "Mpcv"
+    m=(v[0].upper()+v[1:]+"xxxx")[:4]
+    if not any(c.isupper() for c in m): m=m[0].upper()+m[1:]
+print(m)' "$CFG")"
+  AUVER="$(python3 -c 'v=int(__import__("sys").argv[1]); print((v//1000%10)<<16 | (v//100%10)<<8 | v%100)' "$VERSION")"
+  AUNAME="$(printf '%s: %s' "$VENDOR" "$NAME" | tr '_' ' ')"
+  cat > "$COMP/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key><string>English</string>
+  <key>CFBundleExecutable</key><string>$NAME</string>
+  <key>CFBundleIdentifier</key><string>io.mpcvst.au.$BID</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleName</key><string>$NAME</string>
+  <key>CFBundlePackageType</key><string>BNDL</string>
+  <key>CFBundleSignature</key><string>????</string>
+  <key>CFBundleShortVersionString</key><string>$VSTR</string>
+  <key>CFBundleVersion</key><string>$VSTR</string>
+  <key>LSMinimumSystemVersion</key><string>10.13</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>AudioComponents</key>
+  <array><dict>
+    <key>type</key><string>$AUTYPE</string>
+    <key>subtype</key><string>$UID4</string>
+    <key>manufacturer</key><string>$AUMAN</string>
+    <key>name</key><string>$AUNAME</string>
+    <key>description</key><string>$NAME</string>
+    <key>version</key><integer>$AUVER</integer>
+    <key>factoryFunction</key><string>MPCAUFactory_$AU_TAG</string>
+    <key>sandboxSafe</key><true/>
+    <key>tags</key><array><string>$AUTAG</string></array>
+  </dict></array>
+</dict>
+</plist>
+PLIST
+  codesign --force --sign - "$COMP"
+  echo "component: $ROOT/$COMP ($AUTYPE $UID4 $AUMAN)"
   echo "exported: $(nm -gU "$SO" 2>/dev/null | awk '{print $NF}' | sort -u | tr '\n' ' ')"
   lipo -info "$SO"
 elif [ "$ARCH" = x86_64-win ]; then
@@ -200,6 +252,10 @@ if [ "${2:-}" = --install ] && [ -n "$MAC" ]; then
   rm -rf "$D/$NAME.vst3"
   cp -R "$BUNDLE" "$D/$NAME.vst3"
   echo "installed: $D/$NAME.vst3"
+  C="$HOME/Library/Audio/Plug-Ins/Components"
+  mkdir -p "$C"; rm -rf "$C/$NAME.component"; cp -R "$OUTDIR/$NAME.component" "$C/"
+  killall -9 AudioComponentRegistrar 2>/dev/null || true
+  echo "installed: $C/$NAME.component"
 elif [ "${2:-}" = --install ]; then
   mkdir -p "$HOME/.vst3"
   rm -rf "$HOME/.vst3/$NAME.vst3.new"
