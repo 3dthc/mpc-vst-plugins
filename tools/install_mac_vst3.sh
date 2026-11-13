@@ -5,9 +5,9 @@
 # A file fetched with curl gets no such flag, and this script also clears it from any copy you already downloaded.
 #
 #   Unblock what is already installed (and any .vst3 or .zip in ~/Downloads):
-#     curl -fsSL https://raw.githubusercontent.com/3dthc/mpc-vst-plugins/desktop-vst3/tools/install_mac_vst3.sh | bash
+#     curl -fsSL https://raw.githubusercontent.com/3dthc/mpc-vst-plugins/desktop-vst3-openmpc/tools/install_mac_vst3.sh | bash
 #   Download and install the latest published VST3 of every plugin (or name some: ... | bash -s -- Fretty Sonix):
-#     curl -fsSL https://raw.githubusercontent.com/3dthc/mpc-vst-plugins/desktop-vst3/tools/install_mac_vst3.sh | bash -s -- --all
+#     curl -fsSL https://raw.githubusercontent.com/3dthc/mpc-vst-plugins/desktop-vst3-openmpc/tools/install_mac_vst3.sh | bash -s -- --all
 #
 # Installs into ~/Library/Audio/Plug-Ins/VST3 and .../Components (no password needed). Rescan plugins afterwards.
 set -euo pipefail
