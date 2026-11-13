@@ -83,6 +83,14 @@ host pick (setParamNormalized on the program parameter) is applied there and the
 picks read back by name, 0 parameter edits after them (OxZygen, Sonix, OB-Xd). Momentary buttons hold for at least 2048
 engine frames, so a click whose press and release land in one host block still reaches the engine.
 
+Host parameter list (2026-11-13, user report: MPC 3's controller-mode screen showed "random parameters"): tools/gen_vst.py
+`host_hidden` marks everything that isn't a sound control (a layout knob, slider, switch, option row or Q-Link) as kIsHidden and
+not automatable, the way JUCE plugins mark their MIDI helpers: theme, browser, page and list controls, buttons, readouts, meters,
+"live"/"legacy" values and the engine's program parameter. They still work from the plugin's page and in saved state, and never
+go out as parameter changes. Checked with a JUCE 8 host: Sonix offers 61 automatable parameters (was about 150 incl. internals).
+User check (MPC 3, 2026-11-13): Dexed shows the same fixed Preset name after a preset change inside it, so that field not following
+a pick on a plugin's own page is MPC 3's behaviour, not something a plugin can change.
+
 Window size (2026-11-12): right-click (Control-click on macOS) the window for 50-125%; one setting for every plugin built with
 this wrapper (`mpc-vst3-window-size.txt` in ~/Library/Preferences, %APPDATA% or ~/.config), default 75%; the host is asked
 to resize with IPlugFrame::resizeView.

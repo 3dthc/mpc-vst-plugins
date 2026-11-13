@@ -181,6 +181,13 @@ static int param_count(void) { return g_nvis + 1 + has_programs() + MIDI_PARAMS;
 static int is_param(uint32_t id) { return id < (uint32_t)NPARAMS && !popup_is((int)id); }
 /* vst.json "live": a value the engine moves by itself (a meter, an orb, a progress readout). The host reads it, but it never
  * goes out as a change: a host takes changes from the plugin for the user's edits (MPC 3 marks the preset "*"). */
+static int host_hidden(int i) {   /* tools/gen_vst.py host_hidden: not a sound control, left out of a host's lists */
+#ifdef PLUG_HOST_HIDDEN_COUNT
+    for (int k = 0; k < PLUG_HOST_HIDDEN_COUNT; k++) if (PLUG_HOST_HIDDEN[k] == i) return 1;
+#endif
+    (void)i;
+    return 0;
+}
 static int is_live(int i) {
 #ifdef PLUG_LIVE_COUNT
     for (int k = 0; k < PLUG_LIVE_COUNT; k++) if (PLUG_LIVE[k] == i) return 1;
@@ -571,7 +578,7 @@ static void report(v3_t *w, ProcessData *d) {
     for (int i = 0; i < NPARAMS; i++) {
         if (!w->changed[i]) continue;
         w->changed[i] = 0;
-        if (!is_param(i) || is_live(i)) continue;
+        if (!is_param(i) || is_live(i) || host_hidden(i)) continue;   /* the page reads those itself; the host lists only controls */
         double v = get_norm(w, i);
         if (fabs(v - w->reported[i]) < 1e-9) continue;
         w->reported[i] = v;
@@ -1048,6 +1055,9 @@ static tresult ctrl_param_info(void *s, int32_t index, ParameterInfo *pi) {
     pi->stepCount = step_count(p);
     pi->defaultNormalizedValue = clamp01(p->def);
     pi->flags = p->string_display || is_live((int)pi->id) ? kIsReadOnly : kCanAutomate;   /* readouts and live values: the engine's */
+    /* not a sound control (tools/gen_vst.py host_hidden): hidden and not automatable, as JUCE plugins mark their MIDI helpers,
+     * so hosts (MPC 3's controller-mode pages, automation lists) show only the controls */
+    if (host_hidden((int)pi->id)) pi->flags = kIsHidden | (pi->flags & kIsReadOnly);
     if (p->nopts > 1) pi->flags |= kIsList;
     return kResultOk;
 }

@@ -146,7 +146,43 @@ def shown_keys(cfg, here, plist):
     return {p["key"] for p in plist if p["key"] in words or re.sub(r"_\d+$", "", p["key"]) in words}
 
 
-def gen_params(cfg, params, out, shown=None):
+HOST_UI_WORDS = ("theme", "scroll", "browse", "page", "tab", "skin", "colour", "color", "ui_", "br_", "bk_", "pt_", "view",
+                 "zoom", "select", "_sel", "sel_", "display", "load_mode", "stop", "panic")
+
+
+def host_hidden(cfg, here, params):
+    """The parameters a desktop host (MPC 3 in controller mode, a DAW's generic view, automation lists) doesn't list: everything
+    but the sound controls. A sound control is a layout knob, slider, switch or option row, or a Q-Link; a button, readout,
+    meter, theme, browser or page control, a "live" or "legacy" value and the program parameter are not. Without a layout every
+    plain value is listed and only those kinds are hidden. Hidden parameters keep working (state, the plugin's own page)."""
+    import re
+    controls = None
+    if cfg.get("layout") and here and os.path.exists(os.path.join(here, cfg["layout"])):
+        import shadow_skin
+        tabs, top = shadow_skin.parse_layout(os.path.join(here, cfg["layout"]))
+        controls = set()
+        for t in tabs:
+            for w in t["widgets"]:
+                if w.get("kind") in ("knob", "slider_h", "slider_v", "toggle", "enum_h", "enum_v", "stepper") and isinstance(w.get("key"), str):
+                    controls.add(w["key"])
+            for _, ks in t["qlinks"]:
+                controls.update(ks)
+        for x in top:
+            m = re.match(r"\s*qlinks\w*\s*=\s*(.*)", x)
+            if m:
+                controls.update(k.strip() for k in m.group(1).split(","))
+    prog = (cfg.get("programs") or {}).get("param")
+    out = []
+    for i, p in enumerate(params):
+        k = p["key"].lower()
+        ui = any(w in k for w in HOST_UI_WORDS) or p["key"] == prog
+        kind = p.get("momentary") or p.get("display") == "string" or p.get("live") or p.get("legacy") or p.get("step_of")
+        if ui or kind or (controls is not None and p["key"] not in controls):
+            out.append(i)
+    return out
+
+
+def gen_params(cfg, params, out, shown=None, here=None):
     for w in layout_warnings(cfg):
         print("warning: " + w, file=sys.stderr)
     sn = cfg.get("short_names", {})
@@ -249,6 +285,10 @@ def gen_params(cfg, params, out, shown=None):
         lines += ["static const int PLUG_LEGACY[] = {%s};" % ", ".join(str(i) for i in legacy), "#define PLUG_LEGACY_COUNT %d" % len(legacy)]
     if cfg.get("effect"):
         lines.append("#define PLUG_EFFECT 1")
+    hidden = host_hidden(cfg, here, params)
+    if hidden and len(hidden) < len(params):   # never hide everything: a host with no parameters at all is worse
+        lines += ["static const int PLUG_HOST_HIDDEN[] = {%s};" % ", ".join(str(i) for i in hidden),
+                  "#define PLUG_HOST_HIDDEN_COUNT %d" % len(hidden)]
     lines += program_lines(cfg, params, key_to_index)
     lines += cc_lines(cfg, params, key_to_index)
     lines += sample_lines(cfg, params, key_to_index)
@@ -448,7 +488,7 @@ def main():
         plist = plist + shadow_skin.popup_params(os.path.join(here, cfg["layout"]), plist)
     os.makedirs(build, exist_ok=True)
     shown = shown_keys(cfg, here, plist)
-    gen_params(cfg, plist, os.path.join(build, "params.h"), shown)
+    gen_params(cfg, plist, os.path.join(build, "params.h"), shown, here)
     skipped = [p["key"] for p in plist if p.get("display") == "string" and "poll" not in p and shown is not None and p["key"] not in shown]
     print("params.h: %d params%s" % (len(plist), "; %d text param(s) the layout never shows are not polled" % len(skipped) if skipped else ""))
     if sys.argv[2:] == ["--params-h"]:
