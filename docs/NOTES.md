@@ -2576,3 +2576,26 @@ in apply.sh. Not yet checked on a device. A local zip whose `mpc-plugin.json` ha
 
 ### 2026-11-11: the switch is called "External Plugin Support" in the released MPC OS 3.10.1 (offline, read from the 3.10.1.12 firmware and Akai's plugin SDK docs)
 - The MPC binary of 3.10.1.12 (Gen2 and Force images) has the label "External Plugin Support" (and "Enable Enhancements"); the string "VST2 Support" is not in it. The setting key is still `Enhancements.VST2Support` in `MPC.settings`. The "VST2 Support" wording in the entries above is what the 3.10.1.6 beta showed. User-facing text now says External Plugin Support; the Plugin Manager's on-screen hint (`manager.c`) still says VST2 Support until its next rebuild.
+  `build_port.sh` uses since 2026-10-02; `arm32v7/gcc:12` (2.36) binds some pthread symbols to `GLIBC_2.34` and does not load on 2.x. C++ ports also need MPC OS 2.x's libstdc++: at most `GLIBCXX_3.4.28` (GCC 10), so armv7 C++ ports
+  build with `arm32v7/gcc:10-bullseye` since 2026-11-10 (below).
+
+### 2026-11-10: armv7 C++ ports need GLIBCXX <= 3.4.28 on MPC OS 2.x (user report; fix checked in CI, not yet on a device)
+Report (Odin2-MPC issue #2): an MPC Live (Gen1) on MPC OS 2.15.1 does not load Odin 2 armv7 1.4.4, 1.4.6 or 1.4.7:
+`/lib/libstdc++.so.6: version 'GLIBCXX_3.4.29' not found`. That device's `/lib/libstdc++.so.6` goes up to `GLIBCXX_3.4.28`
+(GCC 10). `arm32v7/gcc:11-bullseye` keeps glibc at 2.31 but links GCC 11's libstdc++, so every C++ port built with it
+(Odin 2, OB-XD, JV-880, ...) can need 3.4.29; C ports do not link libstdc++ and are unaffected. `build_port.sh` now builds
+armv7 C++ ports with `arm32v7/gcc:10-bullseye` (same glibc 2.31), prints `highest libstdc++` and fails the armv7 build above
+3.4.28. aarch64 (Gen2, MPC OS 3.x only, libstdc++ from GCC 13) is unchanged. To check a device: `strings /lib/libstdc++.so.6 |
+grep GLIBCXX_3.4.2` and, for a plugin, `/lib/ld-linux-armhf.so.3 --list <so>` must print no "not found". `catalog_check.py`
+does not look at GLIBCXX yet.
+
+### 2026-11-12: desktop VST3 that replaces the device VST2 (offline + CI; not yet opened in MPC Desktop)
+Why: MPC Desktop's controller mode opens the device's projects on the computer, which can't load the ARM VST2, so a track
+with a third-party plugin came up empty. With `"VST3_REPLACES_VST2": 1` the desktop VST3 takes Steinberg's VST2-replacement
+class ID ("VST" + uniqueID + first nine name characters, lower case) and `setState` reads the VST2 chunk (raw, or `VstW` /
+`CcnK` wrapped), docs/DESKTOP_VST3.md. Checked: `tools/vst3_host_test.c` restores from both chunk forms for ten ports
+(Linux, ASan; Windows under Wine in CI; macOS universal in CI on an arm64 runner, editor pages drawn). Found on the way:
+an engine without `"state"` saved an empty VST2 chunk, so MPC projects brought it back at its defaults (Fretty, OxZygen);
+`vst2_wrap.c` now saves its settings as key=value text (`test_port.sh` chunk check passes). **Not yet checked:** whether
+MPC Desktop (3.9+, AU/VST3) maps a device project's VST2 to this VST3 and passes it the chunk; JUCE hosts differ in how
+they hand VST2 state to a replacement VST3. Record the result here.
