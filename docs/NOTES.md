@@ -2599,3 +2599,10 @@ an engine without `"state"` saved an empty VST2 chunk, so MPC projects brought i
 `vst2_wrap.c` now saves its settings as key=value text (`test_port.sh` chunk check passes). **Not yet checked:** whether
 MPC Desktop (3.9+, AU/VST3) maps a device project's VST2 to this VST3 and passes it the chunk; JUCE hosts differ in how
 they hand VST2 state to a replacement VST3. Record the result here.
+
+## 2026-11-13: Audio Unit (AUv2) builds pass Apple's auval (CI, macOS runner; not yet in Logic on a user's Mac)
+
+- `wrapper/au_wrap.m` drives the port's VST3 in the same binary; `tools/build_vst3.sh` (macOS) makes `<name>.component`.
+- `auval -strict -v` passed on the first try for an instrument (Fretty, `aumu`) and an effect (Shapey EQ, `aufx`) in
+  release dry runs; `tools/release_vst3.sh` now stops a release when auval fails.
+- Open: Logic Pro itself (plugin window, factory presets menu, project reopen) is still to be checked by a user.

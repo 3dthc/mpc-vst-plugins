@@ -110,6 +110,24 @@ Why: MPC Desktop's controller mode opens the device's projects on the computer, 
 ARM VST2, so without a desktop build of the same identity the track comes up empty. Status: offline (Linux host test,
 Windows under Wine); the macOS build runs in CI; **not yet opened in MPC Desktop with a device project** (docs/NOTES.md when it is).
 
+## Audio Unit for Logic Pro and GarageBand (2026-11-13, CI: auval -strict on a macOS runner)
+
+`VST3_TARGET=macos` also builds `<name>.component` (AUv2) next to `<name>.vst3`. `wrapper/au_wrap.m`, linked into the same
+binary, is an AU that drives the port's own VST3 interfaces in process, so sound, skin window, programs, state and the
+window-size menu are the VST3's:
+
+- Type `aumu` (instrument) or `aufx` (`PLUG_EFFECT`); subtype = the vst.json `uid`; manufacturer = vst.json `au_manufacturer`,
+  or the first four letters of `vendor` with a capital first letter. Keep all three fixed across releases (Logic saves by them).
+- Parameters: the controls the VST3 lists (not hidden, not the program or bypass parameter); list parameters are Indexed
+  with their names, the rest 0..1 with the VST3's value text.
+- Factory presets and the present preset: the VST3 program list. Saved state (`ClassInfo`): the VST3 `getState` bytes in
+  `vst3-state`, so it is the same text as the MPC's chunk.
+- MIDI: notes as VST3 events; CC, pitch bend and aftertouch through `IMidiMapping`. Tempo and transport from the host callbacks.
+- Window: the VST3 editor (`NSView`) inside the AU's Cocoa view; Objective-C classes carry `<name>_<uid>_<version>`.
+
+`tools/release_vst3.sh` installs the component on the runner, runs `auval -strict -v <type> <uid> <manufacturer>` (a fail
+stops the release) and puts the component in the same `-macos-vst3.zip`; `tools/install_mac_vst3.sh` installs both.
+
 ## How it maps onto VST3
 
 `wrapper/vst3_wrap.c` drives the same `mpc_engine_t` as `vst2_wrap.c`, from the same generated `params.h`. The VST3 ABI is
