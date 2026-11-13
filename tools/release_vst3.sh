@@ -108,7 +108,7 @@ if [ "$OS" = macos ] && [ -z "$NOTARIZED" ]; then   # say how to get past Gateke
   cat >> "$STAGE/README.txt" <<TXT
 
 If macOS says the plugin "can't be opened" or "can't be verified" (it isn't notarized by Apple), install it with this
-Terminal command instead. It installs every plugin's latest Mac VST3 and clears the block:
+Terminal command instead. It installs every plugin's latest Mac VST3 and Audio Unit and clears the block:
   curl -fsSL https://raw.githubusercontent.com/3dthc/mpc-vst-plugins/desktop-vst3-openmpc/tools/install_mac_vst3.sh | bash -s -- --all
 Or, for a copy you already downloaded and installed, just:
   curl -fsSL https://raw.githubusercontent.com/3dthc/mpc-vst-plugins/desktop-vst3-openmpc/tools/install_mac_vst3.sh | bash
