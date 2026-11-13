@@ -47,9 +47,11 @@ Layout file:
     art     file="drawing.svg" [x= y= w= h=] [fit=]    (an SVG drawing, e.g. from studio.py from-svg, or a .png/.jpg/.webp
                                                         image, drawn into the page background: the whole plugin area, or
                                                         the box; fit=contain|cover|stretch; browser renderer only)
-    picture x= y= w= h= key=<param> files="a.png,b.png,.." [fit=]
+    picture x= y= w= h= key=<param> files="a.png,b.png,.." [fit=] [margin=0]
                                                        (one image per option of the parameter, the current one shown:
-                                                        a when= art line per option, so mode images do the switching)
+                                                        a when= art line per option, so mode images do the switching;
+                                                        margin=0: no 2 px of base page around it, for opaque images
+                                                        on a themed page, whose art the base page doesn't have)
     meter   cx= cy= w= h= key=<param> strip=meter.png [frames=N]
                                                        (a display-only filmstrip following a parameter the engine sets;
                                                         experimental: see docs/SKIN_STUDIO.md)
@@ -250,7 +252,7 @@ def expand_pictures(widgets):
         for i, f in enumerate(x.strip() for x in w.get("files", "").split(",")):
             if f:
                 out.append({"kind": "art", "file": f, "x": w["x"], "y": w["y"], "w": w["w"], "h": w["h"],
-                            "fit": w.get("fit", "contain"), "when": "%s:%d" % (w["key"], i)})
+                            "fit": w.get("fit", "contain"), "when": "%s:%d" % (w["key"], i), "margin": w.get("margin")})
     return out
 
 
@@ -615,7 +617,10 @@ def baked_rect(w):
     """Area (shadow coords) that baked_cmds(w) draws into, generously; None if it draws nothing."""
     k = w["kind"]
     if k == "art":
-        return (w["x"] - 2, w["y"] - 2, w["w"] + 4, w["h"] + 4) if "w" in w else (0, Y_OFF, W, H)
+        # margin= (pictures too): the strip of page drawn around a when= image (2 px). 0 for an opaque picture that
+        # carries its own background (a themed page's mode images are drawn over the base page, not the theme's art)
+        m = int(w["margin"]) if w.get("margin") not in (None, "") else 2
+        return (w["x"] - m, w["y"] - m, w["w"] + 2 * m, w["h"] + 2 * m) if "w" in w else (0, Y_OFF, W, H)
     if k == "frame":
         return (w["x"] - 2, w["y"] - 2, w["w"] + 4, w["h"] + 4)
     if k in ("readout", "stepper", "menu", "popup"):
@@ -1288,8 +1293,11 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                             kids.append(c)
             else:  # enum_h / enum_v: radio group, one image button per option
                 n = len(w["options"])
+                # Its look in the names: a port that repeats one selector per theme (when=theme:N, each with its own
+                # img=) gets each theme's pictures, instead of every copy pointing at the last one written.
+                sfx = "_" + skin_assets.look_id(lk) if lk else ""
                 for o, (x, y, sw, sh) in enumerate(seg_rects(w)):
-                    img = "sh_seg_%s_%d" % (w["key"], o)
+                    img = "sh_seg_%s_%d%s" % (w["key"], o, sfx)
                     lab = w["options"][o]
                     baked_lab = " " if TITLE_FONT else lab   # see the button block's comment on this placeholder
                     for state, fill, ink in (("on", SEG_ON, SEG_ON_TX), ("off", SEG_OFF, INK_DIM)):
@@ -1300,7 +1308,7 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                         script += ["clear|" + under(), draw, "crop|%s|%d|%d|%d|%d" % (ppm, x, y, sw, sh)]
                         if TITLE_FONT and lab:
                             label_overlays.append((ppms[-1][1], sw, sh, lab, SEG_ON_TX if state == "on" else INK_DIM))
-                    key = "shSeg_%s_%d" % (w["key"], o)
+                    key = "shSeg_%s_%d%s" % (w["key"], o, sfx)
                     defs[key] = _local(key, [_action("Mouse Down", "Q-Link")],
                                        [_button(img + "_on.png", img + "_off.png", o, n, sw, sh)])
                     kids.append(_placed(key, "%s %s" % (name, lab), i, x, y, sw, sh, focus="Yes" if o == 0 else "No"))

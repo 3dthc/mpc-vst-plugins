@@ -2606,3 +2606,13 @@ they hand VST2 state to a replacement VST3. Record the result here.
 - `auval -strict -v` passed on the first try for an instrument (Fretty, `aumu`) and an effect (Shapey EQ, `aufx`) in
   release dry runs; `tools/release_vst3.sh` now stops a release when auval fails.
 - Open: Logic Pro itself (plugin window, factory presets menu, project reopen) is still to be checked by a user.
+
+## 2026-11-13: themed pages: selector pictures per theme, pictures without the 2 px margin (offline, desktop editor shots)
+
+- A selector (`enum_h`/`enum_v`) repeated once per theme (`when=theme:N`, each with its own `img=`/`img_on=`) showed
+  the last theme's pictures in every theme: its images and components were named by key and option only. The look
+  is now in the names (`shadow_skin.py`), as it already was for list cards.
+- A `when=` picture's mode image is drawn over the base page (the widgets without `when=`). On a page whose art is
+  itself per theme (`art ... when=theme:N`) the base page is the plain plate, so the 2 px around every picture showed
+  as a grey frame. `picture ... margin=0` (also on `art`) crops it to the picture alone; give such pictures their own
+  background (OxZygen cuts its knob-name strips from the panel they sit on).
