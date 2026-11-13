@@ -472,6 +472,6 @@ jobs:
           V="$(ls "$GITHUB_WORKSPACE"/validator-bin/validator*)"
           "$V" "$PWD/$P" > ../validator.txt 2>&1 || true
           grep -E "^Result:" ../validator.txt || true
-          grep -n -i -B20 "fail" ../validator.txt | grep -v "tests passed" | tail -60 || true
+          grep -E "^Result:" ../validator.txt | grep -q " 0 tests failed" || cat ../validator.txt
           ! grep -q "Invalid Module" ../validator.txt || { echo "::error::$P did not load in Steinberg's validator"; exit 1; }
           grep -E "Result: .* tests passed, 0 tests failed" ../validator.txt || { echo "::error::$P failed Steinberg's validator (validator.txt)"; exit 1; }
