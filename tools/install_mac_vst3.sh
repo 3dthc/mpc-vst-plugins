@@ -80,6 +80,14 @@ if [ "${1:-}" = "" ]; then
   done
   shopt -s nullglob
   for z in "$HOME"/Downloads/*-macos-vst3.zip "$HOME"/Downloads/*-macos-au.zip; do echo "Installing $(basename "$z"):"; install_zip "$z"; done
+  for b in "$HOME"/Downloads/*.vst3 "$HOME"/Downloads/*.component "$HOME"/Downloads/*-macos-*/*.vst3 "$HOME"/Downloads/*-macos-*/*.component; do
+    [ -d "$b" ] && [ -f "$b/Contents/Info.plist" ] || continue   # already unzipped (Safari does this): only these plugins' bundles
+    case "$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$b/Contents/Info.plist" 2>/dev/null || true)" in io.mpcvst.*) ;; *) continue ;; esac
+    case "$b" in *.component) d="$CDEST" ;; *) d="$DEST" ;; esac
+    echo "Installing $(basename "$b"):"
+    rm -rf "$d/$(basename "$b")"; ditto "$b" "$d/$(basename "$b")"; unblock "$d/$(basename "$b")"
+  done
+  killall -9 AudioComponentRegistrar 2>/dev/null || true
   echo "Done. Rescan plugins in MPC Desktop, or restart Logic Pro (it checks new Audio Units on launch)."
   exit 0
 fi
