@@ -144,6 +144,7 @@ struct au {
     double rate;
     UInt32 max_frames;
     int initialized, effect, bypass;
+    UInt32 in_ch, out_ch;                    /* 1 or 2 each: Logic's Mono, Mono -> Stereo and Stereo (instruments: out only) */
     float *scratch[4];                       /* outputs (and inputs, effects) when the host gives no buffers */
     AURenderCallbackStruct input_cb;
     AudioUnitConnection conn;
@@ -315,6 +316,7 @@ static OSStatus au_open(void *s, AudioComponentInstance inst) {
 #endif
     a->rate = 44100;
     a->max_frames = MAX_FRAMES_DEFAULT;
+    a->in_ch = a->out_ch = 2;
     pthread_mutex_init(&a->lock, NULL);
     /* the host-listed parameters: the controls the VST3 lists (not hidden, not the program, bypass or MIDI helpers) */
     int n = a->e->getParameterCount(a->ctrl);
@@ -354,9 +356,10 @@ static OSStatus au_close(void *s) {
 static OSStatus au_initialize(void *s) {
     au_t *a = AU(s);
     if (a->initialized) return noErr;
-    uint64_t st = 3;   /* stereo */
-    if (a->effect) a->p->setBusArrangements(a->proc, &st, 1, &st, 1);
-    else a->p->setBusArrangements(a->proc, NULL, 0, &st, 1);
+    if (a->effect && a->in_ch == 2 && a->out_ch == 1) return kAudioUnitErr_FormatNotSupported;   /* not a listed pair */
+    uint64_t ia = a->in_ch == 1 ? 1 : 3, oa = a->out_ch == 1 ? 1 : 3;   /* mono / stereo speaker layouts */
+    tresult ar = a->effect ? a->p->setBusArrangements(a->proc, &ia, 1, &oa, 1) : a->p->setBusArrangements(a->proc, NULL, 0, &oa, 1);
+    if (ar != kResultOk) return kAudioUnitErr_FormatNotSupported;
     ProcessSetup ps = { 0, 0, (int32_t)a->max_frames, a->rate };
     if (a->p->setupProcessing(a->proc, &ps) != kResultOk) return kAudioUnitErr_FailedInitialization;
     for (int i = 0; i < 4; i++) {
@@ -426,14 +429,14 @@ static OSStatus set_classinfo(au_t *a, CFPropertyListRef pl) {
 }
 
 /* ---- properties ----------------------------------------------------------------------- */
-static void fill_format(au_t *a, AudioStreamBasicDescription *f) {
+static void fill_format(au_t *a, AudioStreamBasicDescription *f, UInt32 ch) {
     memset(f, 0, sizeof *f);
     f->mSampleRate = a->rate;
     f->mFormatID = kAudioFormatLinearPCM;
     f->mFormatFlags = kAudioFormatFlagsNativeFloatPacked | kAudioFormatFlagIsNonInterleaved;
     f->mBytesPerPacket = f->mBytesPerFrame = 4;
     f->mFramesPerPacket = 1;
-    f->mChannelsPerFrame = 2;
+    f->mChannelsPerFrame = ch;
     f->mBitsPerChannel = 32;
 }
 static UInt32 element_count(au_t *a, AudioUnitScope sc) {
@@ -458,7 +461,7 @@ static OSStatus au_get_info(void *s, AudioUnitPropertyID id, AudioUnitScope sc, 
         sz = sizeof(AudioStreamBasicDescription); wr = true; break;
     case kAudioUnitProperty_ElementCount: sz = sizeof(UInt32); break;
     case kAudioUnitProperty_Latency: case kAudioUnitProperty_TailTime: sz = sizeof(Float64); break;
-    case kAudioUnitProperty_SupportedNumChannels: sz = sizeof(AUChannelInfo); break;
+    case kAudioUnitProperty_SupportedNumChannels: sz = sizeof(AUChannelInfo) * (a->effect ? 3 : 2); break;
     case kAudioUnitProperty_MaximumFramesPerSlice: sz = sizeof(UInt32); wr = true; break;
     case kAudioUnitProperty_ParameterValueStrings: sz = sizeof(CFArrayRef); break;
     case kAudioUnitProperty_ParameterStringFromValue: sz = sizeof(AudioUnitParameterStringFromValue); break;
@@ -522,14 +525,14 @@ static OSStatus au_get(void *s, AudioUnitPropertyID id, AudioUnitScope sc, Audio
         }
         break;
     }
-    case kAudioUnitProperty_StreamFormat: fill_format(a, out); break;
+    case kAudioUnitProperty_StreamFormat: fill_format(a, out, sc == kAudioUnitScope_Input ? a->in_ch : a->out_ch); break;
     case kAudioUnitProperty_ElementCount: *(UInt32 *)out = element_count(a, sc); break;
     case kAudioUnitProperty_Latency: *(Float64 *)out = a->rate > 0 ? a->p->getLatencySamples(a->proc) / a->rate : 0; break;
     case kAudioUnitProperty_TailTime: *(Float64 *)out = 2.0; break;
-    case kAudioUnitProperty_SupportedNumChannels: {
+    case kAudioUnitProperty_SupportedNumChannels: {   /* effects: mono, mono -> stereo, stereo; instruments: stereo, mono */
         AUChannelInfo *ci = out;
-        ci->inChannels = a->effect ? 2 : 0;
-        ci->outChannels = 2;
+        if (a->effect) { ci[0] = (AUChannelInfo){ 1, 1 }; ci[1] = (AUChannelInfo){ 1, 2 }; ci[2] = (AUChannelInfo){ 2, 2 }; }
+        else { ci[0] = (AUChannelInfo){ 0, 2 }; ci[1] = (AUChannelInfo){ 0, 1 }; }
         break;
     }
     case kAudioUnitProperty_MaximumFramesPerSlice: *(UInt32 *)out = a->max_frames; break;
@@ -623,10 +626,14 @@ static OSStatus au_set(void *s, AudioUnitPropertyID id, AudioUnitScope sc, Audio
     case kAudioUnitProperty_StreamFormat: {
         const AudioStreamBasicDescription *f = in;
         if (size < sizeof *f) return kAudioUnitErr_InvalidPropertyValue;
-        if (f->mFormatID != kAudioFormatLinearPCM || f->mChannelsPerFrame != 2 || f->mBitsPerChannel != 32 ||
+        if (f->mFormatID != kAudioFormatLinearPCM || f->mChannelsPerFrame < 1 || f->mChannelsPerFrame > 2 || f->mBitsPerChannel != 32 ||
             !(f->mFormatFlags & kAudioFormatFlagIsFloat) || !(f->mFormatFlags & kAudioFormatFlagIsNonInterleaved))
             return kAudioUnitErr_FormatNotSupported;
-        if (a->initialized && f->mSampleRate != a->rate) return kAudioUnitErr_Initialized;
+        if (a->initialized && (f->mSampleRate != a->rate ||
+                               f->mChannelsPerFrame != (sc == kAudioUnitScope_Input ? a->in_ch : a->out_ch)))
+            return kAudioUnitErr_Initialized;
+        if (sc == kAudioUnitScope_Input) a->in_ch = f->mChannelsPerFrame;   /* the pair is checked at Initialize */
+        else a->out_ch = f->mChannelsPerFrame;
         a->rate = f->mSampleRate;
         notify_prop(a, kAudioUnitProperty_StreamFormat, sc, 0);
         return noErr;
@@ -797,22 +804,23 @@ static OSStatus au_render(void *s, AudioUnitRenderActionFlags *flags, const Audi
         a->notify[i].proc(a->notify[i].ud, &f, ts, bus, frames, io);
     }
     float *out[2];
-    for (int c = 0; c < 2; c++) {
+    int oc = (int)a->out_ch, ic = (int)a->in_ch;
+    for (int c = 0; c < oc; c++) {
         if ((UInt32)c < io->mNumberBuffers && io->mBuffers[c].mData) out[c] = io->mBuffers[c].mData;
         else { out[c] = a->scratch[c]; if ((UInt32)c < io->mNumberBuffers) { io->mBuffers[c].mData = out[c]; io->mBuffers[c].mDataByteSize = frames * 4; } }
     }
     float *in[2] = { a->scratch[2], a->scratch[3] };
     if (a->effect) {
-        struct { UInt32 n; AudioBuffer b[2]; } inl = { 2, { { 1, frames * 4, in[0] }, { 1, frames * 4, in[1] } } };
+        struct { UInt32 n; AudioBuffer b[2]; } inl = { (UInt32)ic, { { 1, frames * 4, in[0] }, { 1, frames * 4, in[1] } } };
         AudioUnitRenderActionFlags f = 0;
         OSStatus r = noErr;
         if (a->has_cb) r = a->input_cb.inputProc(a->input_cb.inputProcRefCon, &f, ts, 0, frames, (AudioBufferList *)&inl);
         else if (a->has_conn) r = AudioUnitRender(a->conn.sourceAudioUnit, &f, ts, a->conn.sourceOutputNumber, frames, (AudioBufferList *)&inl);
         else { memset(in[0], 0, frames * 4); memset(in[1], 0, frames * 4); }
         if (r) return r;
-        for (int c = 0; c < 2; c++) if (inl.b[c].mData && inl.b[c].mData != in[c]) memcpy(in[c], inl.b[c].mData, frames * 4);
+        for (int c = 0; c < ic; c++) if (inl.b[c].mData && inl.b[c].mData != in[c]) memcpy(in[c], inl.b[c].mData, frames * 4);
         if (a->bypass) {
-            for (int c = 0; c < 2; c++) memcpy(out[c], in[c], frames * 4);
+            for (int c = 0; c < oc; c++) memcpy(out[c], in[c < ic ? c : 0], frames * 4);
             return noErr;
         }
     }
@@ -847,7 +855,7 @@ static OSStatus au_render(void *s, AudioUnitRenderActionFlags *flags, const Audi
             ctx.projectTimeSamples = (int64_t)sample;
         }
     }
-    AudioBusBuffers ib = { 2, 0, in }, ob = { 2, 0, out };
+    AudioBusBuffers ib = { ic, 0, in }, ob = { oc, 0, out };
     ProcessData d = { 0, 0, (int32_t)frames, a->effect ? 1 : 0, 1, a->effect ? &ib : NULL, &ob,
                       (IParameterChanges *)&a->inpc, (IParameterChanges *)&a->outpc, (IEventList *)&a->events, NULL, &ctx };
     a->p->process(a->proc, &d);

@@ -103,13 +103,14 @@ for f in $SOURCES; do
   esac
   OBJS="$OBJS $o"
 done
+DITEMS="$(python3 -c 'import json,os,sys; d=json.load(open(sys.argv[1])).get("desktop_items"); print(os.path.join(os.path.dirname(os.path.abspath(sys.argv[1])), d) if d else "")' "$CFG")"   # desktop-only items (desktop_skin.py)
 SUBDIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("defines", {}).get("MODULE_SUBDIR", "").strip("\""))' "$CFG")"
 EMBED_CF=""
 if [ "$ARCH" = x86_64-win ]; then   # one .vst3 file: the skin and the engine's data ride inside it (unpacked on first load)
   EMB="$OBJ/embed"
   rm -rf "$EMB"; mkdir -p "$EMB"
   if [ -n "$EDITOR_CF" ]; then
-    python3 "$MV/tools/desktop_skin.py" "$SKIN" "$EMB/skin"
+    python3 "$MV/tools/desktop_skin.py" "$SKIN" "$EMB/skin" $DITEMS
     cp "$MV"/tools/html_art/fonts/TitilliumWeb-{Regular,SemiBold,Bold}.ttf "$MV/tools/html_art/fonts/OFL.txt" "$EMB/skin/"
   fi
   if [ -n "$SUBDIR" ]; then mkdir -p "$EMB/$SUBDIR"; [ -z "${VST3_DATA:-}" ] || cp -R "$VST3_DATA"/. "$EMB/$SUBDIR"/; fi
@@ -157,7 +158,7 @@ if [ -n "$SUBDIR" ]; then
 fi
 if [ -n "$EDITOR_CF" ]; then   # the skin, flattened for the editor, and its fonts (SIL OFL: the licence goes with them)
   RES="$BUNDLE/Contents/Resources/skin"
-  python3 "$MV/tools/desktop_skin.py" "$SKIN" "$RES"
+  python3 "$MV/tools/desktop_skin.py" "$SKIN" "$RES" $DITEMS
   cp "$MV"/tools/html_art/fonts/TitilliumWeb-{Regular,SemiBold,Bold}.ttf "$MV/tools/html_art/fonts/OFL.txt" "$RES/"
 fi
 if [ -n "$MAC" ]; then   # Info.plist, PkgInfo, an ad-hoc signature (Apple Silicon refuses unsigned code)

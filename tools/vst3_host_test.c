@@ -274,6 +274,46 @@ static void test_audio(plug_t *pl, double rate, int passthrough) {
     free(inl); free(inr); free(outl); free(outr);
 }
 
+/* Mono layouts (Logic's Mono and Mono -> Stereo, a mono instrument track): accepted, reported back, and the audio is the
+ * stereo engine's, folded (output) or fed from one channel (input). A stereo -> mono effect is a pair hosts don't ask for. */
+static void test_mono(plug_t *pl) {
+    uint64_t m = 1, st = 3, got = 0;
+    int pairs[3][2] = { { 1, 1 }, { 1, 3 }, { 3, 1 } };
+    for (int k = 0; k < (g_effect ? 3 : 1); k++) {
+        uint64_t ia = (uint64_t)pairs[k][0], oa = g_effect ? (uint64_t)pairs[k][1] : m;
+        tresult r = g_effect ? pl->p->setBusArrangements(pl->proc, &ia, 1, &oa, 1) : pl->p->setBusArrangements(pl->proc, NULL, 0, &oa, 1);
+        CHECK(r == kResultOk, "mono layouts: %s -> %s refused", ia == 1 ? "mono" : "stereo", oa == 1 ? "mono" : "stereo");
+        pl->p->getBusArrangement(pl->proc, 1, 0, &got);
+        CHECK(got == oa, "mono layouts: the output reads back %llu (want %llu)", (unsigned long long)got, (unsigned long long)oa);
+        BusInfo bi;
+        pl->c->getBusInfo(pl->comp, 0, 1, 0, &bi);
+        CHECK(bi.channelCount == (oa == 1 ? 1 : 2), "mono layouts: output bus has %d channels", bi.channelCount);
+        ProcessSetup ps = { 0, 0, 1024, 44100 };
+        pl->p->setupProcessing(pl->proc, &ps);
+        pl->c->setActive(pl->comp, 1); pl->p->setProcessing(pl->proc, 1);
+        float in[2][4096], out[2][4096];
+        for (int i = 0; i < 4096; i++) { in[0][i] = 0.25f * sinf(2 * (float)M_PI * 220 * i / 44100.f); in[1][i] = 0; out[0][i] = out[1][i] = 7; }
+        float *ib[2] = { in[0], in[1] }, *ob[2] = { out[0], out[1] };
+        AudioBusBuffers ibus = { ia == 1 ? 1 : 2, 0, ib }, obus = { oa == 1 ? 1 : 2, 0, ob };
+        events_t ev = { &ev_vtbl, 0, {{0}} };
+        if (!g_effect) { Event e; memset(&e, 0, sizeof e); e.type = kNoteOnEvent; e.noteOn.pitch = 60; e.noteOn.velocity = 0.8f; e.noteOn.noteId = -1; ev.e[ev.n++] = e; }
+        ProcessContext ctx; memset(&ctx, 0, sizeof ctx);
+        int finite = 1, untouched = 0;
+        for (int b = 0; b < 4; b++) {
+            ProcessData d = { 0, 0, 1024, g_effect ? 1 : 0, 1, g_effect ? &ibus : NULL, &obus, NULL, NULL, (IEventList *)&ev, NULL, &ctx };
+            ib[0] = in[0] + b * 1024; ib[1] = in[1] + b * 1024; ob[0] = out[0] + b * 1024; ob[1] = out[1] + b * 1024;
+            CHECK(pl->p->process(pl->proc, &d) == kResultOk, "mono layouts: process() failed");
+            ev.n = 0;
+        }
+        for (int i = 0; i < 4096; i++) { if (!isfinite(out[0][i])) finite = 0; if (oa == 1 && out[1][i] != 7) untouched++; }
+        CHECK(finite, "mono layouts: non-finite output");
+        CHECK(!untouched, "mono layouts: a mono output wrote past its one channel");
+        pl->p->setProcessing(pl->proc, 0); pl->c->setActive(pl->comp, 0);
+    }
+    pl->p->setBusArrangements(pl->proc, g_effect ? &st : NULL, g_effect ? 1 : 0, &st, 1);   /* back to stereo */
+    printf("mono layouts: %s\n", g_effect ? "mono, mono -> stereo, stereo -> mono" : "a mono output");
+}
+
 /* a program-change parameter (vst.json "presets"): picking the last program reads back as picked and moves some parameter */
 static void test_programs(plug_t *pl) {
     int n = pl->e->getParameterCount(pl->ctrl);
@@ -679,6 +719,7 @@ int main(int argc, char **argv) {
     test_audio(&pl, 44100, passthrough);
     test_audio(&pl, 48000, passthrough);
     test_audio(&pl, 96000, passthrough);
+    test_mono(&pl);
     test_programs(&pl);
     test_midi_cc(&pl);
     test_state(&pl);

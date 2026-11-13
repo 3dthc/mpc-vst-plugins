@@ -50,7 +50,7 @@ int mpc_plat_menu(void *m, const char *const *items, int n, int checked, double 
 #define MAX_TABS 32
 #define DRAG_PX 300.0     /* a vertical drag across this many skin pixels covers a knob's whole range */
 
-enum { IT_IMG, IT_FILM, IT_BTN, IT_LABEL, IT_HIT };
+enum { IT_IMG, IT_FILM, IT_BTN, IT_LABEL, IT_HIT, IT_XY };
 enum { HIT_RADIO, HIT_TOGGLE, HIT_DRAG };
 
 typedef struct { int p, i; } cond_t;
@@ -164,13 +164,15 @@ static skin_t *skin_load(void) {
             continue;
         }
         int kind = !strcmp(fl[0], "img") ? IT_IMG : !strcmp(fl[0], "film") ? IT_FILM : !strcmp(fl[0], "btn") ? IT_BTN
-                 : !strcmp(fl[0], "label") ? IT_LABEL : !strcmp(fl[0], "hit") ? IT_HIT : -1;
+                 : !strcmp(fl[0], "label") ? IT_LABEL : !strcmp(fl[0], "hit") ? IT_HIT : !strcmp(fl[0], "xy") ? IT_XY : -1;
         if (kind < 0 || tab < 0 || s->nitems == MAX_ITEMS) continue;
         item_t *it = &s->items[s->nitems++];
         it->kind = kind; it->tab = tab;
         it->x = atoi(field(fl, nf, "x")); it->y = atoi(field(fl, nf, "y"));
         it->w = atoi(field(fl, nf, "w")); it->h = atoi(field(fl, nf, "h"));
         it->param = *field(fl, nf, "param") ? atoi(field(fl, nf, "param")) : -1;
+        if (kind == IT_XY)   /* a desktop-only drag area: the engine's parameter by its key */
+            for (int k = 0; k < NPARAMS; k++) if (!strcmp(PARAMS[k].key, field(fl, nf, "key"))) it->param = k;
         it->img = it->img2 = -1;
         if (kind == IT_IMG || kind == IT_FILM) it->img = skin_image(s, dir, field(fl, nf, "src"));
         if (kind == IT_BTN) { it->img = skin_image(s, dir, field(fl, nf, "on")); it->img2 = skin_image(s, dir, field(fl, nf, "off")); }
@@ -375,6 +377,7 @@ typedef struct {
     uint64_t last_hash;
     int dirty;
     int drag_param, drag_steps, press_param;
+    const item_t *xy;         /* the desktop-only drag area being dragged (skin "xy" items) */
     double drag_start_v, drag_y, drag_v;
 } view_t;
 
@@ -482,6 +485,26 @@ static const item_t *hit_at(view_t *v, double px, double py) {
     return NULL;
 }
 
+/* skin "xy" items: presses, drags and the wheel go to the engine as text, "<what> <x> <y>" with x, y 0..1 across the box */
+static const item_t *xy_at(view_t *v, double px, double py) {
+    for (int j = 0; j < NPARAMS; j++)   /* an open list may lie over the area: it takes the clicks */
+        if (popup_is(j) && v->w->open[j] > 0.5) return NULL;
+    for (int i = v->skin->nitems - 1; i >= 0; i--) {
+        const item_t *it = &v->skin->items[i];
+        if (it->tab != v->tab || it->kind != IT_XY || it->param < 0) continue;
+        if (px < it->x || py < it->y || px >= it->x + it->w || py >= it->y + it->h) continue;
+        if (ed_shown(v->w, it)) return it;
+    }
+    return NULL;
+}
+static void xy_send(view_t *v, const item_t *it, const char *what, double px, double py) {
+    char buf[64];
+    snprintf(buf, sizeof buf, "%s %.4f %.4f", what, clamp01((px - it->x) / (it->w > 0 ? it->w : 1)),
+             clamp01((py - it->y) / (it->h > 0 ? it->h : 1)));
+    eng_set(v->w, PARAMS[it->param].key, buf);
+    v->dirty = 1;
+}
+
 static int param_steps(int p) {
     const param_t *pp = &PARAMS[p];
     if (pp->nopts > 1) return pp->nopts - 1;
@@ -500,6 +523,8 @@ static void press(view_t *v, double px, double py) {
         if (t >= 0 && t < v->skin->ntabs && t != v->tab) { v->tab = t; close_popups(v, -1); v->dirty = 1; }
         return;
     }
+    const item_t *xy = xy_at(v, px, py - TAB_H);
+    if (xy) { close_popups(v, -1); v->xy = xy; xy_send(v, xy, "down", px, py - TAB_H); return; }
     const item_t *it = hit_at(v, px, py - TAB_H);
     if (!it) { close_popups(v, -1); return; }
     int p = it->param;
@@ -535,7 +560,8 @@ static void press(view_t *v, double px, double py) {
     ui_set(v, p, get_norm(v->w, p) > 0.5 ? 0 : 1, 3);
 }
 
-static void motion(view_t *v, double py) {
+static void motion(view_t *v, double px, double py) {
+    if (v->xy) { xy_send(v, v->xy, "drag", px, py - TAB_H); return; }
     if (v->drag_param < 0) return;
     double val = clamp01(v->drag_start_v + (v->drag_y - py) / DRAG_PX);
     if (v->drag_steps > 0) val = round(val * v->drag_steps) / v->drag_steps;
@@ -545,12 +571,15 @@ static void motion(view_t *v, double py) {
 }
 
 static void unpress(view_t *v) {
+    if (v->xy) { eng_set(v->w, PARAMS[v->xy->param].key, "up 0 0"); v->xy = NULL; v->dirty = 1; }
     if (v->drag_param >= 0) { ui_set(v, v->drag_param, v->drag_v, 2); v->drag_param = -1; }
     if (v->press_param >= 0) { ui_set(v, v->press_param, 0, 2); v->press_param = -1; }
 }
 
 static void wheel(view_t *v, double px, double py, int up) {
     if (py < TAB_H) return;
+    const item_t *xy = xy_at(v, px, py - TAB_H);
+    if (xy) { xy_send(v, xy, up ? "wheel+" : "wheel-", px, py - TAB_H); return; }
     const item_t *it = hit_at(v, px, py - TAB_H);
     if (!it || it->param < 0 || it->param >= NPARAMS || popup_is(it->param)) return;
     int p = it->param, steps = param_steps(p);
@@ -582,7 +611,7 @@ static void handle_events(view_t *v) {
             else if (e.xbutton.button == 4 || e.xbutton.button == 5) wheel(v, e.xbutton.x / s, e.xbutton.y / s, e.xbutton.button == 4);
             break;
         case ButtonRelease: if (e.xbutton.button == 1) unpress(v); break;
-        case MotionNotify: motion(v, e.xmotion.y / s); break;
+        case MotionNotify: motion(v, e.xmotion.x / s, e.xmotion.y / s); break;
         default: break;
         }
     }
@@ -713,7 +742,7 @@ void mpc_ed_mouse(void *ctx, int kind, double x, double y) {
     double s = v->scale > 0 ? v->scale : 1;
     switch (kind) {
     case 0: press(v, x / s, y / s); break;
-    case 1: motion(v, y / s); break;
+    case 1: motion(v, x / s, y / s); break;
     case 2: unpress(v); break;
     case 3: case 4: wheel(v, x / s, y / s, kind == 3); break;
     case 5: size_menu(v, x, y); break;
@@ -870,6 +899,7 @@ static void *editor_create(v3_t *w, const char *name) {
     v->height = (int)lround(page_h(v) * sc);
     v->scale = sc;
     v->drag_param = v->press_param = -1;
+    v->xy = NULL;
     v->last_prog = -1;
     return &v->vt;
 }

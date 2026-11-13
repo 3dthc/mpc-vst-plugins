@@ -94,6 +94,7 @@ typedef struct {
     pthread_mutex_t lock;             /* one engine call at a time (vst2_wrap.c eng_set) */
     IComponentHandler *handler;
     double rate;                      /* host sample rate */
+    uint64_t arr_in, arr_out;         /* the buses' speaker layouts: mono (1) or stereo (3); stereo until a host asks */
     int active;
     uint32_t latency;                 /* effect: host frames of delay through the FIFOs and converters */
     rs_t *rs_in, *rs_out;             /* host -> engine (effect input), engine -> host */
@@ -470,10 +471,13 @@ static void push_out(v3_t *w, int frames) {
     if (room > 0) w->olen += rs_pull(w->rs_out, w->ofifo[0] + w->olen, w->ofifo[1] + w->olen, room);
 }
 
+/* A safety net for the host's mix: a sample that isn't a number (or has run away past +-8, 18 dB over full scale) goes out as
+ * silence, so one bad block can't blast a project or poison the host's effects after it. */
+static float safe(float x) { return isfinite(x) && x < 8.0f && x > -8.0f ? x : 0.0f; }
 static void pop_out(v3_t *w, float *l, float *r, int n) {
     int m = n < w->olen ? n : w->olen;
-    if (l) memcpy(l, w->ofifo[0], sizeof(float) * m);
-    if (r) memcpy(r, w->ofifo[1], sizeof(float) * m);
+    if (l) for (int j = 0; j < m; j++) l[j] = safe(w->ofifo[0][j]);
+    if (r) for (int j = 0; j < m; j++) r[j] = safe(w->ofifo[1][j]);
     for (int j = m; j < n; j++) { if (l) l[j] = 0; if (r) r[j] = 0; }   /* never with the padding right */
     memmove(w->ofifo[0], w->ofifo[0] + m, sizeof(float) * (w->olen - m));
     memmove(w->ofifo[1], w->ofifo[1] + m, sizeof(float) * (w->olen - m));
@@ -815,14 +819,13 @@ static int32_t comp_bus_count(void *s, int32_t type, int32_t dir) {
     return type == kEvent && dir == kInput;
 }
 static tresult comp_bus_info(void *s, int32_t type, int32_t dir, int32_t index, BusInfo *b) {
-    (void)s;
     if (index != 0 || index >= comp_bus_count(s, type, dir)) return kInvalidArgument;
     memset(b, 0, sizeof *b);
     b->mediaType = type;
     b->direction = dir;
     b->busType = kMain;
     b->flags = kDefaultActive;
-    b->channelCount = type == kAudio ? 2 : 16;
+    b->channelCount = type != kAudio ? 16 : ((dir == kInput ? FROM(s, comp)->arr_in : FROM(s, comp)->arr_out) == 1 ? 1 : 2);
     to_utf16(b->name, type == kEvent ? "MIDI In" : dir == kInput ? "Input" : "Output", 128);
     return kResultOk;
 }
@@ -848,21 +851,39 @@ static const ComponentVtbl comp_vtbl = {
 
 /* ---- IAudioProcessor ---------------------------------------------------------------- */
 #define STEREO 3ull
+/* Mono or stereo on either side (an effect: mono, mono to stereo, stereo; an instrument: stereo or mono). The engine is
+ * always stereo: a mono input feeds both its sides, a mono output is the two sides' average. */
+#define MONO 1ull
 static tresult proc_set_arr(void *s, uint64_t *in, int32_t nin, uint64_t *out, int32_t nout) {
-    (void)s;
+    v3_t *w = FROM(s, proc);
 #ifdef PLUG_EFFECT
     if (nin != 1 || nout != 1) return kResultFalse;
-    return in[0] == STEREO && out[0] == STEREO ? kResultOk : kResultFalse;
+    if ((in[0] != MONO && in[0] != STEREO) || (out[0] != MONO && out[0] != STEREO)) return kResultFalse;
+    w->arr_in = in[0];
 #else
     (void)in;
     if (nin != 0 || nout != 1) return kResultFalse;
-    return out[0] == STEREO ? kResultOk : kResultFalse;
+    if (out[0] != MONO && out[0] != STEREO) return kResultFalse;
 #endif
+    w->arr_out = out[0];
+    return kResultOk;
 }
 static tresult proc_get_arr(void *s, int32_t dir, int32_t index, uint64_t *arr) {
     if (index != 0 || index >= comp_bus_count(s, kAudio, dir)) return kInvalidArgument;
-    *arr = STEREO;
+    v3_t *w = FROM(s, proc);
+    *arr = dir == kInput ? w->arr_in : w->arr_out;
     return kResultOk;
+}
+/* the engine's stereo output into the host's bus: as it is, or (mono) the average of its two sides */
+static void pop_bus(v3_t *w, float **out, int nch, int off, int n) {
+    if (!out) { pop_out(w, NULL, NULL, n); return; }
+    if (nch >= 2) { pop_out(w, out[0] + off, out[1] + off, n); return; }
+    float l[256], r[256];
+    for (int k = 0; k < n; k += 256) {
+        int m = n - k < 256 ? n - k : 256;
+        pop_out(w, l, r, m);
+        for (int j = 0; j < m; j++) out[0][off + k + j] = 0.5f * (l[j] + r[j]);
+    }
 }
 static tresult proc_can_size(void *s, int32_t size) { (void)s; return size == 0 ? kResultOk : kResultFalse; }
 static uint32_t proc_latency(void *s) { return FROM(s, proc)->latency; }
@@ -939,7 +960,8 @@ static tresult proc_process(void *s, ProcessData *d) {
     update_context(w, d->processContext, n);
 
     int evk = 0;
-    float **out = d->numOutputs > 0 && d->outputs[0].numChannels >= 2 ? d->outputs[0].channelBuffers32 : NULL;
+    int och = d->numOutputs > 0 ? d->outputs[0].numChannels : 0;
+    float **out = och >= 1 ? d->outputs[0].channelBuffers32 : NULL;
 #ifdef PLUG_EFFECT
     float **in = d->numInputs > 0 && d->inputs[0].numChannels >= 1 ? d->inputs[0].channelBuffers32 : NULL;
     const float *il = in ? in[0] : NULL, *ir = in ? (d->inputs[0].numChannels >= 2 ? in[1] : in[0]) : NULL;
@@ -948,7 +970,7 @@ static tresult proc_process(void *s, ProcessData *d) {
         for (int from = 0; from < n; from += CHUNK) {
             int to = n - from > CHUNK ? from + CHUNK : n;
             run_effect(w, il, ir, from, to, &evk);
-            pop_out(w, out ? out[0] + from : NULL, out ? out[1] + from : NULL, to - from);
+            pop_bus(w, out, och, from, to - from);
         }
         while (evk < w->nev) send_midi(w, w->ev[evk++].msg);
         for (int j = 0; j < n; j++) {   /* the dry signal, delayed as the output is: what bypass plays */
@@ -956,7 +978,7 @@ static tresult proc_process(void *s, ProcessData *d) {
             w->dry[0][w->drypos] = il ? il[j] : 0;
             w->dry[1][w->drypos] = ir ? ir[j] : 0;
             w->drypos = (w->drypos + 1) % (int)w->latency;
-            if (w->bypass && out) { out[0][j] = dl; out[1][j] = dr; }
+            if (w->bypass && out) { if (och >= 2) { out[0][j] = dl; out[1][j] = dr; } else out[0][j] = 0.5f * (dl + dr); }
         }
     } else {
         while (evk < w->nev) send_midi(w, w->ev[evk++].msg);
@@ -970,11 +992,11 @@ static tresult proc_process(void *s, ProcessData *d) {
         int end = evk < w->nev && w->ev[evk].frame < n ? w->ev[evk].frame : n;
         if (end - pos > CHUNK) end = pos + CHUNK;
         fill_out(w, end - pos);
-        pop_out(w, out ? out[0] + pos : NULL, out ? out[1] + pos : NULL, end - pos);
+        pop_bus(w, out, och, pos, end - pos);
         pos = end;
     }
     while (evk < w->nev) send_midi(w, w->ev[evk++].msg);   /* past the block (or a parameter-only call): now */
-    if (w->bypass && out) { memset(out[0], 0, sizeof(float) * n); memset(out[1], 0, sizeof(float) * n); }
+    if (w->bypass && out) for (int c = 0; c < (och < 2 ? och : 2); c++) memset(out[c], 0, sizeof(float) * n);
 #endif
     if (out) d->outputs[0].silenceFlags = 0;
     if (n > 0) report(w, d);
@@ -1245,6 +1267,7 @@ static v3_t *create(void) {
     if (!g_api->process) return NULL;
 #endif
     v3_t *w = calloc(1, sizeof *w);
+    if (w) w->arr_in = w->arr_out = STEREO;
     if (!w) return NULL;
     pthread_mutexattr_t ma;
     pthread_mutexattr_init(&ma);

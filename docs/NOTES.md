@@ -2616,3 +2616,11 @@ they hand VST2 state to a replacement VST3. Record the result here.
   itself per theme (`art ... when=theme:N`) the base page is the plain plate, so the 2 px around every picture showed
   as a grey frame. `picture ... margin=0` (also on `art`) crops it to the picture alone; give such pictures their own
   background (OxZygen cuts its knob-name strips from the panel they sit on).
+
+## 2026-11-13: mono bus layouts, desktop mouse areas, output safety net (offline)
+
+- `wrapper/vst3_wrap.c`/`au_wrap.m`: mono / mono -> stereo / stereo for effects, stereo / mono out for instruments;
+  `tools/vst3_host_test.c` `test_mono` passes for Shapey EQ, Tuney (effects) and Fretty (instrument). In Logic: not yet seen.
+- `desktop_items` + `xy` (desktop_skin.py, vst3_editor.c): Shapey's graph drag tested at the engine (tests/test_xy.c), not
+  yet by hand in a DAW.
+- Crash detection: left out on purpose (see DESKTOP_VST3.md); the output guard is what ships.

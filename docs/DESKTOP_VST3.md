@@ -131,6 +131,19 @@ window-size menu are the VST3's:
 stops the release) and zips the component on its own as `<name>-<version>-macos-au.zip`, next to the `-macos-vst3.zip`;
 `tools/install_mac_vst3.sh` installs either or both; `--check` runs auval on every installed one and prints a pass/fail summary.
 
+## Mono layouts, mouse areas, the output safety net (2026-11-13, offline: tools/vst3_host_test.c; auval in releases)
+
+- Buses: an effect takes mono or stereo in and out (Logic's Mono, Mono -> Stereo, Stereo; the AU lists those three), an
+  instrument stereo or mono out. The engine stays stereo: a mono input feeds both sides, a mono output is their average.
+  The host test runs every pair and checks a mono output writes one channel only.
+- vst.json `"desktop_items"`: a file of desktop-only items, `<page> xy x= y= w= h= key=<param>` in layout.conf
+  coordinates (`*` for every page). In the plugin window a press, drag, release or wheel inside goes to the engine as
+  `set_param(key, "down|drag|up|wheel+|wheel- <x> <y>")`, x and y 0..1 across the box; the MPC skin never has it. The engine
+  reports what it moved with `mpc_engine_changed`. Shapey uses one over its graph to drag bands freely.
+- The desktop output silences a sample that is not a number or runs past +-8 (18 dB over full scale), so one bad block
+  can't reach the rest of a project. A crash handler was considered and left out: catching a crash inside a host's
+  process can't be made safe (the host, Logic's sandbox and its own crash reporter own those signals).
+
 ## How it maps onto VST3
 
 `wrapper/vst3_wrap.c` drives the same `mpc_engine_t` as `vst2_wrap.c`, from the same generated `params.h`. The VST3 ABI is

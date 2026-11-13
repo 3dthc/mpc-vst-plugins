@@ -19,6 +19,11 @@ option i (IndexedEnabling: when= panels, open popups). Parameters are the VST2 i
     btn     x y w h on= off= param= id= n= [if=]   on/off image: on while the value is option id of n (n = 1: while on)
     label   x y w h param= kind=value|name text= just=l|c|r upper= colour=AARRGGBB size= style= [if=]
     hit     x y w h param= mode=radio|toggle|drag id= n= [if=]
+    xy      x y w h key= [if=]                desktop only: a press, drag, release or wheel inside goes to the engine as
+                                              set_param(key, "down|drag|up|wheel+|wheel- <x> <y>"), x and y 0..1 across
+                                              the box (top left 0 0). From vst.json "desktop_items" (third argument):
+                                              lines "<page> xy x= y= w= h= key=", in layout.conf's coordinates; <page> is
+                                              a page's name as the desktop tabs show it (a Q-Link page's title), or * for all.
 """
 import json
 import os
@@ -52,7 +57,25 @@ def clean(s):
     return str(s).replace("\t", " ").replace("\n", " ")
 
 
-def convert(skin_dir, out_dir):
+def extra_items(path):
+    """vst.json "desktop_items": {tab name: [item line]} (layout coordinates: y includes MPC's 86 px header)."""
+    out = {}
+    if not path:
+        return out
+    for raw in open(path):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        tab, kind, rest = line.split(None, 2)
+        f = dict(x.split("=", 1) for x in rest.split())
+        if kind != "xy":
+            sys.exit("%s: unknown desktop item %r" % (path, kind))
+        geo = "x=%d\ty=%d\tw=%d\th=%d" % (int(f["x"]), int(f["y"]) - 86, int(f["w"]), int(f["h"]))
+        out.setdefault(tab.upper(), []).append("xy\t%s\tkey=%s" % (geo, f["key"]) + ("\tif=%s" % f["if"] if "if" in f else ""))
+    return out
+
+
+def convert(skin_dir, out_dir, extra_path=None):
     tui = os.path.join(skin_dir, "TUI.json")
     if not os.path.exists(tui):
         tui = os.path.join(skin_dir, "Plugin Skins", "TUI.json")
@@ -144,12 +167,24 @@ def convert(skin_dir, out_dir):
             shutil.copyfile(s, os.path.join(out_dir, os.path.basename(name)))
         else:
             sys.stderr.write("warning: desktop skin: %s is missing\n" % name)
+    extra = extra_items(extra_path)
+    if extra:   # each tab's desktop-only items after its own (drawn last, so they take the clicks)
+        out, cur = [], None
+        for ln in lines + ["tab\tname="]:
+            if ln.startswith("tab\t"):
+                out += (extra.pop(cur, []) + extra.get("*", [])) if cur is not None else []
+                cur = ln.split("name=", 1)[1].upper()
+            out.append(ln)
+        lines = out[:-1]
+        extra.pop("*", None)
+        if extra:
+            sys.exit("desktop_items: no page named %s" % ", ".join(sorted(extra)))
     open(os.path.join(out_dir, "desktop.skin"), "w").write("\n".join(lines) + "\n")
     return len(t["tabs"]), len(lines), len(images)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
+    if len(sys.argv) not in (3, 4):
         sys.exit(__doc__)
-    tabs, n, imgs = convert(sys.argv[1], sys.argv[2])
+    tabs, n, imgs = convert(sys.argv[1], sys.argv[2], sys.argv[3] if len(sys.argv) == 4 else None)
     print("desktop skin: %d pages, %d items, %d images" % (tabs, n, imgs))
