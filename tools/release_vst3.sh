@@ -61,17 +61,7 @@ import plistlib,sys; c=plistlib.load(open(sys.argv[1],"rb"))["AudioComponents"][
   else tail -40 "$OUT/auval-$NAME.log"; echo "::error::auval failed for $NAME ($T $S $M)" >&2; exit 1; fi
   AUSTAGE="$(mktemp -d)"; cp -R "$COMP" "$AUSTAGE/"   # its own zip: <name>-<version>-macos-au.zip
 fi
-if [ "$OS" = macos ]; then
-  cat > "$STAGE/README.txt" <<TXT
-$NAME $VERSION, VST3 for macOS (Apple Silicon and Intel, macOS 10.13 or later)
-
-Install: copy $NAME.vst3 into ~/Library/Audio/Plug-Ins/VST3, then rescan plugins in MPC Desktop or your DAW.
-(Logic Pro and GarageBand: use $NAME-$VERSION-macos-au.zip instead.)
-
-It is the same instrument as the MPC VST2: a project saved on the MPC opens with it in MPC Desktop
-(controller mode) with the same sound, and a project saved with it opens on the MPC.
-TXT
-else
+if [ "$OS" != macos ]; then
   cat > "$STAGE/README.txt" <<TXT
 $NAME $VERSION, VST3 for Windows (64-bit)
 
@@ -104,24 +94,45 @@ if [ "$OS" = macos ] && [ -n "${MACOS_SIGN_IDENTITY:-}" ]; then   # Developer ID
     echo "::warning::signed with $MACOS_SIGN_IDENTITY but not notarized (APPLE_ID / APPLE_TEAM_ID / APPLE_APP_PASSWORD missing)"
   fi
 fi
-if [ "$OS" = macos ] && [ -z "$NOTARIZED" ]; then   # say how to get past Gatekeeper in the README
-  cat >> "$STAGE/README.txt" <<TXT
-
-If macOS says the plugin "can't be opened" or "can't be verified" (it isn't notarized by Apple), install it with this
-Terminal command instead. It installs every plugin's latest Mac VST3 and Audio Unit and clears the block:
-  curl -fsSL https://raw.githubusercontent.com/3dthc/mpc-vst-plugins/desktop-vst3-openmpc/tools/install_mac_vst3.sh | bash -s -- --all
-Or, for a copy you already downloaded and installed, just:
-  curl -fsSL https://raw.githubusercontent.com/3dthc/mpc-vst-plugins/desktop-vst3-openmpc/tools/install_mac_vst3.sh | bash
-TXT
-fi
 if [ "$OS" = macos ]; then   # the Audio Unit: a zip of its own, with its own README
-  cat > "$AUSTAGE/README.txt" <<TXT
-$NAME $VERSION, Audio Unit for macOS (Logic Pro, GarageBand; Apple Silicon and Intel, macOS 10.13 or later)
+  mac_readme() {   # $1 = vst3 | au: the same clear steps in both zips, each saying which one it is
+    local ext what where other
+    if [ "$1" = au ]; then ext=component; what="AUDIO UNIT (.component) for LOGIC PRO and GARAGEBAND"
+      where="~/Library/Audio/Plug-Ins/Components"; other="For MPC DESKTOP, download ${NAME// /-}-$VERSION-macos-vst3.zip instead (or as well)."
+    else ext=vst3; what="VST3 (.vst3) for MPC DESKTOP and other VST3 hosts"
+      where="~/Library/Audio/Plug-Ins/VST3"; other="For LOGIC PRO or GARAGEBAND, download ${NAME// /-}-$VERSION-macos-au.zip instead (or as well)."; fi
+    cat <<TXT
+$NAME $VERSION - $what
+Apple Silicon and Intel Macs, macOS 10.13 or later.
+$other
 
-Install: copy $NAME.component into ~/Library/Audio/Plug-Ins/Components, then restart Logic Pro (it checks new Audio
-Units when it starts). Same sound, skin, presets and saved settings as the MPC plugin and the VST3.
+HOW TO INSTALL (3 STEPS)
+------------------------
+1. LEAVE THE DOWNLOADED ZIP IN YOUR DOWNLOADS FOLDER (unzipped or not, both are fine).
+
+2. OPEN TERMINAL (Applications > Utilities > Terminal), PASTE THIS LINE AND PRESS RETURN:
+
+   curl -fsSL INSTALLER | bash
+
+   It installs the plugin into $where
+   and clears macOS's "can't be verified" block. No password needed.
+
+3. CHECK IT (recommended for Audio Units). PASTE THIS AND PRESS RETURN:
+
+   curl -fsSL INSTALLER | bash -s -- --check
+
+   Every plugin should say PASS.
+
+THEN: RESTART LOGIC PRO (it looks for new Audio Units when it starts), or RESCAN PLUGINS in MPC Desktop.
+
+INSTALL BY HAND INSTEAD
+-----------------------
+Copy $NAME.$ext into $where.
+If macOS then says it "can't be opened" or "can't be verified", run step 2 above.
 TXT
-  [ -n "$NOTARIZED" ] || { echo; sed -n '/can.t be opened/,$p' "$STAGE/README.txt"; } >> "$AUSTAGE/README.txt"
+  }
+  mac_readme vst3 | sed "s#INSTALLER#https://raw.githubusercontent.com/3dthc/mpc-vst-plugins/desktop-vst3-openmpc/tools/install_mac_vst3.sh#" > "$STAGE/README.txt"
+  mac_readme au | sed "s#INSTALLER#https://raw.githubusercontent.com/3dthc/mpc-vst-plugins/desktop-vst3-openmpc/tools/install_mac_vst3.sh#" > "$AUSTAGE/README.txt"
   AUZIP="$OUT/$NAME-${VERSION:-dev}-macos-au.zip"; AUZIP="${AUZIP// /-}"; rm -f "$AUZIP"
   (cd "$AUSTAGE" && ditto -c -k --sequesterRsrc . "$AUZIP"); rm -rf "$AUSTAGE"
   echo "zip: $AUZIP ($(du -h "$AUZIP" | cut -f1))"
