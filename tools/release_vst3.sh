@@ -40,6 +40,8 @@ if [ -n "${VST3_DATA:-}" ]; then   # every data file made it into the bundle (a 
   want=$(find "$VST3_DATA" -type f | wc -l)
   sub="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("defines", {}).get("MODULE_SUBDIR", "").strip("\""))' "$CFG")"
   got=$(find "$B" -type d -name "$sub" -exec find {} -type f \; | wc -l)
+  [ "$OS" != windows ] || got=$(sed -n 's/^embedded: \([0-9]*\) files.*/\1/p' "$LOG" | tail -1)   # packed inside the .vst3
+  got=${got:-0}
   echo "data: $got of $want files in the bundle"
   [ "$got" -ge "$want" ] && [ "$want" -gt 1 ] || { echo "::error::the bundle is missing engine data ($got of $want files)" >&2; exit 1; }
 fi
@@ -59,9 +61,9 @@ else
   cat > "$STAGE/README.txt" <<TXT
 $NAME $VERSION, VST3 for Windows (64-bit)
 
-Install: copy $NAME.vst3$( [ -d "$B/$NAME" ] && echo " and the $NAME folder next to it (its skin and sounds)") into
-C:\\Program Files\\Common Files\\VST3, then rescan plugins in MPC Desktop or your DAW. Keep them side by side.
-If you installed an earlier version, delete its old $NAME.vst3 folder first.
+Install: copy $NAME.vst3 (one file, its skin and sounds inside) into C:\\Program Files\\Common Files\\VST3, then rescan
+plugins in MPC Desktop or your DAW. If an earlier version left a $NAME.vst3 folder or a $NAME folder there, delete them.
+On first load it unpacks its skin and sounds into %LOCALAPPDATA%\\MPC VST3\\$NAME (once per version).
 The plugin window shows the same skin as on the MPC.
 
 It is the same instrument as the MPC VST2: a project saved on the MPC opens with it in MPC Desktop with the same sound.

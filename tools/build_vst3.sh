@@ -103,9 +103,25 @@ for f in $SOURCES; do
   esac
   OBJS="$OBJS $o"
 done
+SUBDIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("defines", {}).get("MODULE_SUBDIR", "").strip("\""))' "$CFG")"
+EMBED_CF=""
+if [ "$ARCH" = x86_64-win ]; then   # one .vst3 file: the skin and the engine's data ride inside it (unpacked on first load)
+  EMB="$OBJ/embed"
+  rm -rf "$EMB"; mkdir -p "$EMB"
+  if [ -n "$EDITOR_CF" ]; then
+    python3 "$MV/tools/desktop_skin.py" "$SKIN" "$EMB/skin"
+    cp "$MV"/tools/html_art/fonts/TitilliumWeb-{Regular,SemiBold,Bold}.ttf "$MV/tools/html_art/fonts/OFL.txt" "$EMB/skin/"
+  fi
+  if [ -n "$SUBDIR" ]; then mkdir -p "$EMB/$SUBDIR"; [ -z "${VST3_DATA:-}" ] || cp -R "$VST3_DATA"/. "$EMB/$SUBDIR"/; fi
+  python3 "$MV/tools/pack_embed.py" "$EMB" "$OBJ/embed.bin"
+  printf '\t.section .rdata,"dr"\n\t.balign 16\n\t.globl mpc_embed_start\nmpc_embed_start:\n\t.incbin "%s"\n\t.globl mpc_embed_end\nmpc_embed_end:\n' "$OBJ/embed.bin" > "$OBJ/embed.S"
+  $CC -c "$OBJ/embed.S" -o "$OBJ/embed.o"
+  OBJS="$OBJS $OBJ/embed.o"
+  EMBED_CF="-DMPC_EMBED"
+fi
 for f in "$MV/wrapper/vst3_wrap.c" $ADAPTER_SRC; do
   o="$OBJ/$(basename "$f").o"
-  $CC $OPT -std=gnu11 $EDITOR_CF -I"$MV/wrapper" -I"$PORT/build" -c "$f" -o "$o"
+  $CC $OPT -std=gnu11 $EDITOR_CF $EMBED_CF -I"$MV/wrapper" -I"$PORT/build" -c "$f" -o "$o"
   OBJS="$OBJS $o"
 done
 VIEW_CLASS="MPCView_$(printf '%s_%s_%s' "$NAME" "$UID4" "$VERSION" | tr -c 'A-Za-z0-9_' '_')"   # per plugin and version
@@ -129,7 +145,6 @@ else
   $CXX -shared -fPIC $LDSAN $OBJS $LIBS $EDITOR_LIBS -lpthread -Wl,--no-undefined -o "$SO"
 fi
 [ -n "${VST3_SAN:-}" ] || $STRIP "$SO"
-SUBDIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("defines", {}).get("MODULE_SUBDIR", "").strip("\""))' "$CFG")"
 DATA="$BUNDLE/Contents/$ARCH/$SUBDIR"
 [ -z "$MAC" ] || DATA="$BUNDLE/Contents/Resources/$SUBDIR"   # Contents/MacOS holds only code (signing)
 if [ -n "$SUBDIR" ]; then
@@ -172,14 +187,11 @@ elif [ "$ARCH" = x86_64-win ]; then
 else
   echo "exported: $(readelf --dyn-syms -W "$SO" | grep -E ' GLOBAL .* [0-9]+ [A-Za-z]' | grep -v UND | awk '{print $8}' | tr '\n' ' ')"
 fi
-if [ "$ARCH" = x86_64-win ]; then   # the single-file layout Windows hosts scan (MPC 3 lists only these): <name>.vst3 + <name>\
+if [ "$ARCH" = x86_64-win ]; then   # what Windows hosts scan (MPC 3 lists only single files): <name>.vst3, everything inside
   FLAT="$OUTDIR/windows"
-  rm -rf "$FLAT"; mkdir -p "$FLAT/$NAME"
+  rm -rf "$FLAT"; mkdir -p "$FLAT"
   cp "$SO" "$FLAT/$NAME.vst3"
-  [ ! -d "$BUNDLE/Contents/Resources/skin" ] || cp -R "$BUNDLE/Contents/Resources/skin" "$FLAT/$NAME/skin"
-  [ -z "$SUBDIR" ] || cp -R "$DATA" "$FLAT/$NAME/$SUBDIR"
-  rmdir "$FLAT/$NAME" 2>/dev/null || true   # nothing to keep beside it
-  echo "windows: $ROOT/$FLAT ($NAME.vst3$( [ -d "$FLAT/$NAME" ] && echo " + $NAME\\"))"
+  echo "windows: $ROOT/$FLAT/$NAME.vst3 ($(du -h "$FLAT/$NAME.vst3" | cut -f1), skin and data inside)"
 fi
 echo "bundle: $ROOT/$BUNDLE"
 if [ "${2:-}" = --install ] && [ -n "$MAC" ]; then

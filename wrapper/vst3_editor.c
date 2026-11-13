@@ -605,7 +605,7 @@ static void notify_program(view_t *v) {
     if (v->last_prog < 0) { v->last_prog = cp; return; }   /* the first look: nothing changed yet */
     if (cp == v->last_prog) return;
     v->last_prog = cp;
-    if (w->host_prog == cp) return;   /* the host picked it: it already knows */
+    if (w->host_prog == cp) return;   /* the host picked it: ctrl_set_norm told it already */
     w->host_prog = cp;
     h->v->beginEdit(h, PROG_ID);
     h->v->performEdit(h, PROG_ID, prog_norm(cp));
@@ -633,7 +633,10 @@ static void ui_set(view_t *v, int p, double val, int phase) {
 #else
     int on_ui = v->loop != NULL;
 #endif
-    int via_host = h && on_ui && is_param((uint32_t)p) && !PARAMS[p].string_display;
+    /* Push buttons (momentary, steppers) skip the host: a host passes one value per parameter per block, so a click shorter
+     * than a block lost its press (themes, bank/patch and voice arrows did nothing on MPC 3). The queue keeps both edges. */
+    int button = is_param((uint32_t)p) && (PARAMS[p].momentary || PARAMS[p].step_target >= 0);
+    int via_host = h && on_ui && is_param((uint32_t)p) && !PARAMS[p].string_display && !button;
     if (via_host) {
         if (phase == 0 || phase == 3) h->v->beginEdit(h, (uint32_t)p);
         h->v->performEdit(h, (uint32_t)p, val);
@@ -644,7 +647,7 @@ static void ui_set(view_t *v, int p, double val, int phase) {
         if (head - __atomic_load_n(&w->uiq_tail, __ATOMIC_ACQUIRE) < UIQ) {
             w->uiq[head % UIQ].p = p;
             w->uiq[head % UIQ].v = val;
-            w->hostval[p] = val;
+            if (!button) w->hostval[p] = val;   /* a button's edge is apply_param()'s to see, when process() drains it */
             __atomic_store_n(&w->uiq_head, head + 1, __ATOMIC_RELEASE);
         }
     }

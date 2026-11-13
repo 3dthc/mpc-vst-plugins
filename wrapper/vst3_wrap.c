@@ -644,15 +644,90 @@ static void make_cid(void) {
 #endif
 }
 
-/* A single-file Windows VST3 (<VST3 folder>\<name>.vst3, the layout every Windows host scans, MPC 3 included) keeps its
- * skin and data in a folder named after the plugin next to it: <VST3 folder>\<name>\skin, ...\<name>\<MODULE_SUBDIR>.
- * flat_dir() gives that folder when there is one (here: the folder holding the plugin's binary); a bundle has none. */
+/* A single-file Windows VST3 (<VST3 folder>\<name>.vst3: the layout MPC 3 lists) carries its skin and engine data inside
+ * it (tools/pack_embed.py, linked in as mpc_embed_start..end) and unpacks them once into
+ * %LOCALAPPDATA%\MPC VST3\<name>\<version>-<index hash>\, which flat_dir() then gives (skin\, <MODULE_SUBDIR>\). A folder named
+ * after the plugin next to it (an earlier layout) is still used when present; a bundle has neither. */
 #include <sys/stat.h>
+#if defined(_WIN32) && defined(MPC_EMBED)
+#include <windows.h>
+#include <errno.h>
+extern const unsigned char mpc_embed_start[], mpc_embed_end[];
+static uint32_t rd32(const unsigned char *p) { return p[0] | p[1] << 8 | p[2] << 16 | (uint32_t)p[3] << 24; }
+static int mkdirs(char *path) {   /* every folder of path; path is restored */
+    for (char *c = path + 3; *c; c++)
+        if (*c == '\\' || *c == '/') { char k = *c; *c = 0; _mkdir(path); *c = k; }
+    return _mkdir(path) == 0 || errno == EEXIST;
+}
+static int embed_dir(char *out, size_t n) {
+    static char cached[600];
+    static int done;
+    if (done) { snprintf(out, n, "%s", cached); return cached[0] != 0; }
+    const unsigned char *b = mpc_embed_start, *e = mpc_embed_end;
+    if (e - b < 12 || memcmp(b, "MPCRES01", 8)) return 0;
+    uint32_t count = rd32(b + 8);
+    uint64_t h = 1469598103934665603ull;   /* the index (paths and sizes): a new build unpacks fresh */
+    const unsigned char *p = b + 12;
+    for (uint32_t i = 0; i < count && p + 6 <= e; i++) {
+        unsigned len = p[0] | p[1] << 8;
+        uint32_t sz = rd32(p + 2 + len);
+        for (unsigned k = 0; k < len + 6; k++) h = (h ^ p[k]) * 1099511628211ull;
+        p += 6 + len + sz;
+    }
+    const char *base = getenv("LOCALAPPDATA");
+    if (!base) base = getenv("APPDATA");
+    if (!base) return 0;
+    char dir[600], tmp[640], mark[660];
+    snprintf(dir, sizeof dir, "%s\\MPC VST3\\%s\\%d-%08x", base, PLUG_NAME, PLUG_VERSION, (unsigned)(h ^ (h >> 32)));
+    snprintf(mark, sizeof mark, "%s\\.complete", dir);
+    struct stat st;
+    if (stat(mark, &st) != 0) {   /* first load of this build: unpack beside, then move into place */
+        snprintf(tmp, sizeof tmp, "%s.tmp%lu", dir, (unsigned long)GetCurrentProcessId());
+        if (!mkdirs(tmp)) return 0;
+        p = b + 12;
+        int ok = 1;
+        for (uint32_t i = 0; i < count && ok; i++) {
+            unsigned len = p[0] | p[1] << 8;
+            uint32_t sz = rd32(p + 2 + len);
+            char rel[512], path[1200];
+            if (len >= sizeof rel) { ok = 0; break; }
+            memcpy(rel, p + 2, len);
+            rel[len] = 0;
+            for (char *c = rel; *c; c++) if (*c == '/') *c = '\\';
+            snprintf(path, sizeof path, "%s\\%s", tmp, rel);
+            char *slash = strrchr(path, '\\');
+            if (slash) { *slash = 0; mkdirs(path); *slash = '\\'; }
+            FILE *f = fopen(path, "wb");
+            if (!f || fwrite(p + 6 + len, 1, sz, f) != sz) ok = 0;
+            if (f) fclose(f);
+            p += 6 + len + sz;
+        }
+        if (ok) {
+            snprintf(mark, sizeof mark, "%s\\.complete", tmp);
+            FILE *f = fopen(mark, "wb");
+            if (f) fclose(f);
+            if (!MoveFileExA(tmp, dir, 0)) {   /* another instance got there first: use theirs */
+                char cmd[700];
+                snprintf(cmd, sizeof cmd, "%s\\.complete", dir);
+                if (stat(cmd, &st) != 0) return 0;
+            }
+        } else return 0;
+    }
+    snprintf(cached, sizeof cached, "%s", dir);
+    done = 1;
+    snprintf(out, n, "%s", dir);
+    return 1;
+}
+#endif
 static int flat_dir(const char *here, char *out, size_t n) {
 #ifdef _WIN32
     struct stat st;
-    if (snprintf(out, n, "%s/%s", here, PLUG_NAME) >= (int)n) return 0;
-    return stat(out, &st) == 0 && (st.st_mode & S_IFDIR);
+    if (snprintf(out, n, "%s/%s", here, PLUG_NAME) < (int)n && stat(out, &st) == 0 && (st.st_mode & S_IFDIR)) return 1;
+#ifdef MPC_EMBED
+    return embed_dir(out, n);
+#else
+    return 0;
+#endif
 #else
     (void)here; (void)out; (void)n;
     return 0;
@@ -1033,7 +1108,12 @@ static tresult ctrl_set_norm(void *s, uint32_t id, double v) {
     if (is_param(id) && (PARAMS[id].momentary || PARAMS[id].step_target >= 0)) return kResultOk;   /* process() owns their state */
     if (is_param(id)) w->hostval[id] = clamp01(v);
     if (id == BYPASS_ID) w->bypass = v > 0.5;
-    if (id == PROG_ID && has_programs()) { w->host_prog = prog_index(v); w->host_pick_pending = 1; }   /* reads back at once */
+    if (id == PROG_ID && has_programs()) {   /* reads back at once, and the host is told: hosts (MPC 3) show the name on that */
+        int idx = prog_index(v), was = w->host_prog;
+        w->host_prog = idx;
+        w->host_pick_pending = 1;
+        if (idx != was && w->handler) w->handler->v->restartComponent(w->handler, 4 /* kParamValuesChanged */);
+    }
     return kResultOk;
 }
 static tresult ctrl_set_handler(void *s, IComponentHandler *h) {
