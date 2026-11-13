@@ -470,6 +470,8 @@ jobs:
           cd dist && unzip -q *-vst3.zip -d x && cd x
           P="$(ls -d *.vst3 | head -1)"
           V="$(ls "$GITHUB_WORKSPACE"/validator-bin/validator*)"
-          "$V" "$PWD/$P" 2>&1 | tee ../validator.txt | tail -40
+          "$V" "$PWD/$P" > ../validator.txt 2>&1 || true
+          grep -E "^Result:" ../validator.txt || true
+          grep -B25 "\[Failed\]" ../validator.txt || true
           ! grep -q "Invalid Module" ../validator.txt || { echo "::error::$P did not load in Steinberg's validator"; exit 1; }
           grep -E "Result: .* tests passed, 0 tests failed" ../validator.txt || { echo "::error::$P failed Steinberg's validator (validator.txt)"; exit 1; }
