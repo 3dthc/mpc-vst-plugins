@@ -9,6 +9,9 @@
 #   Download and install the latest published VST3 of every plugin (or name some: ... | bash -s -- Fretty Sonix):
 #     curl -fsSL https://raw.githubusercontent.com/3dthc/mpc-vst-plugins/desktop-vst3-openmpc/tools/install_mac_vst3.sh | bash -s -- --all
 #
+#   Check every installed Audio Unit of these plugins with Apple's validator (auval), one summary at the end:
+#     curl -fsSL https://raw.githubusercontent.com/3dthc/mpc-vst-plugins/desktop-vst3-openmpc/tools/install_mac_vst3.sh | bash -s -- --check
+#
 # Installs into ~/Library/Audio/Plug-Ins/VST3 and .../Components (no password needed). Rescan plugins afterwards.
 set -euo pipefail
 DEST="$HOME/Library/Audio/Plug-Ins/VST3"
@@ -43,6 +46,31 @@ install_zip() {   # a <Name>-<version>-macos-vst3.zip: unpack, replace the old c
   killall -9 AudioComponentRegistrar 2>/dev/null || true
   rm -rf "$tmp"
 }
+
+if [ "${1:-}" = --check ]; then   # auval every one of these plugins' Audio Units (bundle id io.mpcvst.au.*)
+  pass=0; fail=0; failed=""
+  shopt -s nullglob
+  for b in "$CDEST"/*.component /Library/Audio/Plug-Ins/Components/*.component; do
+    pl="$b/Contents/Info.plist"
+    case "$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$pl" 2>/dev/null || true)" in io.mpcvst.au.*) ;; *) continue ;; esac
+    t="$(/usr/libexec/PlistBuddy -c "Print :AudioComponents:0:type" "$pl")"
+    s="$(/usr/libexec/PlistBuddy -c "Print :AudioComponents:0:subtype" "$pl")"
+    m="$(/usr/libexec/PlistBuddy -c "Print :AudioComponents:0:manufacturer" "$pl")"
+    n="$(basename "$b" .component)"
+    log="$(mktemp)"
+    if auval -v "$t" "$s" "$m" > "$log" 2>&1 && grep -q "AU VALIDATION SUCCEEDED" "$log"; then
+      echo "  PASS  $n  ($t $s $m)"; pass=$((pass + 1))
+    else
+      echo "  FAIL  $n  ($t $s $m):"; grep -iE "error|fail|warning" "$log" | head -5 | sed 's/^/        /' || true
+      fail=$((fail + 1)); failed="$failed $n"
+    fi
+    rm -f "$log"
+  done
+  [ $((pass + fail)) -gt 0 ] || { echo "No Audio Units of these plugins are installed in $CDEST."; exit 1; }
+  echo "$pass passed, $fail failed.${failed:+ Failed:$failed}"
+  [ "$fail" -eq 0 ] || echo "If one failed right after installing, restart the Mac (or log out and in) and run this again."
+  exit $((fail > 0))
+fi
 
 if [ "${1:-}" = "" ]; then
   echo "Unblocking installed plugins in $DEST and /Library/Audio/Plug-Ins/VST3:"
