@@ -11,8 +11,16 @@ typedef uint8_t TUID[16];
 typedef uint16_t char16;
 typedef char16 String128[128];
 enum { kNoInterface = -1, kResultOk = 0, kResultFalse = 1, kInvalidArgument = 2, kNotImplemented = 3 };
+#ifdef _WIN32
+/* Windows keeps interface IDs in COM layout (Steinberg's COM_COMPATIBLE INLINE_UID): the first three fields little-endian.
+ * Without it a real Windows host's queryInterface never matches (GetPluginFactory looks like it returned nothing). */
+#define IID(a, b, c, d) { (a) & 255, ((a) >> 8) & 255, ((a) >> 16) & 255, (a) >> 24, ((b) >> 16) & 255, (b) >> 24, (b) & 255, \
+                          ((b) >> 8) & 255, (c) >> 24, ((c) >> 16) & 255, ((c) >> 8) & 255, (c) & 255, (d) >> 24, ((d) >> 16) & 255, \
+                          ((d) >> 8) & 255, (d) & 255 }
+#else
 #define IID(a, b, c, d) { (a) >> 24, ((a) >> 16) & 255, ((a) >> 8) & 255, (a) & 255, (b) >> 24, ((b) >> 16) & 255, ((b) >> 8) & 255, (b) & 255, \
                           (c) >> 24, ((c) >> 16) & 255, ((c) >> 8) & 255, (c) & 255, (d) >> 24, ((d) >> 16) & 255, ((d) >> 8) & 255, (d) & 255 }
+#endif
 static const TUID iid_FUnknown = IID(0x00000000u, 0x00000000u, 0xC0000000u, 0x00000046u);
 static const TUID iid_IPluginBase = IID(0x22888DDBu, 0x156E45AEu, 0x8358B348u, 0x08190625u);
 static const TUID iid_IPluginFactory = IID(0x7A4D811Cu, 0x52114A1Fu, 0xAED9D2EEu, 0x0B43BF9Fu);

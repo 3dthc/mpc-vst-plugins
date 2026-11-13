@@ -430,3 +430,46 @@ jobs:
           OS: ${{ matrix.os }}
         run: gh release upload "$TAG" dist-$OS/*.zip --clobber
 
+
+  # Steinberg's own VST3 validator on the real OS (the Windows build is tested under Wine above, which is more forgiving: a
+  # COM-layout bug once passed there and failed on Windows). The SDK is fetched here to build the validator, never committed.
+  desktop-validate:
+    needs: desktop
+    if: ${{ inputs.desktop }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(inputs.desktop_targets) }}
+    runs-on: ${{ matrix.os == 'macos' && 'macos-latest' || 'windows-latest' }}
+    env:
+      SDK_TAG: v3.7.14_build_55
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.tag }}-vst3-${{ matrix.os }}
+          path: dist
+      - uses: actions/cache@v4
+        id: val
+        with:
+          path: validator-bin
+          key: vst3-validator-${{ matrix.os }}-v3.7.14_build_55
+      - name: Build Steinberg's validator
+        if: ${{ steps.val.outputs.cache-hit != 'true' }}
+        run: |
+          git clone -q --depth 1 -b "$SDK_TAG" --recursive https://github.com/steinbergmedia/vst3sdk.git sdk
+          cmake -S sdk -B sb -DCMAKE_BUILD_TYPE=Release -DSMTG_ENABLE_VST3_PLUGIN_EXAMPLES=OFF -DSMTG_ENABLE_VST3_HOSTING_EXAMPLES=ON \
+            -DSMTG_ENABLE_VSTGUI_SUPPORT=OFF -DSMTG_RUN_VST_VALIDATOR=OFF >/dev/null
+          cmake --build sb --config Release --target validator -j 4 >/dev/null
+          mkdir -p validator-bin
+          cp "$(find sb -name 'validator' -type f -perm -u+x -o -name 'validator.exe' | head -1)" validator-bin/
+      - name: Validate
+        run: |
+          cd dist && unzip -q *-vst3.zip -d x && cd x
+          P="$(ls -d *.vst3 | head -1)"
+          V="$(ls "$GITHUB_WORKSPACE"/validator-bin/validator*)"
+          "$V" "$PWD/$P" 2>&1 | tee ../validator.txt | tail -40
+          ! grep -q "Invalid Module" ../validator.txt || { echo "::error::$P did not load in Steinberg's validator"; exit 1; }
+          grep -E "Result: .* tests passed, 0 tests failed" ../validator.txt || { echo "::error::$P failed Steinberg's validator (validator.txt)"; exit 1; }
