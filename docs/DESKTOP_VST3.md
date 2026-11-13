@@ -75,6 +75,14 @@ picked on the page (the engine's own browser) left the host's Preset field on th
 from its UI-thread tick: beginEdit/performEdit/endEdit on the program parameter, then restartComponent(kParamValuesChanged).
 A program set on the controller (setParamNormalized) also reads back at once, before process() applies it.
 
+Program changes, second follow-up (2026-11-12, user on MPC 3 macOS/Windows: the Preset field kept the first name plus "*"):
+a program change no longer reaches the host as parameter edits. For 0.6 s after one (a preset may load over several blocks)
+process() sends no parameter changes, then the UI tick restarts with kParamValuesChanged so the host re-reads every value; a
+host pick (setParamNormalized on the program parameter) is applied there and then, as JUCE plugins do, and restarts at once.
+"live" parameters (meters, an orb) are read-only and never sent as changes. Checked offline with a JUCE 8 host on Linux:
+picks read back by name, 0 parameter edits after them (OxZygen, Sonix, OB-Xd). Momentary buttons hold for at least 2048
+engine frames, so a click whose press and release land in one host block still reaches the engine.
+
 Window size (2026-11-12): right-click (Control-click on macOS) the window for 50-125%; one setting for every plugin built with
 this wrapper (`mpc-vst3-window-size.txt` in ~/Library/Preferences, %APPDATA% or ~/.config), default 75%; the host is asked
 to resize with IPlugFrame::resizeView.

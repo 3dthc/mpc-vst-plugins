@@ -105,7 +105,10 @@ typedef struct {
     int prog;                         /* NPRESETS: the program last picked (-1: none yet, so picking 0 loads it) */
     int host_pick_pending;            /* the host set the program on the controller; process() hasn't applied it yet */
     int host_prog;                    /* the program the host itself last picked or was told about (-1: none) */
-    double prog_reported;             /* the program parameter's value last sent to the host (-1: not yet) */
+    double prog_reported;             /* unused since programs stopped going out as parameter changes */
+    int proc_prog;                    /* the program process() last saw (-1: not yet) */
+    int prog_quiet;                   /* frames left in which a program's own parameter changes don't go to the host */
+    int prog_dirty;                   /* a program change settled: the UI tick tells the host (edit + restart) */
     int bypass;                       /* the host's bypass: an effect passes its input through, delayed like its output */
     float *dry[2];                    /* effect: the input, delayed by the latency (a ring of `latency` frames) */
     int drypos;
@@ -176,6 +179,15 @@ static int has_programs(void) { return NUM_PROGS > 0; }
 static int param_count(void) { return g_nvis + 1 + has_programs() + MIDI_PARAMS; }
 
 static int is_param(uint32_t id) { return id < (uint32_t)NPARAMS && !popup_is((int)id); }
+/* vst.json "live": a value the engine moves by itself (a meter, an orb, a progress readout). The host reads it, but it never
+ * goes out as a change: a host takes changes from the plugin for the user's edits (MPC 3 marks the preset "*"). */
+static int is_live(int i) {
+#ifdef PLUG_LIVE_COUNT
+    for (int k = 0; k < PLUG_LIVE_COUNT; k++) if (PLUG_LIVE[k] == i) return 1;
+#endif
+    (void)i;
+    return 0;
+}
 
 static int step_count(const param_t *p) {
     if (p->momentary || p->step_target >= 0) return 1;
@@ -302,9 +314,12 @@ static void apply_param(v3_t *w, int i, double n) {
     }
     if (p->momentary) {
         if (n > 0.5 && was > 0.5) return;   /* still held */
+        if (n <= 0.5 && w->hold[i] > 0) return;   /* released early: count_holds() lets go once the engine has seen it */
         norm_to_str(p, n > 0.5 ? 1 : 0, buf, sizeof buf);
         eng_set(w, p->key, buf);
-        if (n > 0.5) w->hold[i] = p->hold_ms > 0 ? (int)(p->hold_ms * 44.1f) : 1;
+        /* held for at least a few engine blocks: a click whose press and release land in one host block (Windows) was
+         * pressed and let go before the engine rendered once, and engines that act on the press at render time missed it */
+        if (n > 0.5) w->hold[i] = p->hold_ms > 0 && p->hold_ms * 44.1f > 2048 ? (int)(p->hold_ms * 44.1f) : 2048;
         return;
     }
     norm_to_str(p, n, buf, sizeof buf);
@@ -532,12 +547,31 @@ static void report(v3_t *w, ProcessData *d) {
                 if (!strcmp(PARAMS[i].key, key)) { w->changed[i] = 1; break; }
         pthread_mutex_unlock(&w->lock);
     }
+    /* A program change (picked by the host, on the page, or by the engine) moves many parameters, some of them over the next
+     * blocks while a preset loads. Those go to the host as one "values changed" restart once it settles (the UI tick, or
+     * ctrl_set_norm for a host pick), as JUCE plugins do, not as parameter edits: a host takes edits for the user's own and
+     * marks the preset changed (MPC 3's "*"), and an edit of the program parameter from here could undo the host's pick. */
+    if (has_programs()) {
+        int cp = cur_program(w);
+        if (cp != w->proc_prog) {
+            if (w->proc_prog >= 0) w->prog_quiet = (int)(w->rate * 0.6);
+            w->proc_prog = cp;
+        }
+        if (w->prog_quiet > 0) {
+            for (int i = 0; i < NPARAMS; i++)
+                if (is_param(i) && !PARAMS[i].momentary && PARAMS[i].step_target < 0) {
+                    double v = get_norm(w, i);
+                    w->reported[i] = v; w->hostval[i] = v; w->changed[i] = 0;
+                }
+            if ((w->prog_quiet -= d->numSamples) <= 0) { w->prog_quiet = 0; w->prog_dirty = 1; }
+        }
+    }
     IParameterChanges *out = d->outputParameterChanges;
     if (!out) return;   /* no list this call: the changes wait for one */
     for (int i = 0; i < NPARAMS; i++) {
         if (!w->changed[i]) continue;
         w->changed[i] = 0;
-        if (!is_param(i)) continue;
+        if (!is_param(i) || is_live(i)) continue;
         double v = get_norm(w, i);
         if (fabs(v - w->reported[i]) < 1e-9) continue;
         w->reported[i] = v;
@@ -546,16 +580,6 @@ static void report(v3_t *w, ProcessData *d) {
         int32_t qi = 0, pi = 0;
         IParamValueQueue *q = out->v->addParameterData(out, &id, &qi);
         if (q) q->v->addPoint(q, 0, v, &pi);
-    }
-    if (has_programs()) {   /* a program picked on the page (or by the engine) moves the host's program too: its name */
-        double v = prog_norm(cur_program(w));
-        if (fabs(v - w->prog_reported) > 1e-9) {
-            w->prog_reported = v;
-            uint32_t id = PROG_ID;
-            int32_t qi = 0, pi = 0;
-            IParamValueQueue *q = out->v->addParameterData(out, &id, &qi);
-            if (q) q->v->addPoint(q, 0, v, &pi);
-        }
     }
 }
 
@@ -1023,7 +1047,7 @@ static tresult ctrl_param_info(void *s, int32_t index, ParameterInfo *pi) {
     to_utf16(pi->units, p->unit, 128);
     pi->stepCount = step_count(p);
     pi->defaultNormalizedValue = clamp01(p->def);
-    pi->flags = p->string_display ? kIsReadOnly : kCanAutomate;   /* a readout: text the engine writes */
+    pi->flags = p->string_display || is_live((int)pi->id) ? kIsReadOnly : kCanAutomate;   /* readouts and live values: the engine's */
     if (p->nopts > 1) pi->flags |= kIsList;
     return kResultOk;
 }
@@ -1108,11 +1132,14 @@ static tresult ctrl_set_norm(void *s, uint32_t id, double v) {
     if (is_param(id) && (PARAMS[id].momentary || PARAMS[id].step_target >= 0)) return kResultOk;   /* process() owns their state */
     if (is_param(id)) w->hostval[id] = clamp01(v);
     if (id == BYPASS_ID) w->bypass = v > 0.5;
-    if (id == PROG_ID && has_programs()) {   /* reads back at once, and the host is told: hosts (MPC 3) show the name on that */
-        int idx = prog_index(v), was = w->host_prog;
+    if (id == PROG_ID && has_programs()) {   /* the host's pick: applied here, as JUCE plugins do, then the host re-reads */
+        int idx = prog_index(v);
         w->host_prog = idx;
         w->host_pick_pending = 1;
-        if (idx != was && w->handler) w->handler->v->restartComponent(w->handler, 4 /* kParamValuesChanged */);
+        if (idx != cur_program(w)) {
+            set_program(w, idx);
+            if (w->handler) w->handler->v->restartComponent(w->handler, 4 /* kParamValuesChanged */);
+        }
     }
     return kResultOk;
 }
@@ -1239,6 +1266,7 @@ static v3_t *create(void) {
     w->unitinfo = &ui_vtbl;
     w->prog_reported = -1;
     w->host_prog = -1;
+    w->proc_prog = -1;
     w->ctxreq = &cr_vtbl;
     w->refs = 1;
     w->rate = ENGINE_RATE;

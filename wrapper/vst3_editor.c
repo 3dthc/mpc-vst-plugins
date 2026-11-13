@@ -600,17 +600,16 @@ static void notify_program(view_t *v) {
 #else
     int on_ui = v->loop != NULL;
 #endif
-    if (!has_programs() || !h || !on_ui) return;
+    if (!has_programs() || !h || !on_ui || !w->prog_dirty) return;
+    w->prog_dirty = 0;
     int cp = cur_program(w);
-    if (v->last_prog < 0) { v->last_prog = cp; return; }   /* the first look: nothing changed yet */
-    if (cp == v->last_prog) return;
-    v->last_prog = cp;
-    if (w->host_prog == cp) return;   /* the host picked it: ctrl_set_norm told it already */
-    w->host_prog = cp;
-    h->v->beginEdit(h, PROG_ID);
-    h->v->performEdit(h, PROG_ID, prog_norm(cp));
-    h->v->endEdit(h, PROG_ID);
-    h->v->restartComponent(h, 4 /* kParamValuesChanged */);
+    if (w->host_prog != cp) {   /* picked here, not by the host: the host's program parameter follows, like a person picked it */
+        w->host_prog = cp;
+        h->v->beginEdit(h, PROG_ID);
+        h->v->performEdit(h, PROG_ID, prog_norm(cp));
+        h->v->endEdit(h, PROG_ID);
+    }
+    h->v->restartComponent(h, 4 /* kParamValuesChanged: re-read every value, the program's name included */);
 }
 
 static void tick(view_t *v) {
