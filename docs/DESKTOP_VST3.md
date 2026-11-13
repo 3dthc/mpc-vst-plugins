@@ -126,7 +126,8 @@ window-size menu are the VST3's:
 - Window: the VST3 editor (`NSView`) inside the AU's Cocoa view; Objective-C classes carry `<name>_<uid>_<version>`.
 
 `tools/release_vst3.sh` installs the component on the runner, runs `auval -strict -v <type> <uid> <manufacturer>` (a fail
-stops the release) and puts the component in the same `-macos-vst3.zip`; `tools/install_mac_vst3.sh` installs both.
+stops the release) and zips the component on its own as `<name>-<version>-macos-au.zip`, next to the `-macos-vst3.zip`;
+`tools/install_mac_vst3.sh` installs either or both.
 
 ## How it maps onto VST3
 

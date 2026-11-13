@@ -51,7 +51,7 @@ if [ "${1:-}" = "" ]; then
     if [ -w "$b" ]; then unblock "$b"; else echo "  $(basename "$b") is in /Library: run with sudo, or move it to $DEST"; fi
   done
   shopt -s nullglob
-  for z in "$HOME"/Downloads/*-macos-vst3.zip; do echo "Installing $(basename "$z"):"; install_zip "$z"; done
+  for z in "$HOME"/Downloads/*-macos-vst3.zip "$HOME"/Downloads/*-macos-au.zip; do echo "Installing $(basename "$z"):"; install_zip "$z"; done
   echo "Done. Rescan plugins in MPC Desktop, or restart Logic Pro (it checks new Audio Units on launch)."
   exit 0
 fi
@@ -68,10 +68,10 @@ for r in json.load(sys.stdin):
     if r.get("draft"): continue
     for a in r.get("assets", []):
         n = a["name"]
-        if n.endswith("-macos-vst3.zip"):
+        if n.endswith("-macos-vst3.zip") or n.endswith("-macos-au.zip"):
             plug = n.rsplit("-", 3)[0]
-            if plug not in seen:
-                seen.add(plug); print(plug + " " + a["browser_download_url"])
+            if (plug, n[-8:]) not in seen:
+                seen.add((plug, n[-8:])); print(plug + " " + a["browser_download_url"])
 ')"
   [ -n "$urls" ] || continue
   while read -r plug url; do

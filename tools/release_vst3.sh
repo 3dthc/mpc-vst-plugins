@@ -59,14 +59,14 @@ import plistlib,sys; c=plistlib.load(open(sys.argv[1],"rb"))["AudioComponents"][
   auval -a | grep -F "$T $S $M" || echo "::warning::auval -a does not list $T $S $M yet"
   if auval -strict -v "$T" "$S" "$M" > "$OUT/auval-$NAME.log" 2>&1; then echo "auval: PASS ($T $S $M)"
   else tail -40 "$OUT/auval-$NAME.log"; echo "::error::auval failed for $NAME ($T $S $M)" >&2; exit 1; fi
-  cp -R "$COMP" "$STAGE/"
+  AUSTAGE="$(mktemp -d)"; cp -R "$COMP" "$AUSTAGE/"   # its own zip: <name>-<version>-macos-au.zip
 fi
 if [ "$OS" = macos ]; then
   cat > "$STAGE/README.txt" <<TXT
-$NAME $VERSION, VST3 and Audio Unit for macOS (Apple Silicon and Intel, macOS 10.13 or later)
+$NAME $VERSION, VST3 for macOS (Apple Silicon and Intel, macOS 10.13 or later)
 
-Install: copy $NAME.vst3 into ~/Library/Audio/Plug-Ins/VST3 (MPC Desktop and VST3 hosts) and $NAME.component into
-~/Library/Audio/Plug-Ins/Components (Logic Pro, GarageBand), then rescan plugins.
+Install: copy $NAME.vst3 into ~/Library/Audio/Plug-Ins/VST3, then rescan plugins in MPC Desktop or your DAW.
+(Logic Pro and GarageBand: use $NAME-$VERSION-macos-au.zip instead.)
 
 It is the same instrument as the MPC VST2: a project saved on the MPC opens with it in MPC Desktop
 (controller mode) with the same sound, and a project saved with it opens on the MPC.
@@ -88,13 +88,15 @@ ZIP="${ZIP// /-}"
 rm -f "$ZIP"
 NOTARIZED=""
 if [ "$OS" = macos ] && [ -n "${MACOS_SIGN_IDENTITY:-}" ]; then   # Developer ID + notarization: opens without a prompt
-  codesign --force --timestamp --options runtime --sign "$MACOS_SIGN_IDENTITY" "$STAGE/$NAME.vst3" "$STAGE/$NAME.component"
-  codesign --verify --strict --verbose=2 "$STAGE/$NAME.vst3" "$STAGE/$NAME.component"
+  codesign --force --timestamp --options runtime --sign "$MACOS_SIGN_IDENTITY" "$STAGE/$NAME.vst3" "$AUSTAGE/$NAME.component"
+  codesign --verify --strict --verbose=2 "$STAGE/$NAME.vst3" "$AUSTAGE/$NAME.component"
   if [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ] && [ -n "${APPLE_APP_PASSWORD:-}" ]; then
     N="$(mktemp -d)/notarize.zip"
-    (cd "$STAGE" && ditto -c -k . "$N")
+    (cd "$STAGE" && ditto -c -k --keepParent "$NAME.vst3" "$N")
+    N2="$(mktemp -d)/notarize-au.zip"; (cd "$AUSTAGE" && ditto -c -k --keepParent "$NAME.component" "$N2")
+    xcrun notarytool submit "$N2" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
     xcrun notarytool submit "$N" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
-    xcrun stapler staple "$STAGE/$NAME.vst3"; xcrun stapler staple "$STAGE/$NAME.component"
+    xcrun stapler staple "$STAGE/$NAME.vst3"; xcrun stapler staple "$AUSTAGE/$NAME.component"
     spctl --assess --type install -vv "$STAGE/$NAME.vst3" || true
     NOTARIZED=1
     echo "notarized: $NAME.vst3"
@@ -112,7 +114,17 @@ Or, for a copy you already downloaded and installed, just:
   curl -fsSL https://raw.githubusercontent.com/3dthc/mpc-vst-plugins/desktop-vst3/tools/install_mac_vst3.sh | bash
 TXT
 fi
-if [ "$OS" = macos ]; then
+if [ "$OS" = macos ]; then   # the Audio Unit: a zip of its own, with its own README
+  cat > "$AUSTAGE/README.txt" <<TXT
+$NAME $VERSION, Audio Unit for macOS (Logic Pro, GarageBand; Apple Silicon and Intel, macOS 10.13 or later)
+
+Install: copy $NAME.component into ~/Library/Audio/Plug-Ins/Components, then restart Logic Pro (it checks new Audio
+Units when it starts). Same sound, skin, presets and saved settings as the MPC plugin and the VST3.
+TXT
+  [ -n "$NOTARIZED" ] || { echo; sed -n '/can.t be opened/,$p' "$STAGE/README.txt"; } >> "$AUSTAGE/README.txt"
+  AUZIP="$OUT/$NAME-${VERSION:-dev}-macos-au.zip"; AUZIP="${AUZIP// /-}"; rm -f "$AUZIP"
+  (cd "$AUSTAGE" && ditto -c -k --sequesterRsrc . "$AUZIP"); rm -rf "$AUSTAGE"
+  echo "zip: $AUZIP ($(du -h "$AUZIP" | cut -f1))"
   (cd "$STAGE" && ditto -c -k --sequesterRsrc . "$ZIP")   # ditto keeps the bundle's signature intact
 else
   (cd "$STAGE" && zip -qr "$ZIP" .)
