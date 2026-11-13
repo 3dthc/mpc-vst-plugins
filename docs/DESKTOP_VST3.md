@@ -118,6 +118,8 @@ window-size menu are the VST3's:
 
 - Type `aumu` (instrument) or `aufx` (`PLUG_EFFECT`); subtype = the vst.json `uid`; manufacturer = vst.json `au_manufacturer`,
   or the first four letters of `vendor` with a capital first letter. Keep all three fixed across releases (Logic saves by them).
+- Logic lists Audio Units under a vendor: vst.json `au_vendor` (else `vendor`). Give every plugin of one maker the same
+  `au_vendor` and `au_manufacturer`, or Logic shows them under separate vendors.
 - Parameters: the controls the VST3 lists (not hidden, not the program or bypass parameter); list parameters are Indexed
   with their names, the rest 0..1 with the VST3's value text.
 - Factory presets and the present preset: the VST3 program list. Saved state (`ClassInfo`): the VST3 `getState` bytes in

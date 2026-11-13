@@ -198,7 +198,8 @@ if not m:
     if not any(c.isupper() for c in m): m=m[0].upper()+m[1:]
 print(m)' "$CFG")"
   AUVER="$(python3 -c 'v=int(__import__("sys").argv[1]); print((v//1000%10)<<16 | (v//100%10)<<8 | v%100)' "$VERSION")"
-  AUNAME="$(printf '%s: %s' "$VENDOR" "$NAME" | tr '_' ' ')"
+  AUVENDOR="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("au_vendor") or d.get("vendor","mpc"))' "$CFG")"
+  AUNAME="$AUVENDOR: $NAME"   # Logic Pro lists Audio Units under the part before ":"
   cat > "$COMP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
