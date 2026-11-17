@@ -198,6 +198,10 @@ for the pattern). This applies to every future port, not just ones that hit the 
 - [ ] Instruments-browser tile: `"tile": "art/tile.png"` (270x110 PNG) in vst.json puts the artwork tile in the Sounds >
       INSTRUMENTS browser and ships a Default preset so the tile opens the plugin (`tools/xpl.py`; NOTES.md
       "Instruments-browser tiles"). Without it the plugin is a folder tile in the browser.
+- [ ] Factory presets on that preset page: run `tools/xpl_presets.sh vst/vst.json` (builds the plugin on this machine,
+      selects each program, writes `vst/xpl/NNNN-<name>.xpl` from its own chunk), commit `vst/xpl/`, and add
+      `"xpl_presets": "xpl"` to vst.json (`"xpl_skip"`: a regex for programs to leave out, such as empty slots). Rerun it
+      whenever the programs change.
 - [ ] Presets in MPC's PRESET menu (2026-10-07; menu listing and loading checked on a Force, reload behaviour not yet): an engine with its own preset parameter
       sets vst.json `"programs": {"param": "<key>"}` (an option list, or a `"display": "int"` range whose names the engine
       gives as `get_param("<key>:<n>")`); one without sets `"presets": "presets.json"` (`{"presets": [{"name", "values":

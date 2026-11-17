@@ -13,6 +13,10 @@ carries an empty wrapper chunk, so loading it starts the engine from its default
 
     python3 tools/xpl.py <skin folder> <name> <vendor> <uid4> <so> [tile.png]   # writes the preset (and tile)
     python3 tools/xpl.py --decode <file.xpl>                           # dumps the decoded <state> bytes
+    python3 tools/xpl.py --programs <vst.json> <programs.tsv> <out dir>  # NNNN-<name>.xpl per program (tools/xpl_presets.sh)
+
+A port with programs can ship one .xpl per program instead of the Default one: tools/xpl_presets.sh writes them from
+the plugin's own chunks into a folder the port commits, and vst.json "xpl_presets" names it (gen_vst.py copies it in).
 """
 import datetime
 import os
@@ -108,7 +112,49 @@ def write_default_preset(skin_folder, name, vendor, uid4, so, version=1000, effe
     return dst
 
 
+BAD = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
+
+
+def write_programs(cfg_path, tsv, out_dir):
+    """programs.tsv ("<name>\t<chunk hex>" per program) -> <out dir>/NNNN-<name>.xpl; returns how many."""
+    import json
+    with open(cfg_path, encoding="utf-8") as f:
+        cfg = json.load(f)
+    name, vendor, so = cfg["name"], cfg["vendor"], cfg["so"]
+    uid = int.from_bytes(cfg["uid"].encode(), "big")
+    so_path = "%%payload-path%%/%s - VST - %s/%s" % (vendor, name, so)
+    os.makedirs(out_dir, exist_ok=True)
+    for old in os.listdir(out_dir):
+        if old.endswith(".xpl"):
+            os.remove(os.path.join(out_dir, old))
+    skip = re.compile(cfg["xpl_skip"]) if cfg.get("xpl_skip") else None   # vst.json: programs to leave out (empty slots)
+    n = 0
+    seen = set()
+    with open(tsv, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            pname, _, hexchunk = line.rstrip("\n").partition("\t")
+            pname = pname.strip()
+            if not pname or not hexchunk or (skip and skip.search(pname)):
+                continue
+            chunk = bytes.fromhex(hexchunk)
+            fname = BAD.sub("-", pname).strip(" .") or "Preset"
+            base = "%04d-%s" % (n, fname[:60])
+            while base.lower() in seen:
+                base += "_"
+            seen.add(base.lower())
+            with open(os.path.join(out_dir, base + ".xpl"), "w", encoding="utf-8") as o:
+                o.write(xpl(name, vendor, so_path, uid, cfg.get("version", 1000), chunk, preset=pname,
+                            effect=bool(cfg.get("effect")), date="2026-01-01-00-00"))
+            n += 1
+    if not n:
+        raise SystemExit("xpl: no programs in %s" % tsv)
+    return n
+
+
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["--programs"] and len(sys.argv) == 5:
+        print("xpl: %d presets in %s" % (write_programs(*sys.argv[2:5]), sys.argv[4]))
+        sys.exit(0)
     if sys.argv[1:2] == ["--decode"]:
         for f in sys.argv[2:]:
             with open(f, encoding="utf-8") as fh:

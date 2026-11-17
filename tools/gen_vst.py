@@ -17,6 +17,8 @@ vst.json (paths are relative to the vst.json's folder):
       "short_names": {"LFO1 > ": "L1 "},          # optional on-screen name shortening
       "art": "html",                             # optional: draw the skin artwork in a browser (tools/html_art.py)
       "tile": "art/tile.png",                    # optional: 270x110 Instruments-browser tile (+ a Default preset; tools/xpl.py)
+      "xpl_presets": "xpl",                      # optional, with "tile": a folder of NNNN-<name>.xpl (tools/xpl_presets.sh), one per program
+      "xpl_skip": "^USER \\d+ \\(empty\\)$",       # optional: programs tools/xpl_presets.sh leaves out (a regex on the name)
       "effect": true,                            # optional: an audio effect (2 inputs, category Effect); the engine provides process()
       "skin_post": "skin_post.py",               # optional: run as `python3 skin_post.py <skin dir>` after the skin is built, to
                                                  #   adjust TUI.json the layout can't express (e.g. per-role live-text sizes/colours)
@@ -55,6 +57,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import sys
 
 TOOLS = os.path.dirname(os.path.abspath(__file__))
@@ -526,8 +529,19 @@ def main():
     if cfg.get("tile"):   # the browser tile only does something with a preset to open: ship a Default one with it
         import xpl
         print("tile:", xpl.write_tile(os.path.join(here, cfg["tile"]), skin))
-        print("preset:", xpl.write_default_preset(skin, cfg["name"], cfg["vendor"], cfg["uid"], cfg["so"],
-                                                  cfg.get("version", 1000), bool(cfg.get("effect"))))
+        if cfg.get("xpl_presets"):   # one preset per program (tools/xpl_presets.sh), committed by the port
+            src = os.path.join(here, cfg["xpl_presets"])
+            files = sorted(f for f in os.listdir(src) if f.endswith(".xpl"))
+            if not files:
+                raise SystemExit("xpl_presets: no .xpl files in %s (run tools/xpl_presets.sh)" % src)
+            dst = os.path.join(skin, "Presets")
+            os.makedirs(dst, exist_ok=True)
+            for f in files:
+                shutil.copyfile(os.path.join(src, f), os.path.join(dst, f))
+            print("presets: %d from %s" % (len(files), cfg["xpl_presets"]))
+        else:
+            print("preset:", xpl.write_default_preset(skin, cfg["name"], cfg["vendor"], cfg["uid"], cfg["so"],
+                                                      cfg.get("version", 1000), bool(cfg.get("effect"))))
 
 
 if __name__ == "__main__":

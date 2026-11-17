@@ -807,19 +807,22 @@ static void set_program(wrap_t *w, int idx) {
     w->need_update_display = 1;
 }
 
+#ifndef PROG_NAME_LEN   /* VST2's program-name buffer (kVstMaxProgNameLen); tools/xpl_presets.sh builds with a longer one */
+#define PROG_NAME_LEN 24
+#endif
 static void program_name(wrap_t *w, int idx, char *out) {
     out[0] = 0;
     if (idx < 0 || idx >= NUM_PROGRAMS) return;
 #if defined(NPRESETS)
     (void)w;
-    copy_str(out, PRESETS[idx].name, 24);
+    copy_str(out, PRESETS[idx].name, PROG_NAME_LEN);
 #elif defined(PROG_PARAM)
     char k2[96], buf[64];
     const param_t *pp = &PARAMS[PROG_PARAM];
-    if (pp->nopts > 1) { copy_str(out, pp->opts[idx], 24); return; }
+    if (pp->nopts > 1) { copy_str(out, pp->opts[idx], PROG_NAME_LEN); return; }
     snprintf(k2, sizeof k2, "%s:%d", pp->key, (int)lroundf(pp->min) + idx);   /* the engine names it without loading it */
-    if (eng_get(w, k2, buf, sizeof buf) > 0) copy_str(out, buf, 24);
-    else snprintf(out, 24, "%s %d", pp->name, (int)lroundf(pp->min) + idx);
+    if (eng_get(w, k2, buf, sizeof buf) > 0) copy_str(out, buf, PROG_NAME_LEN);
+    else snprintf(out, PROG_NAME_LEN, "%s %d", pp->name, (int)lroundf(pp->min) + idx);
 #else
     (void)w;
 #endif
