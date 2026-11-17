@@ -137,7 +137,9 @@ def write_programs(cfg_path, tsv, out_dir):
             if not pname or not hexchunk or (skip and skip.search(pname)):
                 continue
             chunk = bytes.fromhex(hexchunk)
-            fname = BAD.sub("-", pname).strip(" .") or "Preset"
+            # MPC's preset page reads every "-" after the number as a folder break ("Lo-Fi" became a folder "Lo"),
+            # so hyphens and characters a file name can't hold become spaces
+            fname = re.sub(r"\s+", " ", BAD.sub(" ", pname).replace("-", " ")).strip(" .") or "Preset"
             base = "%04d-%s" % (n, fname[:60])
             while base.lower() in seen:
                 base += "_"
