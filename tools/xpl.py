@@ -112,6 +112,12 @@ def write_default_preset(skin_folder, name, vendor, uid4, so, version=1000, effe
     return dst
 
 
+def clean(t):
+    """a file-name part: MPC's preset page reads each "-" after the number as a folder break, so a "-" inside a
+    category or a name (and anything a file name can't hold) becomes a space"""
+    return re.sub(r"\s+", " ", BAD.sub(" ", t).replace("-", " ")).strip(" .")
+
+
 BAD = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 
 
@@ -127,20 +133,33 @@ def write_programs(cfg_path, tsv, out_dir):
     for old in os.listdir(out_dir):
         if old.endswith(".xpl"):
             os.remove(os.path.join(out_dir, old))
-    skip = re.compile(cfg["xpl_skip"]) if cfg.get("xpl_skip") else None   # vst.json: programs to leave out (empty slots)
+    skip = re.compile(cfg["xpl_skip"]) if cfg.get("xpl_skip") else None
+    xc = cfg.get("xpl_category")
+    catre = re.compile(xc) if xc and xc != "engine" else None
+    namere = re.compile(cfg["xpl_name"]) if cfg.get("xpl_name") else None   # vst.json: programs to leave out (empty slots)
     n = 0
     seen = set()
     with open(tsv, encoding="utf-8", errors="replace") as f:
         for line in f:
-            pname, _, hexchunk = line.rstrip("\n").partition("\t")
-            pname = pname.strip()
+            pname, _, rest = line.rstrip("\n").partition("\t")
+            hexchunk, _, cat = rest.partition("\t")
+            pname, cat = pname.strip(), cat.strip()
             if not pname or not hexchunk or (skip and skip.search(pname)):
                 continue
             chunk = bytes.fromhex(hexchunk)
-            # MPC's preset page reads every "-" after the number as a folder break ("Lo-Fi" became a folder "Lo"),
-            # so hyphens and characters a file name can't hold become spaces
-            fname = re.sub(r"\s+", " ", BAD.sub(" ", pname).replace("-", " ")).strip(" .") or "Preset"
-            base = "%04d-%s" % (n, fname[:60])
+            shown = pname
+            if namere:   # vst.json "xpl_name": the name to show, (?P<name>) of the program name (a category tag left out)
+                m = namere.search(pname)
+                if m and m.group("name"):
+                    shown = m.group("name").strip()
+            if catre and not cat:   # vst.json "xpl_category" regex: the category (and the name without it) from the name
+                m = catre.search(pname)
+                if m:
+                    cat = (m.group("cat") or "").strip()
+                    if "name" in catre.groupindex and m.group("name"):
+                        shown = m.group("name").strip()
+            fname = clean(shown)[:60] or "Preset"
+            base = "%04d-%s%s" % (n, clean(cat)[:30] + "-" if clean(cat) else "", fname)
             while base.lower() in seen:
                 base += "_"
             seen.add(base.lower())

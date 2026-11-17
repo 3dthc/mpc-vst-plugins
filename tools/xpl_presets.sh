@@ -4,6 +4,8 @@
 # Builds the port with the wrapper on this machine (like tools/test_port.sh, without sanitizers), selects each program
 # and writes <out dir>/NNNN-<name>.xpl holding the plugin's own chunk for it (default out dir: <vst dir>/xpl). Commit the
 # folder and name it in vst.json as "xpl_presets": gen_vst.py ships it as the skin's Presets/ in place of the Default one.
+# Categories (folders on MPC's preset page, NNNN-<category>-<name>.xpl): vst.json "xpl_category" is "engine" (the engine
+# answers get_param("preset_category:<index>")) or a regex on the program name with (?P<cat>) and optionally (?P<name>).
 # Run it from wherever the engine finds its data at runtime when that matters (the plugin dir is the build dir here).
 set -euo pipefail
 MV="$(cd "$(dirname "$0")/.." && pwd)"
@@ -30,7 +32,7 @@ OBJS=""
 for f in $SOURCES; do OBJS="$OBJS $B/${f//\//_}.o"; done
 for f in "$MV/tools/xpl_dump.c" "$MV/wrapper/vst2_wrap.c" $ADAPTER_SRC; do
   o="$B/$(basename "$f").o"
-  gcc -O1 -w -std=gnu11 -DPROG_NAME_LEN=64 -I"$PORT/build" -c "$f" -o "$o"
+  gcc -O1 -w -std=gnu11 -DPROG_NAME_LEN=64 -I"$PORT/build" -I"$MV/wrapper" -c "$f" -o "$o"
   OBJS="$OBJS $o"
 done
 g++ $OBJS $LIBS -lpthread -o "$B/xpl_dump"
@@ -39,7 +41,8 @@ SUB=$(python3 -c 'import json,sys;print(str(json.load(open(sys.argv[1])).get("de
 if [ -n "$SUB" ] && [ ! -e "$B/$SUB" ]; then
   for d in "$(dirname "$CFG")/$SUB" "$ROOT/$SUB"; do [ -d "$d" ] && ln -s "$d" "$B/$SUB" && break; done
 fi
-(cd "$B" && "$B/xpl_dump") > "$B/programs.tsv"
+EC=$(python3 -c 'import json,sys;print(1 if json.load(open(sys.argv[1])).get("xpl_category")=="engine" else "")' "$CFG")
+(cd "$B" && XPL_ENGINE_CATEGORY=$EC "$B/xpl_dump") > "$B/programs.tsv"
 python3 -c '
 import json,re,sys
 c=json.load(open(sys.argv[1])); s=re.compile(c["xpl_skip"]) if c.get("xpl_skip") else None

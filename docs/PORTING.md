@@ -201,7 +201,9 @@ for the pattern). This applies to every future port, not just ones that hit the 
 - [ ] Factory presets on that preset page: run `tools/xpl_presets.sh vst/vst.json` (builds the plugin on this machine,
       selects each program, writes `vst/xpl/NNNN-<name>.xpl` from its own chunk), commit `vst/xpl/`, and add
       `"xpl_presets": "xpl"` to vst.json (`"xpl_skip"`: a regex for programs to leave out, such as empty slots). Rerun it
-      whenever the programs change.
+      whenever the programs change. The preset page makes a folder of each "-" after the number, so the files are `NNNN-<category>-<name>.xpl`:
+      set `"xpl_category": "engine"` and answer `get_param("preset_category:<index>")` with the BROWSE category, or give
+      a regex with `(?P<cat>)` (and `(?P<name>)`) on the program name; `"xpl_name"` strips a category tag from the name.
 - [ ] Presets in MPC's PRESET menu (2026-10-07; menu listing and loading checked on a Force, reload behaviour not yet): an engine with its own preset parameter
       sets vst.json `"programs": {"param": "<key>"}` (an option list, or a `"display": "int"` range whose names the engine
       gives as `get_param("<key>:<n>")`); one without sets `"presets": "presets.json"` (`{"presets": [{"name", "values":

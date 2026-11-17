@@ -1,11 +1,14 @@
 /* tools/xpl_presets.sh links this with the wrapper and a port's engine on the build machine: it selects each program
  * the way MPC's PRESET menu does (effSetProgram) and prints the plugin's own chunk for it (effGetChunk), so every .xpl
- * holds exactly what a project saved on that program would. Output, per program: "<name>\t<chunk as hex>\n". */
+ * holds exactly what a project saved on that program would. Output, per program: "<name>\t<chunk as hex>\t<category>\n";
+ * the category is the engine's answer to get_param("preset_category:<index>") when XPL_ENGINE_CATEGORY is set
+ * (vst.json "xpl_category": "engine"), from an instance of its own, else empty. */
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 #include "params.h"
+#include "engine.h"
 typedef struct AEffect AEffect;
 typedef intptr_t (*cb)(AEffect*,int32_t,int32_t,intptr_t,void*,float);
 struct AEffect { int32_t magic; intptr_t (*d)(AEffect*,int32_t,int32_t,intptr_t,void*,float);
@@ -44,7 +47,7 @@ static int verify(void) {
         memmove(line, sp ? sp + 1 : line, strlen(sp ? sp + 1 : line) + 1);
         tab = strchr(line, '\t');
         char *hex = tab + 1;
-        size_t n = strcspn(hex, "\n") / 2;
+        size_t n = strcspn(hex, "\t\n") / 2;
         unsigned char *c = malloc(n + 1);
         for (size_t k = 0; k < n; k++) { unsigned v; sscanf(hex + 2 * k, "%2x", &v); c[k] = v; }
         AEffect *a = open_plugin();
@@ -81,6 +84,12 @@ int main(int argc, char **argv) {
     a->d(a, 11, 0, 128, 0, 0);       /* effSetBlockSize */
     a->d(a, 12, 0, 1, 0, 0);         /* effMainsChanged on */
     run(a, 4);
+    const mpc_engine_t *api = getenv("XPL_ENGINE_CATEGORY") ? mpc_engine() : 0;
+#ifdef MODULE_DIR
+    void *cat_inst = api ? api->create(MODULE_DIR) : 0;
+#else
+    void *cat_inst = api ? api->create(NULL) : 0;
+#endif
     for (int i = 0; i < a->np; i++) {
         char name[256] = {0};   /* PROG_NAME_LEN 64 here: the whole name */
         a->d(a, 29, i, 0, name, 0);   /* effGetProgramNameIndexed */
@@ -89,10 +98,17 @@ int main(int argc, char **argv) {
         void *chunk = 0;
         intptr_t n = a->d(a, 23, 0, 0, &chunk, 0);   /* effGetChunk (bank) */
         for (char *c = name; *c; c++) if (*c == '\t' || *c == '\n') *c = ' ';
+        char cat[128] = {0}, key[48];
+        if (cat_inst) {
+            snprintf(key, sizeof key, "preset_category:%d", i);
+            if (api->get_param(cat_inst, key, cat, sizeof cat) <= 0) cat[0] = 0;
+            for (char *c = cat; *c; c++) if (*c == '\t' || *c == '\n') *c = ' ';
+        }
         printf("%s\t", name);
         for (intptr_t k = 0; k < n && chunk; k++) printf("%02x", ((unsigned char *)chunk)[k]);
-        printf("\n");
+        printf("\t%s\n", cat);
     }
+    if (cat_inst) api->destroy(cat_inst);
     a->d(a, 12, 0, 0, 0, 0);
     a->d(a, 1, 0, 0, 0, 0);          /* effClose */
     return 0;
