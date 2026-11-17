@@ -96,6 +96,10 @@ on:
         description: Build and package only (zip + previews as run artifacts), no draft release
         type: boolean
         default: false
+      replace_published:
+        description: The release is already published and this build replaces its zips and notes (a fix nobody has installed yet); it stays published and its tag stays where it is
+        type: boolean
+        default: false
       desktop:
         description: Also build the desktop VST3 (macOS universal with the skin as its editor, and Windows) and attach it to the same release (docs/DESKTOP_VST3.md)
         type: boolean
@@ -123,13 +127,16 @@ jobs:
         if: ${{ !inputs.dry_run }}
         env:
           GH_TOKEN: ${{ github.token }}
+          REPLACE: ${{ inputs.replace_published }}
         run: |
           state=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
                     --jq ".[] | select(.tag_name == \"$TAG\") | if .draft then \"draft\" else \"published\" end" | head -1)
           echo "existing release for $TAG: ${state:-none}"
-          if [ "$state" = published ]; then
-            echo "::error::$TAG is already published - bump the version"; exit 1
+          if [ "$state" = published ] && [ "$REPLACE" != true ]; then
+            echo "::error::$TAG is already published - bump the version (or replace_published, for a fix nobody has installed)"; exit 1
           fi
+          [ "$state" = published ] && echo "::warning::replacing the zips of the published release $TAG; its tag stays at $(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha | cut -c1-7)"
+          true
 
       - name: Check out the port
         uses: actions/checkout@v4
@@ -301,7 +308,11 @@ jobs:
           fi
           printf '\n---\nBuilt by GitHub Actions from %s@%s with mpc-vst-plugins@%s.\n' \
             "$GITHUB_REPOSITORY" "${GITHUB_SHA::7}" "${TOOLS_REF::7}" >> notes.md
-          if gh release view "$TAG" >/dev/null 2>&1; then
+          published=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --jq ".[] | select(.tag_name == \"$TAG\") | (.draft | not)" | head -1)
+          if [ "$published" = true ]; then   # replace_published (checked above): new zips and notes, still published
+            gh release upload "$TAG" $ZIPS --clobber
+            gh release edit "$TAG" --notes-file notes.md
+          elif gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" $ZIPS --clobber
             gh release edit "$TAG" --draft --target "$GITHUB_SHA" --title "$NAME VST v$VERSION" --notes-file notes.md
           else
