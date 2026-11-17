@@ -41,6 +41,9 @@
 #ifndef HAS_LFO_BPM
 #define HAS_LFO_BPM 0
 #endif
+#ifndef ENGINE_PROGRAM
+#define ENGINE_PROGRAM 0 /* see vst2_wrap.c */
+#endif
 #ifndef HAS_DISPLAY_REV
 #define HAS_DISPLAY_REV 0
 #endif
@@ -108,6 +111,7 @@ typedef struct {
     int host_prog;                    /* the program the host itself last picked or was told about (-1: none) */
     double prog_reported;             /* unused since programs stopped going out as parameter changes */
     int proc_prog;                    /* the program process() last saw (-1: not yet) */
+    char last_eprog[24];              /* ENGINE_PROGRAM: the engine's "program" last seen (vst2_wrap.c) */
     int prog_quiet;                   /* frames left in which a program's own parameter changes don't go to the host */
     int prog_dirty;                   /* a program change settled: the UI tick tells the host (edit + restart) */
     int bypass;                       /* the host's bypass: an effect passes its input through, delayed like its output */
@@ -546,6 +550,16 @@ static void report(v3_t *w, ProcessData *d) {
         w->rev_poll = (int)(w->rate / 10);
         if (eng_get(w, "display_rev", rev, sizeof rev) > 0 && strcmp(rev, w->last_rev)) {
             snprintf(w->last_rev, sizeof w->last_rev, "%s", rev);
+#if ENGINE_PROGRAM && defined(NPRESETS)
+            char ep[24];
+            if (eng_get(w, "program", ep, sizeof ep) > 0 && strcmp(ep, w->last_eprog)) {
+                int first = !w->last_eprog[0];
+                snprintf(w->last_eprog, sizeof w->last_eprog, "%s", ep);
+                const char *c = strchr(ep, ':');
+                int idx = c ? atoi(c + 1) : -1;
+                if (!first && idx >= 0 && idx < NPRESETS) w->prog = idx;   /* settles into one host restart (below) */
+            }
+#endif
             for (int i = 0; i < NPARAMS; i++)
                 if (is_param(i) && !PARAMS[i].momentary && !PARAMS[i].string_display) w->changed[i] = 1;
         }

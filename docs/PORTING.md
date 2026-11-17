@@ -67,6 +67,8 @@ for the pattern). This applies to every future port, not just ones that hit the 
 - [ ] Optional: an engine that changes values by itself (a worker thread, a state machine, status text) sets `"defines": {"HAS_DISPLAY_REV": 1}` and
       bumps a `display_rev` value whenever something changed; the wrapper polls it every ~100 ms and tells the host (text, `when=` panels, meters). With a PRESET menu and live meters add
       `"DISPLAY_REV_NO_UPDATE": 1`: it reports only the moved values, no full `UpdateDisplay` (which closes the popup 10 times a second);
+      `"ENGINE_PROGRAM": 1` (with `"presets"` and `HAS_DISPLAY_REV`): the engine loads presets itself too (its own browser page) and answers
+      `get_param("program")` with `"<loads>:<index>"`; the host's current preset follows it, so MPC's preset name matches the browser (Fretty);
       text readouts then stop refreshing, so draw live numbers as `picture` widgets keyed on the same value (ottmpc: `vst/art/make_art.py`).
       Readouts longer than 24 characters need `"PARAM_TEXT_MAX": <n>` (NOTES.md; `poc/uiprobe` is the example).
 - [ ] Optional: an engine that sets its own parameters from something the host doesn't see (MIDI on an ALSA port of its

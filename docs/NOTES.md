@@ -2624,3 +2624,16 @@ they hand VST2 state to a replacement VST3. Record the result here.
 - `desktop_items` + `xy` (desktop_skin.py, vst3_editor.c): Shapey's graph drag tested at the engine (tests/test_xy.c), not
   yet by hand in a DAW.
 - Crash detection: left out on purpose (see DESKTOP_VST3.md); the output guard is what ships.
+
+### 2026-11-17: MPC's preset name now follows an engine's own browser (`ENGINE_PROGRAM`, offline)
+- A port with vst.json `"presets"` (the wrapper's NPRESETS) and its own BROWSE page loaded the preset's values, but the host's
+  current program stayed on the last one picked in MPC's menu, so MPC's preset name did not change (Fretty 0.8.6, seen on the
+  user's Live II: the name stayed on preset 0).
+- `"defines": {"ENGINE_PROGRAM": 1}`: the engine answers `get_param("program")` with `"<n>:<index>"`, n counting its own
+  loads; when n moves, `vst2_wrap.c` (on the display_rev poll) sets the current program to that index with no reload and asks
+  for an UpdateDisplay, and `vst3_wrap.c` moves its program so the settle step tells the host. A pick in MPC's menu does not
+  move n, so it stays.
+- Tested through the real VST2 wrapper (fretty-mpc `tests/program_test.sh`): effGetProgram / effGetProgramName follow two
+  browser picks, and fail without the define. On the device: not yet checked that MPC 3 redraws the name on that UpdateDisplay.
+- Ports with an engine-owned preset parameter (vst.json `"programs"`: OB-Xd, Odin 2, Sonix, Tropix, OxZygen) already
+  follow, since the current program is that parameter.

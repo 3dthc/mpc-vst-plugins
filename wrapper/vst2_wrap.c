@@ -36,6 +36,12 @@
                                  * meters; value-driven widgets (picture, meter) still move. Text readouts then redraw only on an
                                  * UpdateDisplay from elsewhere (a preset pick): show live numbers as pictures. */
 #endif
+#ifndef ENGINE_PROGRAM
+#define ENGINE_PROGRAM 0 /* 1 (with "presets" and HAS_DISPLAY_REV): the engine loads presets itself too (its own browser page)
+                          * and answers get_param("program") with "<n>:<index>", n counting its own loads. When n moves, the
+                          * host's current program becomes that index (no reload: the engine already set the values), so
+                          * MPC's preset name follows the engine's browser. A pick in the host's menu doesn't move n. */
+#endif
 #ifndef PARAM_TEXT_MAX
 #define PARAM_TEXT_MAX 24 /* value text length handed to the host, NUL included. The VST2 spec says 8, JUCE's buffer is
                            * bigger; ports that show sentences (status lines) raise it via vst.json "defines" */
@@ -147,6 +153,7 @@ typedef struct {
     float pend0, pend0_from;  /* a host set of parameter 0 not applied yet, and where parameter 0 was before it */
     int has_pend0;            /* (see setParameter) */
     char last_rev[16];       /* HAS_DISPLAY_REV: the "display_rev" last seen */
+    char last_eprog[24];     /* ENGINE_PROGRAM: the engine's "program" last seen */
     float last_norm[NPARAMS];   /* HAS_DISPLAY_REV: value last reported per param (-1 = never) */
 #ifdef DISPLAY_REV_THREAD
     pthread_t rev_th; volatile int rev_stop; int rev_th_on;   /* the display_rev reporter thread (see rev_scan) */
@@ -525,6 +532,16 @@ static void rev_scan(wrap_t *w) {
     if (eng_get(w, "display_rev", rev, sizeof rev) > 0 && strcmp(rev, w->last_rev)) {
         snprintf(w->last_rev, sizeof w->last_rev, "%s", rev);
         if (!DISPLAY_REV_NO_UPDATE) w->need_update_display = 1;
+#if ENGINE_PROGRAM && defined(NPRESETS)
+        char ep[24];
+        if (eng_get(w, "program", ep, sizeof ep) > 0 && strcmp(ep, w->last_eprog)) {
+            int first = !w->last_eprog[0];
+            snprintf(w->last_eprog, sizeof w->last_eprog, "%s", ep);
+            const char *c = strchr(ep, ':');
+            int idx = c ? atoi(c + 1) : -1;
+            if (!first && idx >= 0 && idx < NPRESETS && idx != w->program) { w->program = idx; w->need_update_display = 1; }
+        }
+#endif
         for (int i = 0; i < NPARAMS; i++) {
             if (PARAMS[i].momentary || popup_is(i) || PARAMS[i].string_display) continue;
             float v = get_norm(w, i);
