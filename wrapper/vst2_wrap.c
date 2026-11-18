@@ -1026,6 +1026,9 @@ __attribute__((visibility("default"))) AEffect *VSTPluginMain(audioMasterCallbac
 #endif
     e->uniqueID = PLUG_UID;
     e->version = PLUG_VERSION;
+#ifdef ENGINE_LATENCY
+    e->initialDelay = ENGINE_LATENCY;   /* the engine's own delay in frames (vst.json "defines"), read by the host at load */
+#endif
     e->object = w;
 #ifdef SAMPLE_PAGE
     w->page_prog = -1;   /* the page itself opens at effMainsChanged, only on an MPC Sample with mpc-addin-sample-draw-handler */

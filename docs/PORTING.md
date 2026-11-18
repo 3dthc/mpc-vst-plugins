@@ -67,6 +67,10 @@ for the pattern). This applies to every future port, not just ones that hit the 
 - [ ] Optional: an engine that changes values by itself (a worker thread, a state machine, status text) sets `"defines": {"HAS_DISPLAY_REV": 1}` and
       bumps a `display_rev` value whenever something changed; the wrapper polls it every ~100 ms and tells the host (text, `when=` panels, meters). With a PRESET menu and live meters add
       `"DISPLAY_REV_NO_UPDATE": 1`: it reports only the moved values, no full `UpdateDisplay` (which closes the popup 10 times a second);
+- [ ] An engine that delays its own output (a worker thread running a block ahead, a look-ahead): `"ENGINE_LATENCY": <frames>`
+      in vst.json `"defines"`. The VST2 wrapper puts it in `initialDelay`, which MPC reads when it loads the plugin (Akai's SDK
+      docs, host-contract.md; whether MPC then compensates is not yet checked on a device); the VST3 wrapper adds it to its
+      reported latency (engine frames, so approximate when the host runs at another rate). Added 2026-11-17 (Odin 2's TWO CORES).
       `"ENGINE_PROGRAM": 1` (with `"presets"` and `HAS_DISPLAY_REV`): the engine loads presets itself too (its own browser page) and answers
       `get_param("program")` with `"<loads>:<index>"`; the host's current preset follows it, so MPC's preset name matches the browser (Fretty);
       text readouts then stop refreshing, so draw live numbers as `picture` widgets keyed on the same value (ottmpc: `vst/art/make_art.py`).

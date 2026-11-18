@@ -2637,3 +2637,15 @@ they hand VST2 state to a replacement VST3. Record the result here.
   browser picks, and fail without the define. On the device: not yet checked that MPC 3 redraws the name on that UpdateDisplay.
 - Ports with an engine-owned preset parameter (vst.json `"programs"`: OB-Xd, Odin 2, Sonix, Tropix, OxZygen) already
   follow, since the current program is that parameter.
+
+### 2026-11-17: Akai's plugin SDK on threads, latency and CPU (offline, read from inmusic-software/mpc-plugin-builder-sdk)
+- Threads: `process` runs on a real-time audio thread that must never allocate, lock, log, read files or block. Parameter
+  changes from project load, preset load and automation can arrive from the UI thread while `process` runs. Plugin threads
+  are not forbidden; the rule is "don't spawn threads that touch audio state without synchronisation".
+- Latency: the host reads the plugin's latency during load (`initialDelay`); the SDK's framework also updates it later with
+  `audioMasterIOChanged`. The docs don't say whether MPC compensates it. `ENGINE_LATENCY` (PORTING.md) reports one.
+- CPU: Akai's guidance for the 32-bit MPCs (Cortex-A17) is under 15 % of a 128-frame block (about 0.4 ms) per plugin, worst
+  case, since one core is shared with MPC's sequencer, sampler and mixer; a sin/tan/pow/exp costs about 50-100 ns there.
+- Block size: `numFrames` can be 32..512 whatever `effSetBlockSize` said (our wrapper renders in 128-frame pieces).
+- Builds: the SDK targets `-mcpu=cortex-a17` (32-bit) and `cortex-a55` (64-bit) as each family's lowest common CPU.
+

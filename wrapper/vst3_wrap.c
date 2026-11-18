@@ -900,7 +900,10 @@ static void pop_bus(v3_t *w, float **out, int nch, int off, int n) {
     }
 }
 static tresult proc_can_size(void *s, int32_t size) { (void)s; return size == 0 ? kResultOk : kResultFalse; }
-static uint32_t proc_latency(void *s) { return FROM(s, proc)->latency; }
+#ifndef ENGINE_LATENCY
+#define ENGINE_LATENCY 0   /* the engine's own delay in engine frames (vst.json "defines"), added to the wrapper's */
+#endif
+static uint32_t proc_latency(void *s) { return FROM(s, proc)->latency + ENGINE_LATENCY; }
 static tresult proc_setup(void *s, ProcessSetup *setup) {
     v3_t *w = FROM(s, proc);
     if (setup->symbolicSampleSize != 0) return kResultFalse;
