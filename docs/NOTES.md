@@ -2649,3 +2649,4 @@ they hand VST2 state to a replacement VST3. Record the result here.
 - Block size: `numFrames` can be 32..512 whatever `effSetBlockSize` said (our wrapper renders in 128-frame pieces).
 - Builds: the SDK targets `-mcpu=cortex-a17` (32-bit) and `cortex-a55` (64-bit) as each family's lowest common CPU.
 
+- 2026-11-18 (device, Live II, Odin 2 1.4.11 draft): ECO Ultra (the engine at half the sample rate, see Odin2-MPC) took Antarctica from 70 % to 40 % on MPC's CPU meter, about the 40 % fewer instructions measured offline.
