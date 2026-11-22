@@ -2868,3 +2868,10 @@ device; the user played the guitar through the QC during each capture.
   3 capture, buffer 768) and streams 44097 frames/s, duplex, 0 xruns. Its converter is the same 16-bit linear one: recorded through
   `plughw` at 44.1 kHz versus native 48 kHz, the user heard no difference (amp-sim guitar, stereo reverb), but the converted take has
   only 16-bit resolution and more energy above 10 kHz (10-16 kHz band -65 versus -79 dB of the total, 16-22 kHz -74 versus -115).
+- **The QC as MPC's audio device, through an addin (same day).** A preview addin (mpc-addin-rate-bridge, hooks `snd_pcm_open` only)
+  opens alsa-lib's `type rate` PCM over `hw:<card>` at 48 kHz when MPC opens a USB card whose `stream0` lists no 44100. Installed with
+  the shared addin installer next to skipback and usb-audio. MPC then accepted the QC in Preferences and logged
+  `Audio 44100Hz; 8-in; 8-out; 128sample buffer`; for that device MPC asks for a 128-frame buffer, which the converter runs as 140-frame
+  periods at 48 kHz (buffers 421/420). MPC's output and input meters both moved. To hear it: QC USB audio set to **Multi Out**, and
+  MPC's output sent to **outputs 3/4**; the Key 61's own outputs are silent while the QC is MPC's device. Recording a take and a
+  latency measurement were not done yet.
