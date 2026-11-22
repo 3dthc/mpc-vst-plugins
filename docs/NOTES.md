@@ -2808,3 +2808,44 @@ runs on `ubuntu-latest` again (the `ubuntu-24.04` pin of #1086 is gone). The dev
 `dd` cases differ.
 
 - **Catalog build: download cap raised to 128 MiB (2026-11-22, CI log + release API; fix tested offline only).** The `g2-stick-v2.0.0` stick zip is 72,916,787 bytes, over the 64 MiB cap in `tools/site_downloads.py`, so "Copy the Install page's downloads" failed on every push to main (PR runs skip that step, so they stayed green). Both that cap and the Install page reader (`drivewrite.js`) are now 128 MiB. Not yet checked on a real stick or in the deployed Chrome page.
+
+## 2026-11-22: a Quad Cortex mini over USB on a Key 61: silent unless the host plays to it; MPC rejects it as audio device on the rate (device, Key 61, Gen1, MPC OS 3.10.1)
+
+Tried bringing a Neural DSP Quad Cortex mini (`152a:892f`, class-compliant USB audio) into MPC, first as a plugin track
+(MPC USB Bridge 0.2.3, `noxed-mpc-usb-bridge`), then as MPC's own audio device in Preferences. Everything here was seen on the
+device; the user played the guitar through the QC during each capture.
+
+- **How the QC enumerates.** High speed on `ehci-platform` (`usb-ff500000`, a USB-A socket behind the Key 61's internal hub
+  `09e8:504b`), ALSA card `mini`: playback and capture, 8 channels each, S32_LE (24 valid bits), **48000 Hz only**, 125 µs packets.
+  Playback runs in **implicit feedback** mode: its sync endpoint is the capture endpoint (0x82 IN). The Key 61's own cards
+  are `M61` (`09e8:004b`, the keybed's USB audio, full speed) and `ACVM` (internal, not USB).
+- **The QC sends only zeros unless the host is also playing to it.** A capture-only stream delivers frames at the right
+  rate (288000 frames in 6 s), but every sample on all 8 channels is exactly 0. With a second stream playing silence to the QC's
+  playback side, capture carries the signal: ch1 -4.3 dBFS peak / -16.9 RMS, ch2 -5.0 / -16.8, ch3 -21.3 / -34.5, ch4 at the noise floor,
+  ch5-8 zero (QC output set to USB 1/2). Capture and playback can be held by **different processes** (MPC's plugin captures, a
+  helper plays) when both use the same period and buffer (128 / 1024 frames at 48 kHz); no xruns in about 20 minutes.
+- **Capture buffer size mattered (cause not known).** With `snd_pcm_set_params(..., latency)`, a 100 ms or 21.3 ms latency made the
+  first `snd_pcm_readi` fail with EIO and 0 frames, and the stream status never left Stop; 5.3 ms worked every time.
+- **MPC USB Bridge 0.2.3 on the QC:** STATUS STREAMING (`S32 8ch 48.0 kHz (measured 48.00) -> MPC 44.1 kHz, period 128`) but
+  `peak -inf`, because it opens capture only, takes channels 1-2 and never plays to the device. With the helper above running it
+  worked well (user: "tremendously well"), latency reported as 20.1 ms. Other findings: it sends an UpdateDisplay whenever its
+  status text changes, checked every 500 ms, so while audio plays the plugin-picker menu on its track jumps and selects the wrong
+  item (the menu rebuild described in `docs/EMULATOR_PORTS.md`); its report's "Seen, but cannot open audio" verdict is wrong while
+  the Bridge itself holds the capture (EBUSY, owner is MPC's own thread). Reported upstream (molgino/noxend-mpc-plugins#4).
+  The catalog listed it with no installable version: the repo was renamed to `noxend-mpc-plugins` and the registry still named
+  the old one (fixed in #1101).
+- **Installing that release by hand:** the Key 61 has no `/sdcard/Synths`; its plugins are in `<drive>/VST2 Plugins` on the
+  attached drive. The release's `install.sh` is an older template that defaults to `/sdcard/Synths`, so it needs
+  `-t "<drive>/VST2 Plugins"`; with that it installed and MPC restarted cleanly. `/data/Settings/MPC/MPC.settings` and
+  `/media/az01-internal/Settings/MPC/MPC.settings` are the same file (same inode).
+- **Recording a plugin track's sound:** arming the plugin track records MIDI, not audio. The audio track's input list has no
+  Resample entry on this device (seen by the user), even though `/usr/bin/MPC` contains the strings "Resample L", "Resample R"
+  and "Resample L+R". The Sampler's Resample input does record it.
+- **The QC as MPC's audio device (Preferences):** MPC reads the card's mixer controls ("Ignoring non-boolean control Playback
+  Channel Map", ...), then logs `Error: 44100 may not be a supported sample rate on the external device. Code: -22, Message:
+  Invalid argument` twice and `Failed to open ALSA device for capture hw:2`. It opens the device **by card index** (`hw:2`),
+  shows the same error on screen, and falls back to the Key 61's own audio: `Audio 44100Hz; 2-in; 4-out; 192sample buffer`.
+  So on this device MPC's period is 192 frames, not 128. The rate is the only refusal seen; no vendor or model check showed up.
+- **Userland for audio work on this Key 61:** no `arecord`/`aplay`, no `/usr/lib/alsa-lib/` (so ALSA has no speex or libsamplerate
+  converter, and `plughw:` would fall back to linear interpolation), no `/etc/asound.conf`, BusyBox 1.36.1 without `pkill` or
+  `head -c`. `libasound.so.2` is alsa-lib 1.2.11.
