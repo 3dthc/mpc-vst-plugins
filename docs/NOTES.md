@@ -2873,5 +2873,6 @@ device; the user played the guitar through the QC during each capture.
   the shared addin installer next to skipback and usb-audio. MPC then accepted the QC in Preferences and logged
   `Audio 44100Hz; 8-in; 8-out; 128sample buffer`; for that device MPC asks for a 128-frame buffer, which the converter runs as 140-frame
   periods at 48 kHz (buffers 421/420). MPC's output and input meters both moved. To hear it: QC USB audio set to **Multi Out**, and
-  MPC's output sent to **outputs 3/4**; the Key 61's own outputs are silent while the QC is MPC's device. Recording a take and a
-  latency measurement were not done yet.
+  MPC's output sent to **outputs 3/4**; the Key 61's own outputs are silent while the QC is MPC's device, and the Key 61's MAIN
+  volume knob has no effect (MPC ignores the QC's volume controls). A guitar take recorded on an audio track (input 1/2) played back
+  cleanly (user), with no audio errors in MPC's log for the session. No latency measurement yet.
