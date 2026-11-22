@@ -2849,3 +2849,22 @@ device; the user played the guitar through the QC during each capture.
 - **Userland for audio work on this Key 61:** no `arecord`/`aplay`, no `/usr/lib/alsa-lib/` (so ALSA has no speex or libsamplerate
   converter, and `plughw:` would fall back to linear interpolation), no `/etc/asound.conf`, BusyBox 1.36.1 without `pkill` or
   `head -c`. `libasound.so.2` is alsa-lib 1.2.11.
+- **What MPC calls, from a trace (`poc/alsatrace`, same day).** MPC opens its audio device as `hw:<index>`, playback then capture, each:
+  `hw_params_any`, `set_access RW_INTERLEAVED`, `set_format S32_LE`, **`set_rate 44100` (exact)**, `set_channels_near 32` (Key 61:
+  4 out, 2 in), `set_period_size_near 192`, `set_periods_near 3` (playback) / `2` (capture), `hw_params` (buffers 576 / 384); sw params:
+  start threshold = boundary, stop threshold = buffer, avail_min = period, silence threshold 0. Its audio thread then drops and prepares
+  both streams, writes 3 periods ahead, starts capture then playback, and loops `readi`/`avail`/`writei`. **No `snd_pcm_link`.** It
+  recovers an underrun (-32) with drop/prepare/start, not `snd_pcm_recover`. Choosing the QC in Preferences: MPC closes `hw:1`
+  first, then on `hw:2` access and format succeed and **`set_rate 44100` returns -22** on both streams. That is the only failing call;
+  MPC closes it and reopens `hw:1`. The log appeared only once MPC opened audio, about 30 s after its restart.
+- **Startup errors with the QC plugged in.** The user gets two error dialogs at every MPC start while the QC is connected. The trace
+  shows MPC opening `hw:1` successfully, then about a second later trying `open "hw:1"` again twice (playback and capture) while still
+  holding it: `-16` (EBUSY), logged as `Failed to open ALSA device for capture hw:1` twice. MPC never tried `hw:2` at that start.
+  The audio already running is unaffected. Not checked with no addins loaded.
+- **Which converter fits MPC's sequence** (`poc/alsatrace` `mpc_negotiate`, replaying it on the device): `hw:CARD=mini` fails at the
+  exact rate as MPC does (channels 8..8). `plughw:CARD=mini` offers 1..10000 channels, so `set_channels_near 32` returns **32**, and
+  its capture `hw_params` fails (-22) with MPC's 2-period request: not usable. alsa-lib's plain `type rate` PCM over `hw:mini` at
+  48000 (inline config, `snd_pcm_open_lconf`) keeps 8 channels, accepts the whole sequence (periods round up: 4 playback, buffer 771;
+  3 capture, buffer 768) and streams 44097 frames/s, duplex, 0 xruns. Its converter is the same 16-bit linear one: recorded through
+  `plughw` at 44.1 kHz versus native 48 kHz, the user heard no difference (amp-sim guitar, stereo reverb), but the converted take has
+  only 16-bit resolution and more energy above 10 kHz (10-16 kHz band -65 versus -79 dB of the total, 16-22 kHz -74 versus -115).
