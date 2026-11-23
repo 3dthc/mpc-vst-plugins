@@ -2925,3 +2925,10 @@ Details, addresses and the feasibility notes are in `docs/MPC_MODES.md`. Verifie
   `check_profile_a32.py` (six deliberate profile errors are each reported), and the hooks run through the real patching engine on 32-bit
   ARM under qemu-user. Not yet on a device (no Gen1 MPC; the Force is on an older MPC OS); the compat emulator runs the real firmware.
   Also fixed by the 32-bit test: the live page host took the `decodeImage` vtable slot in units of 8 bytes.
+- **Offline, 2026-11-24: the shim on the real Gen1, Force and Gen2 binaries (user-mode emulation).** Running each update image's real `MPC`
+  in a chroot with the shim preloaded (arm32v7 / arm64v8 under Docker binfmt; modeslot/real_mpc_test.sh): Gen2 3.10.1, Gen1 3.10.1 and
+  Force 3.10.1 print `modeslot: installed:` and MPC's own startup runs on; Gen2 3.10.0, Gen1 3.9.1 and the Force's 3.10.1.8 print
+  `modeslot: refused: unknown MPC build-id` and MPC starts as before. MPC stops later for lack of a display (as it does without the
+  shim). The UI path (the tile, the page) was not run: QEngine's full emulation of Gen1 3.10.1 did not get through boot on this host
+  (the guest's 90 s wait for its data device expired under TCG; the harness waits for MPC's first start were fixed-length).
+
