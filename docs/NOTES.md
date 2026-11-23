@@ -2885,6 +2885,8 @@ device; the user played the guitar through the QC during each capture.
 - **MPC doesn't keep an external audio device across restarts (same day).** After the QC was selected in Preferences, an MPC restart
   (00:27) and a power cycle (00:08) both came back on `hw:1` (the Key 61's own audio); MPC never tried `hw:2` at startup.
   `MPC.settings` holds `<VALUE name="audioSetup"><DEVICESETUP audioOutputDeviceName="" audioInputDeviceName=""/>` and an
-  `AudioDevices` list with only `Internal`, i.e. the default. The two startup dialogs ("AUDIO DEVICE ERROR: Failed to open Capture
+  `AudioDevices` list with only `Internal`, i.e. the default. MPC rewrites `MPC.settings` while running (about a minute after start,
+  and when leaving Preferences): with the QC selected and running (00:34:31) it saved at 00:35:32, `audioSetup` still empty; the QC
+  appears in the file only as a MIDI device ("Quad Cortex mini MIDI 1"). So MPC 3.10.1 does not persist an external audio device. The two startup dialogs ("AUDIO DEVICE ERROR: Failed to open Capture
   Stream", the EBUSY re-open of `hw:1` above) also appeared with skipback and usb-audio removed and only the rate-converting addin loaded.
   Not yet checked with no addin at all.
