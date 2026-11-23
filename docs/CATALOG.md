@@ -462,7 +462,7 @@ Locrian's installer uses a drop-in folder in `Synths` (`docs/CATALOG_SPEC.md`, "
   CC BY over ODC-BY for recognition, and because the draft already excludes plugin text and screenshots, which stay their authors'. Added: an
   `attribution` field in `catalog.json`, `<rights>` in the feeds and a footer line on the site and plugin pages. `catalog.tsv` is unchanged:
   it is positional. Still to do before merging: sign-off from every listed maintainer (`LICENSE` names sd88me), a legal read, and a
-  `tools/compat/run.sh` run against the published catalog to confirm old managers and installers ignore the new field (not run).
+  `tools/compat/run.sh` run against the published catalog (not run: no Docker daemon, no route to the published catalog and no Go 1.26 where this was drafted). Read instead on 2026-11-23, from the client tags: the managers v0.2.0 and v0.2.5 dispatch top-level keys in `top_member`, which acts only on `plugins` and skips every other value whole with `jskip`, and the installers v0.5.5 and v1.1.2 decode with `json.Unmarshal` into a struct (no `DisallowUnknownFields`) and check only `schema`, which stays 1.
 - **Catalog scope creep.** Every feature that needs a server, a DB or manual curation is out of scope by default.
 
 ## Client addresses during the organization move (2026-10-20, offline tests only; new address live 2026-11-01)
