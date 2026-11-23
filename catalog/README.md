@@ -236,7 +236,9 @@ from one repo by one author without a collection, and on any `*.json` directly i
 `added.json`, `apps.json`, `patches.json` and `yanked.json`: an entry put one folder too high); without the flag it fetches releases (set
 `GITHUB_TOKEN` to avoid API limits) and writes `catalog/dist/catalog.json` and `problems.json`.
 In `problems.json`, `superseded: true` marks a failing release that a newer, unyanked release of the same plugin
-replaces. `python3 tools/catalog_issues.py --dry-run` shows the issues the nightly would open and close.
+replaces; `transient: true` marks a read that failed with a server error or timeout after retries (no issue opens for it;
+`--previous <published catalog.json path or URL>` lets a `tested.json` that failed that way keep its published results).
+`python3 tools/catalog_issues.py --dry-run` shows the issues the nightly would open and close.
 `python3 tools/catalog_site.py` then writes the site to `catalog/dist/site/` (open `index.html`).
 
 ## Guide pages

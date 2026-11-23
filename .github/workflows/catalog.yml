@@ -54,7 +54,8 @@ jobs:
         if: ${{ github.event_name != 'pull_request' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 tools/catalog_build.py
+        # --previous: a tested.json the server won't hand over (5xx after retries) keeps its published results
+        run: python3 tools/catalog_build.py --previous https://open-mpc.github.io/catalog.json
       - name: Host the converted SDK zips (releases that carry only an Akai SDK zip; uploaded once, never replaced)
         # catalog_build.py converted them into per-build zips and listed this release's URLs for them; they must exist before the site goes out
         if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
