@@ -198,6 +198,18 @@ is hidden or demoted because of it. The items:
 ## Feed
 The site publishes `feed.xml` (Atom, newest 50 non-yanked releases). Members of a collection released on the same day are one entry.
 
+## Reusing the catalog
+`catalog.json`, `catalog.tsv` and `feed.xml` are public and meant to be read by other tools: plugin managers, mirrors, community
+lists. Read them freely. If you build a list or tool on them, please:
+- **Credit and link:** say where the data comes from ("Plugin list from OpenMPC, https://open-mpc.github.io") on your site or README,
+  not only in a code comment. If you seed your own list from our registry (for example by taking every `repo`), that counts.
+- **Keep to our verdicts:** a plugin we delist, yank or mark `experimental` should not show as a normal listing in your copy. Re-read
+  the file on every build rather than keeping repos from an old read.
+- **Don't present the checks as yours:** the review (open source, checksums, no other company's branding) is what the catalog adds.
+  Say so if you rely on it, or do your own and say that.
+Summaries, screenshots and skins belong to their authors; link to each plugin's page or repo rather than copying them. The code in
+this repo is MIT (`LICENSE`), which asks for its copyright notice in copies of the code.
+
 ## Yank a release
 Add `"<id>@<version>"` (or `"<id>@*"` for all versions) to `yanked.json`. It stays in the catalog marked yanked and is
 never offered as the latest.

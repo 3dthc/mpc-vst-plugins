@@ -286,6 +286,15 @@ the list for the entry's kind (MIDI means an instrument with `role: "midi"`). Al
 machine 21, Sampler & rompler 17, Macro & hybrid 16, Mono & bass 14, Wavetable 14, ...). The site shows the labels. A new style is a
 PR to `styles.json`.
 
+### Reuse by other lists and tools (2026-11-23, no code change)
+`catalog.json` is public, so other projects read it: plugin managers, mirrors and community lists, some nightly. One in the wild
+(checked 2026-11-23, public repos only) takes the `repo` of every non-experimental, non-build-yourself entry as its starting list,
+merges it with what it already had and never drops a repo, so a plugin we delist or yank can stay on that list. The expectation
+for such projects is written in `catalog/README.md` "Reusing the catalog": credit and link the source in visible text, honour delist,
+yank and `experimental`, and don't copy summaries, screenshots or skins (they belong to the authors). It is a request, not a licence
+term: the data is facts about other people's plugins, and the MIT licence only covers code copied from this repo. We don't gate or
+change `catalog.json` for it, since installers read it. Nothing here is enforced; the page exists so a maintainer has one thing to link.
+
 ### Site
 Generated static HTML (`tools/catalog_site.py`, no JS framework): searchable/filterable grid, a page per plugin
 (screenshot, description, version history, install steps, source link, checksum, tested-on), a "recently updated"
