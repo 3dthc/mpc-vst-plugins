@@ -40,6 +40,10 @@ static void setup(snd_pcm_t *pcm) {
 }
 
 int main(void) {
+    int card = -1;
+    while (snd_card_next(&card) == 0 && card >= 0) { char n[32]; snd_ctl_t *c; snprintf(n, sizeof n, "hw:%d", card); if (snd_ctl_open(&c, n, 0) == 0) snd_ctl_close(c); }
+    P(snd_card_next(&card) == 0);
+    { snd_ctl_t *c = NULL; int r = snd_ctl_open(&c, "hw:0", 0); printf("ctl_open hw:0 %s\n", r == 0 ? "ok" : "failed"); if (r == 0) snd_ctl_close(c); }
     snd_pcm_t *pb = NULL, *cap = NULL;
     static int32_t frames[192 * 2];
     P(snd_pcm_open(&pb, "null", SND_PCM_STREAM_PLAYBACK, 0));

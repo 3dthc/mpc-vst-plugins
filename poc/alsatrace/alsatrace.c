@@ -4,7 +4,9 @@
  * An addin that redirects such a device to alsa-lib's rate converter has to answer MPC's calls the way MPC expects,
  * so this probe records them first: snd_pcm_open (name, stream, mode), every hw/sw-params setter, getter and test with its
  * arguments and result, link/prepare/start/drop/recover/close, and, for the per-period calls (readi/writei/readn/
- * writen, avail, wait, poll, forward/rewind), the first few calls per PCM and every error, plus totals at close.
+ * writen, avail, wait, poll, forward/rewind), the first few calls per PCM and every error, plus totals at close. It also logs MPC's
+ * device enumeration (snd_card_next, snd_ctl_open/close, snd_ctl_pcm_next_device/pcm_info, snd_device_name_hint), so a trace shows
+ * what MPC looked at between two opens.
  *
  * It changes nothing: each hook calls the next definition (dlsym(RTLD_NEXT), docs/ADDINS.md "Two addins that replace the
  * same function") with the same arguments and returns its result. Log: $ALSATRACE_LOG or /tmp/alsatrace.log, capped at
@@ -362,5 +364,48 @@ EXPORT int snd_pcm_poll_descriptors_revents(snd_pcm_t *p, struct pollfd *f, unsi
     REAL(int, snd_pcm_poll_descriptors_revents, snd_pcm_t *, struct pollfd *, unsigned, unsigned short *);
     int r = real(p, f, nfds, rev);
     if (tick(p, K_REVENTS, r, 0)) logf_("poll_descriptors_revents %p nfds=%u -> %d (revents 0x%x)", (void *)p, nfds, r, rev ? *rev : 0);
+    return r;
+}
+
+/* ---- device enumeration (what MPC looks at while it builds its device list) ---- */
+typedef struct _snd_ctl snd_ctl_t;
+typedef struct _snd_ctl_card_info snd_ctl_card_info_t;
+typedef struct _snd_pcm_info snd_pcm_info_t;
+EXPORT int snd_card_next(int *card) {
+    REAL(int, snd_card_next, int *);
+    int in = card ? *card : -2;
+    int r = real(card);
+    logf_("card_next %d -> %d (%d)", in, r, card ? *card : -2);
+    return r;
+}
+EXPORT int snd_ctl_open(snd_ctl_t **ctl, const char *name, int mode) {
+    REAL(int, snd_ctl_open, snd_ctl_t **, const char *, int);
+    int r = real(ctl, name, mode);
+    logf_("ctl_open \"%s\" mode=0x%x -> %d %p", name ? name : "(null)", mode, r, r == 0 && ctl ? (void *)*ctl : NULL);
+    return r;
+}
+EXPORT int snd_ctl_close(snd_ctl_t *ctl) {
+    REAL(int, snd_ctl_close, snd_ctl_t *);
+    int r = real(ctl);
+    logf_("ctl_close %p -> %d", (void *)ctl, r);
+    return r;
+}
+EXPORT int snd_ctl_pcm_next_device(snd_ctl_t *ctl, int *dev) {
+    REAL(int, snd_ctl_pcm_next_device, snd_ctl_t *, int *);
+    int in = dev ? *dev : -2;
+    int r = real(ctl, dev);
+    logf_("ctl_pcm_next_device %p %d -> %d (%d)", (void *)ctl, in, r, dev ? *dev : -2);
+    return r;
+}
+EXPORT int snd_ctl_pcm_info(snd_ctl_t *ctl, snd_pcm_info_t *info) {
+    REAL(int, snd_ctl_pcm_info, snd_ctl_t *, snd_pcm_info_t *);
+    int r = real(ctl, info);
+    logf_("ctl_pcm_info %p -> %d", (void *)ctl, r);
+    return r;
+}
+EXPORT int snd_device_name_hint(int card, const char *iface, void ***hints) {
+    REAL(int, snd_device_name_hint, int, const char *, void ***);
+    int r = real(card, iface, hints);
+    logf_("device_name_hint card=%d iface=%s -> %d", card, iface ? iface : "(null)", r);
     return r;
 }
