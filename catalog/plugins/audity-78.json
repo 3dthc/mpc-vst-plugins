@@ -5,8 +5,8 @@
   "repo": "Luminous-Works/mpc-vst-audity-78",
   "kind": "instrument",
   "license": "MIT",
-  "summary": "Wavetable synth: two morphing wavetable oscillators, SSM2040-style filters, chorus, delay and reverb. 16 sounds.",
+  "summary": "Wavetable synth: two morphing oscillators, SSM2040-style filters, chorus, delay, reverb. 16 sounds. Bright tables alias on high notes.",
   "style": "wavetable",
-  "tags": ["wavetable", "polyphonic", "analog", "chorus", "reverb"],
-  "screenshot": "https://raw.githubusercontent.com/Luminous-Works/mpc-vst-audity-78/v0.1.0/docs/screenshots/audity-78.png"
+  "tags": ["wavetable", "polyphonic", "chorus", "reverb"],
+  "screenshot": "https://raw.githubusercontent.com/Luminous-Works/mpc-vst-audity-78/v0.2.0/docs/screenshots/audity-78.png"
 }
