@@ -1,0 +1,5 @@
+{ "id": "sculpt", "name": "Sculpt", "author": "Lightlike", "repo": "lightlikemusic/sculpt",
+  "kind": "instrument", "style": "sampler-rompler", "tags": ["sampler", "granular", "looper", "lo-fi", "reverb", "ambient"],
+  "license": "MIT",
+  "screenshot": "https://raw.githubusercontent.com/lightlikemusic/sculpt/v1.0.0/docs/screenshot.png",
+  "summary": "A sculpting sampler and looper. Stretch, slice, reverse and granulate samples, filter them into harmonic tones, and add grit and warmth. Send them through chorus, echo and big reverbs. Sync to the beat or let them drift like tape." }
