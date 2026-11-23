@@ -215,3 +215,54 @@ Steps:
 1. Shim v3: touches to the socket, plus repaint on a new frame. Test it on the device with a tiny test app that
    draws the last touch.
 2. Plugin Manager: its background server draws its UI (software raster to PNG) and handles the touches.
+
+## The 32-bit builds: Gen1 MPC and Force, MPC OS 3.10.1 (offline, 2026-11-23)
+
+**[F, offline: read from the update images, tested under qemu-user; not on a device.]** The Mode Slot shim now has profiles for
+the 32-bit ARM builds. Everything above (the `ModeID` table, the three holes, the hooks) applies to them; this section is what
+differs and where the sites are. Images: `MPC-3.10.1-Gen1-update.img` (Gen1 MPC: Live, Live II, One, X, Key 61/37) and
+`Force-3.10.1-update.img` (the final Force 3.10.1; the 3.10.1.8 pre-release is a different build), both from the private
+open-mpc/mpc-firmware release. An update image is an `AZ01` container holding xz streams; the root filesystem is the big ext4 one.
+
+| | Gen1 MPC 3.10.1 | Force 3.10.1 |
+|---|---|---|
+| build-id | `851d050eb03ce0b8663aaa572b2599813cbf53d4` | `1d93533452bc330028ca60b735b83a4be3e4ebbd` |
+| `getModeName` (out r0, id r1) / its `0x2080` switch | `0x166e39c` / `addls` at `0x166e630` | `0x166e35c` / `0x166e5f0` |
+| `registerMode` (mgr, id, Mode\*) | `0x166b374` | `0x166b334` |
+| touch UI mode change (this, id) / its page switch | `0x3640804` / `0x36408a4` | `0x36403cc` / `0x364046c` |
+| `ImageCache::getFromMemory` (out, data, size) | `0xadbeb4` | `0xadbe74` |
+| MENU icon lookup (out, id) | `0x3818620` | `0x38181e8` |
+| `ModeMenuOrder` setup (this, vector&, settings) | `0xef4e20` | `0xef4de0` |
+| `TouchDummyPage::paint` (slot 8 of the vtable at) | `0x3a5a5ec` (`0x6f3c370`) | `0x3a5a1b4` (`0x6f3b390`) |
+| mouseDown/Drag/Up slots; JUCE's empty callback | `0x6f3c3d0/d4/d8`; `0xb53c08` | `0x6f3b3f0/f4/f8`; `0xb53bc8` |
+| wrapper vtable (`TouchPageContainer`'s Component sub-vtable) | `0x6f01bec` | `0x6f00c0c` |
+| `Component::repaint()`, `internalRepaint(x,y,w,h)`, `setBounds(x,y,w,h)` | `0xbc39d0`, `0xbc322c`, `0xbd72c8` | `0xbc3990`, `0xbc31ec`, `0xbd7288` |
+| `MemoryInputStream` ctor / dtor, `findImageFormatForStream` | `0x94f4dc` / `0x93bc70`, `0xa86bbc` | `0x94f49c` / `0x93bc30`, `0xa86b7c` |
+| placeholder pointer variable -> PNG (208,454 bytes) | `0x7028620` -> `0x5844d50` | `0x7027620` -> `0x58445d0` |
+
+The two builds are the same program text, `0x40` bytes apart in most of it (the touch UI `0x438` apart), found by matching
+functions by instruction patterns with branch targets and literal offsets masked out; every site matched exactly one function.
+
+What is different from Gen2:
+- **Calling convention.** A class returned by value (`juce::String`, `juce::Image`) comes back through a hidden pointer that is
+  the first argument (`r0`), not `x8`, so the 32-bit hooks are ordinary C functions. `Rectangle<int>` (16 bytes) is passed in
+  `r1`-`r3` and the stack: `internalRepaint(this, x, y, w, h)`, not two packed registers. A `ModeID` is `r1` after a result
+  pointer in `r0`.
+- **Long-branch veneers.** The text is 77 MB, beyond a branch's 32 MB, so calls to far functions go through linker veneers
+  (`ldr ip, [pc]; add pc, pc, ip; .word offset`, target = veneer + 12 + offset). Hook the real function, never a veneer.
+- **Function starts.** Prologues use `strd`/`str lr`, not `push`; scanning for `push {..., lr}` finds almost nothing. The binary has
+  `.ARM.exidx`, which lists every function's start. Entry instructions may be PC-relative literal loads (`ldr r2, [pc, #0x4fc]`);
+  what they load is a constant (often an offset the function adds its own pc to later), so a trampoline can re-create them.
+- **Jump tables** are `addls pc, pc, rN, lsl #2` followed by one `b` per id (the instruction after the `addls` is the default's
+  `b`), not halfword offsets.
+- **Layouts** (pointers are 4 bytes): `juce::Component` parent `+0xc`, bounds `x, y, w, h` at `+0x10`, child array `+0x28` with its count
+  at `+0x30`, flags `+0x68`; `ReferenceCountedObject`'s count `+4`; `TouchDummyPage`'s Component sub-object is at `+8`
+  (Gen2: `+16`); the touch UI keeps the placeholder page's holder at `this + 0x3510`, the page pointer inside it at `+0x1a0`;
+  `decodeImage` is vtable slot 5 (`+0x14`). The vtables' groups and offsets-to-top come from the RTTI (`14TouchDummyPage`,
+  `18TouchPageContainer`); no JUCE function has a symbol.
+- **`ModeMenuOrder`.** The function that reads the `ModeMenuPage`/`Slot` settings keys (`0x23aad68`, 4 arguments) has no direct
+  callers; the hook goes on its wrapper `0xef4e20` instead (the same shape as Gen2's `0x154da40`).
+
+Checked by `check_profile_a32.py` (in open-mpc/plugin-manager, `modeslot/`) against both binaries, including through the RTTI that
+`paint` is slot 8 of `TouchDummyPage`'s vtable and that the Component layout constants match the code of `setBounds`, `repaint`
+and `getFromMemory`.

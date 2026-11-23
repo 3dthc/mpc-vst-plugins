@@ -2917,3 +2917,11 @@ Details, addresses and the feasibility notes are in `docs/MPC_MODES.md`. Verifie
   the plugin's daemon, which the plugin's own launcher had started at 15.7 s (its once-per-boot guard then left the app's
   alone). **Bug found and fixed:** cards past the first ~120 thumbnails showed one picture (the page table's option
   lists, ~3,600 characters, were cut at 1,500 by the page's loader).
+- **Offline, 2026-11-23: Mode Slot profiles for Gen1 MPC and Force, MPC OS 3.10.1.** The shim's 32-bit ARM version (open-mpc/plugin-manager,
+  `modeslot/`) has a profile for the Gen1 MPC 3.10.1 build (`851d050e...`) and for the final Force 3.10.1 build (`1d935334...`; not the
+  3.10.1.8 pre-release, `02639aca...`, which would have been refused). Addresses and what differs from Gen2 (hidden result pointer is `r0`,
+  `Rectangle<int>` in four registers, long-branch veneers, `strd` prologues, `.ARM.exidx` for function starts, `b`-table switches, 4-byte
+  Component layout) are in `docs/MPC_MODES.md`. Done offline only: found from the update images, checked against both binaries by
+  `check_profile_a32.py` (six deliberate profile errors are each reported), and the hooks run through the real patching engine on 32-bit
+  ARM under qemu-user. Not yet on a device (no Gen1 MPC; the Force is on an older MPC OS); the compat emulator runs the real firmware.
+  Also fixed by the 32-bit test: the live page host took the `decodeImage` vtable slot in units of 8 bytes.
