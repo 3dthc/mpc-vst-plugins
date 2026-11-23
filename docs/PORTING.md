@@ -89,6 +89,9 @@ for the pattern). This applies to every future port, not just ones that hit the 
 ## 2. Parameters
 - [ ] Stable order (the VST index is what skins and projects bind to). Append only; never reorder a shipped plugin.
 - [ ] Options: an index; nudges step one option (the wrapper does this). Triggers: `"momentary": true`, which springs back.
+- [ ] Display-only vents (a meter or "orb" whose value follows the audio, not the user) take `"live": true`. The offline
+      host test's STOP-toggle checks then skip them (gen_vst.py emits `PLUG_LIVE`), since their text legitimately changes
+      with the output and would otherwise read as a knob that moved on its own. (offline, 2026-11-23)
 - [ ] Display strings are the only dynamic text channel into the skin (see NOTES on refresh behaviour).
       A param whose `get_param()` returns real text (a name, a status message), not a number, needs
       `"display": "string"` in its parameter entry -- otherwise the wrapper's default numeric

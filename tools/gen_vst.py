@@ -165,6 +165,12 @@ def gen_params(cfg, params, out):
               "#define PLUG_NAME %s" % c_str(cfg["name"]), "#define PLUG_VENDOR %s" % c_str(cfg["vendor"]),
               "#define PLUG_UID 0x%08x /* '%s' */" % (int.from_bytes(cfg["uid"].encode(), "big"), cfg["uid"]),
               "#define PLUG_VERSION %d" % cfg.get("version", 1000)]
+    # "live" params are display-only vents that follow the output (e.g. a meter), not knobs. The host test's
+    # toggle checks skip them via PLUG_LIVE, since their text legitimately changes with the audio.
+    live = [i for i, p in enumerate(params) if p.get("live")]
+    if live:
+        lines += ["static const int PLUG_LIVE[] = {%s};" % ", ".join(str(i) for i in live),
+                  "#define PLUG_LIVE_COUNT %d" % len(live)]
     lines += ["#define %s %s" % (k, v) for k, v in cfg.get("defines", {}).items()]
     if cfg.get("effect"):
         lines.append("#define PLUG_EFFECT 1")
