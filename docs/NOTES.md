@@ -2882,3 +2882,9 @@ device; the user played the guitar through the QC during each capture.
   JSON (`.xpj` is gzip; the event's `audio.sliceStart`), so it skips 672 samples (15.2 ms) as its own latency compensation, the same
   value on every take this session, and takes land 64 samples (1.45 ms) late. MPC never records the metronome itself: measuring needs
   the physical loop.
+- **MPC doesn't keep an external audio device across restarts (same day).** After the QC was selected in Preferences, an MPC restart
+  (00:27) and a power cycle (00:08) both came back on `hw:1` (the Key 61's own audio); MPC never tried `hw:2` at startup.
+  `MPC.settings` holds `<VALUE name="audioSetup"><DEVICESETUP audioOutputDeviceName="" audioInputDeviceName=""/>` and an
+  `AudioDevices` list with only `Internal`, i.e. the default. The two startup dialogs ("AUDIO DEVICE ERROR: Failed to open Capture
+  Stream", the EBUSY re-open of `hw:1` above) also appeared with skipback and usb-audio removed and only the rate-converting addin loaded.
+  Not yet checked with no addin at all.
