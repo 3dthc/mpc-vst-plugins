@@ -2875,4 +2875,10 @@ device; the user played the guitar through the QC during each capture.
   periods at 48 kHz (buffers 421/420). MPC's output and input meters both moved. To hear it: QC USB audio set to **Multi Out**, and
   MPC's output sent to **outputs 3/4**; the Key 61's own outputs are silent while the QC is MPC's device, and the Key 61's MAIN
   volume knob has no effect (MPC ignores the QC's volume controls). A guitar take recorded on an audio track (input 1/2) played back
-  cleanly (user), with no audio errors in MPC's log for the session. No latency measurement yet.
+  cleanly (user), with no audio errors in MPC's log for the session.
+- **Round-trip latency through that addin** (cable from a QC output into QC input 2, MPC's metronome on outputs 3/4, the dry input
+  recorded on an audio track at 120 BPM, then the saved WAV measured against the beat grid): **736 samples (16.7 ms)** from MPC's output
+  to its recording, identical on all 16 clicks (±0.5 sample) and no drift. MPC stores each take with `sliceStart: 672` in the project
+  JSON (`.xpj` is gzip; the event's `audio.sliceStart`), so it skips 672 samples (15.2 ms) as its own latency compensation, the same
+  value on every take this session, and takes land 64 samples (1.45 ms) late. MPC never records the metronome itself: measuring needs
+  the physical loop.
