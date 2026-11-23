@@ -287,13 +287,16 @@ machine 21, Sampler & rompler 17, Macro & hybrid 16, Mono & bass 14, Wavetable 1
 PR to `styles.json`.
 
 ### Reuse by other lists and tools (2026-11-23, no code change)
-`catalog.json` is public, so other projects read it: plugin managers, mirrors and community lists, some nightly. One in the wild
-(checked 2026-11-23, public repos only) takes the `repo` of every non-experimental, non-build-yourself entry as its starting list,
-merges it with what it already had and never drops a repo, so a plugin we delist or yank can stay on that list. The expectation
-for such projects is written in `catalog/README.md` "Reusing the catalog": credit and link the source in visible text, honour delist,
-yank and `experimental`, and don't copy summaries, screenshots or skins (they belong to the authors). It is a request, not a licence
-term: the data is facts about other people's plugins, and the MIT licence only covers code copied from this repo. We don't gate or
-change `catalog.json` for it, since installers read it. Nothing here is enforced; the page exists so a maintainer has one thing to link.
+`catalog.json` is public and other projects read it: plugin managers, mirrors, community lists, some nightly. One in the wild (checked
+2026-11-23, public repos only) takes the `repo` of every non-experimental, non-build-yourself entry as its starting list, merges it with
+what it already had and never drops a repo, so a plugin we delist or yank can stay on that list; it credits OpenMPC only in a code
+comment. The conditions for reuse are written in `catalog/README.md` "Reusing the catalog: terms": visible credit with a link, honour
+delists, yanks and `experimental`, don't present our review as theirs, don't copy listing content. Why credit is a condition: the
+catalog's value is the maintainers' review and validation (what the registry, `CATALOG_REVIEW.md` and CI do), not the file format.
+What we can and can't do: the entries are facts about other people's plugins, so we can't restrict listing a repo as such; what we
+ask for is credit for the compilation and the review, and that our removals are respected. We don't gate or change `catalog.json`
+for this, since installers read it. A formal data licence (for example CC BY 4.0 on the catalog data, with an attribution field in
+`catalog.json`) would make the credit rule stronger and is a maintainer decision (open): see Risks and open questions.
 
 ### Site
 Generated static HTML (`tools/catalog_site.py`, no JS framework): searchable/filterable grid, a page per plugin
@@ -454,6 +457,10 @@ Locrian's installer uses a drop-in folder in `Synths` (`docs/CATALOG_SPEC.md`, "
 - **Non-GitHub hosting.** Start GitHub-only; the registry's `repo` field can grow a `releases_url` later.
 - **Authors not using `release.py`.** Support them by documenting the manifest; the validator is the contract.
 - **Rate limits / token.** One nightly run with the Actions token is far below limits for hundreds of plugins.
+- **Data licence for the catalog (open, 2026-11-23).** The repo is MIT, which covers code, not the published data. Reuse conditions are
+  stated as terms in `catalog/README.md`, but without a named licence their force is uncertain. Option: CC BY 4.0 on the catalog data plus an
+  `attribution` field in `catalog.json` and the TSV/feed headers. Needs the copyright holder's decision and a check that older clients ignore
+  a new field (`tools/compat/run.sh`).
 - **Catalog scope creep.** Every feature that needs a server, a DB or manual curation is out of scope by default.
 
 ## Client addresses during the organization move (2026-10-20, offline tests only; new address live 2026-11-01)
