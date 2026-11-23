@@ -6,6 +6,8 @@
 A failing version is already left out of catalog.json, so the previous good version stays the latest. This only makes
 the failure visible:
 - one issue per failing release (or unreadable plugin), keyed by title, so a problem that persists is reported once;
+- none for a problem marked "transient" (a server error or timeout that outlasted catalog_build.py's retries: the next build
+  will most likely read it), and an open issue with its title is left open, since this build could not tell if it is fixed;
 - none for a release marked "superseded" (a newer release of the same plugin passes: an old tag can't be rebuilt, so
   it is history, not something to fix);
 - none for a per-tag title that has a closed issue: closing it is the answer, it is not opened again (a tag can't
@@ -48,22 +50,32 @@ def reopenable(t):
     return t.endswith(" cannot be read")
 
 
+def body(t, errs):
+    """A per-tag title: that release was left out. A tagless one ("cannot be read") names no release, and its plugin may still be
+    listed (a tested.json that can't be read only costs the test results), so it says what could not be read, not what was excluded."""
+    lines = "\n".join("- " + e for e in errs)
+    if reopenable(t):
+        return ("The nightly catalog build could not read part of this plugin's data.\n\n" + lines +
+                "\n\nFix the repo (or the registry entry). This issue is closed automatically once a build reads it.")
+    return ("The nightly catalog build excluded this release.\n\n" + lines +
+            "\n\nFix the release (or the registry entry). This issue is closed automatically once the release "
+            "passes or a newer release of this plugin passes.")
+
+
 def plan(problems, issues):
     """problems: problems.json; issues: [{number, title, state}] of this repo (open and closed).
     -> (to_open [(title, body)], to_close [(number, comment)])."""
     want = {}
     for p in problems:
-        if not p.get("superseded"):
+        if not p.get("superseded") and not p.get("transient"):
             want.setdefault(title(p), []).append(p["error"])
     known_open = {i["title"] for i in issues if i["state"].upper() == "OPEN"}
     known_closed = {i["title"] for i in issues} - known_open
     blocked = known_open | {t for t in known_closed if not reopenable(t)}
-    to_open = [(t, "The nightly catalog build excluded this release.\n\n" + "\n".join("- " + e for e in errs) +
-                "\n\nFix the release (or the registry entry). This issue is closed automatically once the release "
-                "passes or a newer release of this plugin passes.")
-               for t, errs in want.items() if t not in blocked]
+    to_open = [(t, body(t, errs)) for t, errs in want.items() if t not in blocked]
     superseded = {title(p) for p in problems if p.get("superseded")}
     skip_ids = {p["id"] for p in problems if unread(p)}
+    held = {title(p) for p in problems if p.get("transient")}   # not known either way this build: an open issue stays open
     to_close, seen = [], set()
     for i in sorted((i for i in issues if i["state"].upper() == "OPEN"), key=lambda i: i["number"]):
         m = TITLE_RE.match(i["title"])
@@ -73,7 +85,7 @@ def plan(problems, issues):
             to_close.append((i["number"], "Duplicate of an older open issue with the same title."))
             continue
         seen.add(i["title"])
-        if i["title"] in want or m.group(1) in skip_ids:
+        if i["title"] in want or i["title"] in held or m.group(1) in skip_ids:
             continue
         to_close.append((i["number"], "A newer release of this plugin passes the catalog build, so this one is history."
                          if i["title"] in superseded else "The catalog build no longer reports this problem."))

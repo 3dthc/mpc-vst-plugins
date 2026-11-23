@@ -359,6 +359,13 @@ here first and move to its own repo (recommended, for community ownership) once 
       be rebuilt, even if its release asset is later replaced); a closed "repo cannot be read" title reopens if the
       repo breaks again, since that one isn't tied to a fixed tag; duplicates close. Issues on the plugin's own
       repo: not done.
+- [x] (2026-11-24, offline unit tests; not yet seen in a real outage) Server errors are not plugin problems. On 2026-11-23
+      raw.githubusercontent.com answered `503 Backend.max_conn reached` for 29 plugins' `tested.json` in one build: the
+      published catalog dropped 19 of them from `verified` to `listed`, and 29 "cannot be read" issues opened (#1120-#1148)
+      that wrongly said a release was excluded. Now every GitHub read retries a 5xx, 429 or timeout (`RETRY_DELAYS`, 4 tries);
+      a `tested.json` that still fails keeps that plugin's test results from the published catalog (`--previous`, which the
+      workflow passes); and the problem is marked `transient`, which opens no issue and leaves an open one as it is. A 404 (no
+      file) or a file that won't parse is handled as before. A "cannot be read" issue's text now says what could not be read.
 - [x] (`.github/workflows/catalog.yml`, builds and uploads an artifact; Pages deploy comes with Phase 3) Workflow: nightly cron + `repository_dispatch`/`workflow_dispatch`; an optional one-line "ping" step ports
       can add to their release workflow for instant updates.
 - [x] (registry rules and licence list; 'latest release validates' runs in the full build) PR check for registry PRs: schema, repo exists, latest release validates, uid unique. Issue template

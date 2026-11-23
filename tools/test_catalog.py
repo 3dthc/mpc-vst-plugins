@@ -895,6 +895,62 @@ class BuildTest(Base):
         self.assertNotIn("sdk", v["assets"])
         self.assertTrue(any("SDK zip not listed" in w for w in v["warnings"]), v["warnings"])
 
+    def test_tested_json_server_error_keeps_the_published_results(self):
+        """raw.githubusercontent.com answered 503 for 29 plugins (2026-11-23) and every one of them lost its badges and got an issue.
+        A server error keeps the results of the published catalog (--previous) and is marked transient; a bad file is still ignored."""
+        import urllib.error
+        z = self.build("1.0.0")
+        rel = self.rel("v1.0.0", 1)
+        live = {"device": "MPC Live II", "firmware": "3.10.1", "date": "2026-11-15"}
+        previous = {"plugins": [{"id": "test-synth", "versions": [{"version": "1.0.0", "tested": [live]}]}]}
+
+        class Busy(FakeGitHub):
+            def tested(self, repo):
+                raise urllib.error.HTTPError("https://raw/x", 503, "Backend.max_conn reached", {}, None)
+
+        class Bad(FakeGitHub):
+            def tested(self, repo):
+                raise ValueError("Expecting value: line 1 column 1")
+        for gh, kept in ((Busy, [live]), (Bad, [])):
+            cat, problems = catalog_build.build([self.ENTRY], gh({"acme/test-synth": [rel]}, {1: z}),
+                                                os.path.join(self.tmp, "cache-" + gh.__name__), set(), previous=previous)
+            self.assertEqual(cat["plugins"][0]["versions"][0]["tested"], kept, gh.__name__)
+            p = [p for p in problems if "tested.json" in p["error"]]
+            self.assertEqual(len(p), 1, problems)
+            self.assertEqual(p[0].get("transient", False), gh is Busy, p)
+        self.assertEqual(catalog_build.previous_tested(None), {})
+
+    def test_github_reads_retry_server_errors_only(self):
+        import io
+        import urllib.error
+        calls = []
+
+        def fake(codes):
+            def urlopen(req, timeout=None):
+                calls.append(req.full_url)
+                c = codes.pop(0)
+                if c != 200:
+                    raise urllib.error.HTTPError(req.full_url, c, "x", {}, None)
+                return io.BytesIO(b'[{"version": "1.0.0", "device": "MPC One"}]')
+            return urlopen
+        old, delays = catalog_build.urllib.request.urlopen, catalog_build.RETRY_DELAYS
+        catalog_build.RETRY_DELAYS = (0, 0, 0)
+        try:
+            catalog_build.urllib.request.urlopen = fake([503, 429, 200])
+            self.assertEqual(catalog_build.GitHub().tested("acme/x")[0]["device"], "MPC One")
+            self.assertEqual(len(calls), 3)
+            calls.clear(); catalog_build.urllib.request.urlopen = fake([404])
+            self.assertEqual(catalog_build.GitHub().tested("acme/x"), [])   # no tested.json: not retried
+            self.assertEqual(len(calls), 1)
+            calls.clear(); catalog_build.urllib.request.urlopen = fake([502, 502, 502, 502])
+            with self.assertRaises(urllib.error.HTTPError) as cm:
+                catalog_build.GitHub()._get("https://api.github.com/x")
+            self.assertTrue(catalog_build.transient(cm.exception))
+            self.assertEqual(len(calls), 4)
+            self.assertFalse(catalog_build.transient(urllib.error.HTTPError("u", 403, "x", {}, None)))
+        finally:
+            catalog_build.urllib.request.urlopen, catalog_build.RETRY_DELAYS = old, delays
+
     def sdk_only_zip(self, version="1.0.0"):
         """An Akai SDK-format zip as Akai's tools make it: one folder, binaries in VST/, no per-build zips."""
         f = "Acme - VST - Test Synth"
@@ -1975,6 +2031,18 @@ class IssuesTest(unittest.TestCase):
         self.assertEqual([t for t, _ in got], ["Catalog: c cannot be read"])
         self.assertEqual([n for n, _ in close], [10, 11, 13])
         self.assertIn("newer release", close[0][1])
+
+    def test_transient_problem_opens_nothing_and_keeps_its_open_issue(self):
+        pr = [{"id": "a", "tag": None, "transient": True, "error": "tested.json not read (HTTP Error 503): kept 2 published test results"},
+              {"id": "b", "tag": None, "transient": True, "unreadable": True, "error": "cannot list releases: HTTP Error 502"},
+              {"id": "c", "tag": None, "error": "tested.json ignored: Expecting value"}]
+        issues = [{"number": 1, "title": "Catalog: a cannot be read", "state": "OPEN"},   # from an earlier, real problem: not judged now
+                  {"number": 2, "title": "Catalog: b v1 failed validation", "state": "OPEN"}]   # b unreadable: left alone
+        got, close = catalog_issues.plan(pr, issues)
+        self.assertEqual([t for t, _ in got], ["Catalog: c cannot be read"])
+        self.assertEqual(close, [])
+        self.assertIn("could not read part of this plugin's data", got[0][1])
+        self.assertNotIn("excluded", got[0][1])
 
     def test_cannot_be_read_reopens_but_a_per_tag_title_never_does(self):
         # a tagless title's repo can go from unreadable to readable (closing its issue) and back to
