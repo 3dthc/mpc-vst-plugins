@@ -577,6 +577,20 @@ static void rev_scan(wrap_t *w) {
             float v = get_norm(w, i);
             if (fabsf(v - w->last_norm[i]) > 1e-4f) { w->last_norm[i] = v; w->master(&w->fx, audioMasterAutomate, i, 0, 0, v); }
         }
+#if defined(ENGINE_PROGRAM) && defined(NPRESETS)
+        /* The engine can change its own preset (its on-screen browser): keep the host's current program in step so
+         * the MPC main screen shows the new preset name, and force an UpdateDisplay for it even when
+         * DISPLAY_REV_NO_UPDATE suppresses the general one. The engine's "program" is "picks:loaded" (see the port):
+         * picks changes on every pick so a re-pick of the same preset still registers; loaded is the preset index. */
+        {
+            char pg[24];
+            if (eng_get(w, "program", pg, sizeof pg) > 0) {
+                const char *colon = strchr(pg, ':');
+                int li = colon ? atoi(colon + 1) : -1;
+                if (li >= 0 && li < NPRESETS && li != w->program) { w->program = li; w->need_update_display = 1; }
+            }
+        }
+#endif
     }
 }
 #ifdef DISPLAY_REV_THREAD
