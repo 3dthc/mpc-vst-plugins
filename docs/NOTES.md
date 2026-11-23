@@ -2860,7 +2860,7 @@ device; the user played the guitar through the QC during each capture.
 - **Startup errors with the QC plugged in.** The user gets two error dialogs at every MPC start while the QC is connected. The trace
   shows MPC opening `hw:1` successfully, then about a second later trying `open "hw:1"` again twice (playback and capture) while still
   holding it: `-16` (EBUSY), logged as `Failed to open ALSA device for capture hw:1` twice. MPC never tried `hw:2` at that start.
-  The audio already running is unaffected. Not checked with no addins loaded.
+  The audio already running is unaffected. (Later the same day: it happens with no addins and no QC too; see the startup re-open below.)
 - **Which converter fits MPC's sequence** (`poc/alsatrace` `mpc_negotiate`, replaying it on the device): `hw:CARD=mini` fails at the
   exact rate as MPC does (channels 8..8). `plughw:CARD=mini` offers 1..10000 channels, so `set_channels_near 32` returns **32**, and
   its capture `hw_params` fails (-22) with MPC's 2-period request: not usable. alsa-lib's plain `type rate` PCM over `hw:mini` at
@@ -2889,4 +2889,17 @@ device; the user played the guitar through the QC during each capture.
   and when leaving Preferences): with the QC selected and running (00:34:31) it saved at 00:35:32, `audioSetup` still empty; the QC
   appears in the file only as a MIDI device ("Quad Cortex mini MIDI 1"). So MPC 3.10.1 does not persist an external audio device. The two startup dialogs ("AUDIO DEVICE ERROR: Failed to open Capture
   Stream", the EBUSY re-open of `hw:1` above) also appeared with skipback and usb-audio removed and only the rate-converting addin loaded.
-  Not yet checked with no addin at all.
+  (Later: it also happens with no addin at all; see below.)
+- **MPC re-applies its saved audio device at every startup by opening before closing (same day, traced with `poc/alsatrace` and a
+  stock start).** About 0.7 s after opening and starting `hw:1`, MPC runs its device-open routine again, twice, without closing the
+  first handles (no card enumeration in between). The outcome depends on `audioSetup` in `MPC.settings`:
+  `Internal` or empty: the extra opens of `hw:1` get EBUSY (-16): the two "AUDIO DEVICE ERROR: Failed to open Capture Stream" dialogs.
+  Reproduced with **no addins at all** (the shared drop-in moved aside, no `LD_PRELOAD` in MPC's environment) and with the QC unplugged:
+  stock MPC behaviour on this unit, 7 of 7 starts. With the QC's ALSA longname saved (`Neural DSP Quad Cortex mini at
+  usb-ff500000.usb-1.1, high speed`, by hand, MPC stopped, backup first): the QC opens (through the rate-converting addin) while `hw:1` is
+  still running, the audio thread starts all four streams, and MPC aborts with `terminate called without an active exception`
+  (`status=6/ABRT`), at every restart (3 of 3) until the backup was restored. Choosing the QC in Preferences works because MPC closes
+  `hw:1` first. Plugging the QC in while MPC runs triggers no re-open. Settings backups show `audioSetup` was `Internal` (with the QC in
+  the `AudioDevices` list) until 22 Nov 17:26 and empty by 22:14, before any addin of ours existed; selecting Internal in Preferences
+  did not bring `Internal` back, and writing it by hand restores it (Preferences shows Internal, not `*`) but not the dialogs. No safe
+  addin fix: making the duplicate open succeed leads into the crashing path.
