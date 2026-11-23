@@ -198,6 +198,34 @@ is hidden or demoted because of it. The items:
 ## Feed
 The site publishes `feed.xml` (Atom, newest 50 non-yanked releases). Members of a collection released on the same day are one entry.
 
+## Reusing the catalog: terms
+The OpenMPC catalog is maintained by volunteers. Every entry is reviewed by hand against `docs/CATALOG_REVIEW.md`, and every release is
+validated: open-source licence, checksums, a canonical installer, no other company's branding, a yank or delist when something is wrong.
+That review is what the catalog is worth, and the data is published so people can use it. Using it carries these conditions.
+
+**You may** read `catalog.json`, `catalog.tsv` and `feed.xml` (and the `catalog/plugins/*.json` registry) to build a plugin manager, a
+mirror, a community list or any other tool, including one that competes with ours.
+
+**Licence:** the compilation is CC BY 4.0 (`catalog/LICENSE-DATA.md`); `catalog.json` carries the
+credit wording in its `attribution` field. Condition 1 below is the licence's attribution term; 2 to 4 are terms of publication.
+
+**You must:**
+1. **Credit OpenMPC visibly, with a link.** Put "Plugin list from OpenMPC, https://open-mpc.github.io" (or equivalent wording naming
+   OpenMPC and linking it) in your README and on any site or in any app screen that shows the list. A code comment does not count: users
+   have to be able to see where the vetted list comes from. This applies whether you copy the file, mirror it, or use it to decide
+   which repos to list (for example by taking every `repo` from the registry).
+2. **Honour our decisions.** A plugin that has left the catalog, a yanked version and an `experimental` tier must not appear in your
+   copy as a normal, recommended listing. Read the data fresh on every build; do not keep repos from an old read.
+3. **Not present our review as yours.** If you rely on it, say so. If you add your own checks, describe them as yours.
+4. **Not copy listing content.** Summaries, screenshots and skins belong to their authors, and a screenshot or summary may have been
+   edited by our maintainers. Link to the plugin's page or repo instead.
+
+**Not covered here:** the code in this repository is MIT (`LICENSE`), which requires its copyright notice in copies of the code. The
+conditions above are the terms on which OpenMPC publishes the catalog data and its review. If you can't meet them, don't use the data.
+
+Maintainers who find a project that doesn't meet them contact its owner first, point at this section, and ask for the credit or the
+fix. Questions: open an issue on this repo.
+
 ## Yank a release
 Add `"<id>@<version>"` (or `"<id>@*"` for all versions) to `yanked.json`. It stays in the catalog marked yanked and is
 never offered as the latest.

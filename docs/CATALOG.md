@@ -286,6 +286,18 @@ the list for the entry's kind (MIDI means an instrument with `role: "midi"`). Al
 machine 21, Sampler & rompler 17, Macro & hybrid 16, Mono & bass 14, Wavetable 14, ...). The site shows the labels. A new style is a
 PR to `styles.json`.
 
+### Reuse by other lists and tools (2026-11-23, no code change)
+`catalog.json` is public and other projects read it: plugin managers, mirrors, community lists, some nightly. One in the wild (checked
+2026-11-23, public repos only) takes the `repo` of every non-experimental, non-build-yourself entry as its starting list, merges it with
+what it already had and never drops a repo, so a plugin we delist or yank can stay on that list; it credits OpenMPC only in a code
+comment. The conditions for reuse are written in `catalog/README.md` "Reusing the catalog: terms": visible credit with a link, honour
+delists, yanks and `experimental`, don't present our review as theirs, don't copy listing content. Why credit is a condition: the
+catalog's value is the maintainers' review and validation (what the registry, `CATALOG_REVIEW.md` and CI do), not the file format.
+What we can and can't do: the entries are facts about other people's plugins, so we can't restrict listing a repo as such; what we
+ask for is credit for the compilation and the review, and that our removals are respected. We don't gate or change `catalog.json`
+for this, since installers read it. A formal data licence (for example CC BY 4.0 on the catalog data, with an attribution field in
+`catalog.json`) would make the credit rule stronger and is a maintainer decision (open): see Risks and open questions.
+
 ### Site
 Generated static HTML (`tools/catalog_site.py`, no JS framework): searchable/filterable grid, a page per plugin
 (screenshot, description, version history, install steps, source link, checksum, tested-on), a "recently updated"
@@ -445,6 +457,11 @@ Locrian's installer uses a drop-in folder in `Synths` (`docs/CATALOG_SPEC.md`, "
 - **Non-GitHub hosting.** Start GitHub-only; the registry's `repo` field can grow a `releases_url` later.
 - **Authors not using `release.py`.** Support them by documenting the manifest; the validator is the contract.
 - **Rate limits / token.** One nightly run with the Actions token is far below limits for hundreds of plugins.
+- **Data licence for the catalog (chosen 2026-11-23, offline: unit tests; not yet merged).** The repo is MIT, which covers code, not the
+  published data. Decision: the compilation is held by "the OpenMPC maintainers" (`MAINTAINERS.md`) under CC BY 4.0 (`catalog/LICENSE-DATA.md`);
+  CC BY over ODC-BY for recognition, and because the draft already excludes plugin text and screenshots, which stay their authors'. Added: an
+  `attribution` field in `catalog.json`, `<rights>` in the feeds and a footer line on the site and plugin pages. `catalog.tsv` is unchanged:
+  it is positional. Compat (2026-11-23, run offline on a maintainer's machine with `tools/compat/run.sh`: the published catalog plus the one new `attribution` key against Plugin Manager v0.2.0 and v0.2.5 and desktop installers v0.5.5 and v1.1.2): every client showed the same output (Discover, Installed, Updates, detail pages, per-arch download picks), and `catalog.tsv` is unchanged. This is not a full rebuild from the branch, but the branch adds nothing else to `catalog.json` (the diff to `catalog_build.py` is the constant and the key). Still to do before merging: a legal read of `catalog/LICENSE-DATA.md`.
 - **Catalog scope creep.** Every feature that needs a server, a DB or manual curation is out of scope by default.
 
 ## Client addresses during the organization move (2026-10-20, offline tests only; new address live 2026-11-01)

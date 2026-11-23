@@ -263,6 +263,13 @@ def breakage_of(entry, latest, raw, confirmed, now, team_replied=None):
     return None
 
 
+ATTRIBUTION = {   # 2026-11-23 (docs/CATALOG.md "Risks"): the published data's licence and credit line
+    "source": "OpenMPC", "url": "https://open-mpc.github.io", "license": "CC-BY-4.0",
+    "license_url": "https://creativecommons.org/licenses/by/4.0/",
+    "text": "Plugin list data from OpenMPC (https://open-mpc.github.io), licensed CC BY 4.0. Reuse terms: catalog/README.md",
+}
+
+
 BAR = {   # id -> what the author sees. Informational: it never hides or demotes a plugin (docs/CATALOG_QUALITY.md, step 1).
     "stable-release": "publish a stable (non-beta) release",
     "screenshot": "add a screenshot of the plugin screen to the registry entry",
@@ -1004,7 +1011,7 @@ def build(entries, src, cache, yanked, keep=10, now=None, require_portable=(), a
             breakage.append(dict(b, id=p["id"]))
     hook_overlaps_of(plugins)
     catalog = {"schema": 1, "generated": (now or datetime.datetime.now(datetime.timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ"),
-               "bar": BAR, "plugins": plugins}
+               "attribution": ATTRIBUTION, "bar": BAR, "plugins": plugins}
     catalog_breakage[:] = breakage
     if collections:
         catalog["collections"] = collections_of(plugins, collections)
