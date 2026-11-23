@@ -1,0 +1,7 @@
+# alsatrace: a log-only probe (docs/ADDINS.md). Not for the catalog: install it to record one session, then uninstall it.
+ADDIN_ID=alsatrace
+ADDIN_NAME="ALSA trace (probe)"
+ADDIN_SO=libalsatrace.so
+ADDIN_CONF=""
+ADDIN_FILES=""
+ADDIN_DONE="Log: /tmp/alsatrace.log. Remove with: sh /data/mpc-addins/alsatrace/uninstall.sh -y"

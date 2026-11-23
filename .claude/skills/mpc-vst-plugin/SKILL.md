@@ -280,6 +280,10 @@ docs/SKIN_VARIANTS.md.
 - `tools/screenshot.sh <ssh target> out.png [--plugin]`: a screenshot of what the device shows now (read-only DRM grab; NOTES.md).
 - `tools/probe_device.sh` (read-only): arch, CPU, audio workers, plugin formats. VST3 is **not** compiled into MPC OS
   (Force, 2026-09-24): don't build VST3 ports.
+- `poc/alsatrace/` (`build.sh`, `test.sh`): a log-only addin that records every ALSA PCM call MPC makes (open, hw/sw params,
+  start/drop, per-period counts) to `/tmp/alsatrace.log`, for working out what an audio addin must answer; install, reproduce,
+  uninstall (each restarts MPC, so ask). The log appears once MPC opens audio, about 30 s after the restart. `build/tools/mpc_negotiate`
+  replays MPC's negotiation against any PCM name on the device (NOTES.md 2026-11-22).
 
 ## Catalog
 Every release must be catalog-conformant: `tools/release.py ... --repo owner/name --license <SPDX> [--id x] [--requires "..."] [--depends <id>[>=X.Y.Z]] [--conflicts <id>]`
