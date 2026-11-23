@@ -192,6 +192,11 @@ static void step_of_option_tests(AEffect *a) {
     a->setP(a, prev, 1.0f); run(a, 1); a->setP(a, prev, 0.0f);
     CHECK(fabsf(a->getP(a, t) - 1.0f) < 1e-3f && automated[t] == 2, "step_of %s on %s: first -> last (%.3f)",
           PARAMS[prev].key, PARAMS[t].key, a->getP(a, t));
+    /* The two presses above are different params (next, then prev), so neither is debounced. This third press
+     * repeats prev, and a momentary stepper ignores a second press within debounce_ms (default 250) of the last
+     * one acted on -- MPC delivers one tap on a drawn button twice, 30-140 ms apart (Live III, docs/NOTES.md).
+     * A real finger taps the arrow far more than 250 ms apart, so wait it out, as debounce_tests() does. */
+    usleep(300 * 1000);
     a->setP(a, prev, 1.0f); run(a, 1); a->setP(a, prev, 0.0f);
     CHECK(fabsf(a->getP(a, t) - (float)(n - 2) / (n - 1)) < 1e-3f, "step_of %s on %s: steps one option (%.3f)",
           PARAMS[prev].key, PARAMS[t].key, a->getP(a, t));
