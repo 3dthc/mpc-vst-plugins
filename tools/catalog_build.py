@@ -263,7 +263,7 @@ def breakage_of(entry, latest, raw, confirmed, now, team_replied=None):
     return None
 
 
-ATTRIBUTION = {   # 2026-11-23 (draft, needs a maintainer's go-ahead: docs/CATALOG.md "Risks"): the published data's licence and credit line
+ATTRIBUTION = {   # 2026-11-23 (docs/CATALOG.md "Risks"): the published data's licence and credit line
     "source": "OpenMPC", "url": "https://open-mpc.github.io", "license": "CC-BY-4.0",
     "license_url": "https://creativecommons.org/licenses/by/4.0/",
     "text": "Plugin list data from OpenMPC (https://open-mpc.github.io), licensed CC BY 4.0. Reuse terms: catalog/README.md",

@@ -206,7 +206,7 @@ That review is what the catalog is worth, and the data is published so people ca
 **You may** read `catalog.json`, `catalog.tsv` and `feed.xml` (and the `catalog/plugins/*.json` registry) to build a plugin manager, a
 mirror, a community list or any other tool, including one that competes with ours.
 
-**Licence (draft, pending maintainer approval):** the compilation is CC BY 4.0 (`catalog/LICENSE-DATA.md`); `catalog.json` carries the
+**Licence:** the compilation is CC BY 4.0 (`catalog/LICENSE-DATA.md`); `catalog.json` carries the
 credit wording in its `attribution` field. Condition 1 below is the licence's attribution term; 2 to 4 are terms of publication.
 
 **You must:**

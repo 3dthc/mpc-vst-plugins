@@ -153,7 +153,7 @@ no valid tag, script missing at the newest tag, and (loudly, `LICENCE RISK`) a G
 ## `catalog.json` (generated)
 `{"schema": 1, "generated": <ISO time>, "attribution": {"source", "url", "license", "license_url", "text"}, "plugins": [ <registry fields> + "versions": [ <record>, ... ], "latest",
 "latest_beta", "downloads", "updated", "tier", "verified_on", "bar_missing", "featured", "maintenance"? ]}`, versions
-newest first. `attribution` (2026-11-23, draft) is the credit line and licence of the compilation (`catalog/LICENSE-DATA.md`); readers ignore it, and
+newest first. `attribution` (2026-11-23) is the credit line and licence of the compilation (`catalog/LICENSE-DATA.md`); readers ignore it, and
 installers and managers are unaffected. `feed.xml` and the per-plugin feeds carry the same text in `<rights>`. A record is what `catalog_check.py --json` prints (`version`, `size`, `sha256` of the zip,
 `param_compat`, `max_glibc`, `os_compat`, `os_compat_why`, `cpu`, `defer`, `requires`, `manifest`, and for an addin `hooks`) plus `url`, `date`, `channel` (`stable`|`beta`), `notes`, `yanked`
 and `tested` (`[{device, firmware, date}]`), added by the builder. `tier` is `verified`|`listed`|`experimental`; `verified_on`

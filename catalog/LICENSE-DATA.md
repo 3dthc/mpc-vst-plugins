@@ -1,6 +1,6 @@
-# Licence for the published catalog data (DRAFT: not in force until a maintainer merges it)
+# Licence for the published catalog data (in force from the day this file is merged)
 
-**Holder: [TO CONFIRM BEFORE MERGE: the copyright holder of the catalog compilation, e.g. "the OpenMPC maintainers"; `LICENSE` names sd88me.]**
+**Copyright (c) 2026 the OpenMPC maintainers** (the people listed in `MAINTAINERS.md`). The code in this repository stays under `LICENSE` (MIT).
 
 The compilation published as `catalog.json`, `catalog.tsv`, `feed.xml` and the per-plugin feeds (the selection, ordering, review
 results, tiers, checksums and notes the OpenMPC maintainers produce), and any database right in it, is licensed under
