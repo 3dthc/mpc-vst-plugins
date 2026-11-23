@@ -1336,6 +1336,22 @@ class BuildTest(Base):
         self.assertEqual(by["tool"]["versions"], [])
         self.assertTrue(any("only for the MPC Sample" in str(x) for x in problems), problems)
 
+    def test_attribution_is_published_everywhere(self):
+        """2026-11-23 draft: the credit line is in catalog.json, every feed and both page footers, and they say the same thing."""
+        import catalog_site
+        self.assertEqual(catalog_build.ATTRIBUTION["text"], catalog_site.RIGHTS)
+        self.assertEqual(catalog_build.ATTRIBUTION["license"], "CC-BY-4.0")
+        gh = FakeGitHub({"acme/test-synth": [self.rel("v1.0.0", 1)]}, {1: self.build("1.0.0")})
+        cat, _ = catalog_build.build([self.ENTRY], gh, os.path.join(self.tmp, "attr"), set())
+        self.assertEqual(cat["attribution"], catalog_build.ATTRIBUTION)
+        self.assertIn("open-mpc.github.io", cat["attribution"]["text"])
+        self.assertIn("<rights>%s</rights>" % catalog_site.RIGHTS, catalog_site.atom(cat))
+        here = os.path.join(os.path.dirname(__file__), "catalog_site")
+        for name in ("index.template.html", "page.template.html"):
+            html = open(os.path.join(here, name), encoding="utf-8").read()
+            self.assertIn("CC BY 4.0", html, name)
+            self.assertIn("reusing-the-catalog-terms", html, name)
+
     def test_quality_bar(self):
         gh = FakeGitHub({"acme/test-synth": [self.rel("v1.0.0", 1)]}, {1: self.build("1.0.0")})
         cat, _ = catalog_build.build([self.ENTRY], gh, os.path.join(self.tmp, "bar"), set())

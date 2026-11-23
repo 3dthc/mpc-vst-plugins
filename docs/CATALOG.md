@@ -457,10 +457,12 @@ Locrian's installer uses a drop-in folder in `Synths` (`docs/CATALOG_SPEC.md`, "
 - **Non-GitHub hosting.** Start GitHub-only; the registry's `repo` field can grow a `releases_url` later.
 - **Authors not using `release.py`.** Support them by documenting the manifest; the validator is the contract.
 - **Rate limits / token.** One nightly run with the Actions token is far below limits for hundreds of plugins.
-- **Data licence for the catalog (open, 2026-11-23).** The repo is MIT, which covers code, not the published data. Reuse conditions are
-  stated as terms in `catalog/README.md`, but without a named licence their force is uncertain. Option: CC BY 4.0 on the catalog data plus an
-  `attribution` field in `catalog.json` and the TSV/feed headers. Needs the copyright holder's decision and a check that older clients ignore
-  a new field (`tools/compat/run.sh`).
+- **Data licence for the catalog (drafted 2026-11-23, offline: unit tests; needs a maintainer decision).** The repo is MIT, which
+  covers code, not the published data. The draft puts the compilation under CC BY 4.0 (`catalog/LICENSE-DATA.md`): an `attribution`
+  field in `catalog.json`, `<rights>` in the feeds and a footer line on the site and plugin pages. Still open before merging: the
+  copyright holder (`LICENSE` names sd88me, the project lives in the OpenMPC org), whether contributors' summaries and screenshots
+  stay theirs (the draft says they do), CC BY 4.0 versus ODC-BY, and a `tools/compat/run.sh` run against the published catalog to
+  confirm old managers and installers ignore the new field (not run yet). `catalog.tsv` is unchanged: it is positional.
 - **Catalog scope creep.** Every feature that needs a server, a DB or manual curation is out of scope by default.
 
 ## Client addresses during the organization move (2026-10-20, offline tests only; new address live 2026-11-01)
