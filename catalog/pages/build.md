@@ -9,6 +9,24 @@ This page is for **building**: a plugin marked "Build it yourself" in the catalo
 
 **Akai's SDK or Open MPC?** Both, for different jobs. A new plugin is built with Akai's [MPC Plugin SDK](https://github.com/inmusic-software/mpc-plugin-builder-sdk) (code framework, build tools, screen kit). Open MPC takes it from there: the release workflow packages it for every MPC (including MPC OS 3.9.1), the catalog checks and lists it, and the Plugin Manager and installer put it on devices and keep it updated. Many existing catalog plugins use this repo's own wrapper instead; both routes end in the same catalog.
 
+### What Open MPC adds
+
+**For every plugin, whichever way it's built:**
+- **Releases:** one command or a GitHub workflow builds zips for every MPC (Gen1, Gen2, MPC OS 3.9.1 and 3.10.1+), with checksums and installers.
+- **The catalog:** automatic checks on every release, a **Verified** badge for hardware-tested ones, and a feed of new releases.
+- **Installs:** the desktop installer app, the on-device Plugin Manager and USB sticks. No SSH needed on 3.10.1.
+- **Older MPC OS:** registration for MPC OS 3.9.1 and earlier, where plugins don't appear on their own.
+- **CPU check:** a benchmark you run on the device, which gives the catalog's CPU rating.
+- **Extras:** browser tiles in INSTRUMENTS, switchable skin themes and a desktop VST3 build for your DAW.
+
+**For ports built on this repo's wrapper:**
+- **Port an existing engine** by describing it in one `vst.json`. Engines written for Ableton Move's Schwung build without changes.
+- **Skin Studio:** design the plugin's MPC screen page in your browser.
+- **Test on your PC first:** a host test catches crashes before the plugin goes to a device.
+- **More kinds of plugin:** sequencers and arpeggiators, app-like plugins that use the network or files, and pages on the MPC Sample.
+
+Not plugins, but in the same catalog: [addins](https://github.com/open-mpc/mpc-vst-plugins/blob/main/docs/ADDINS.md) (libraries MPC loads at start-up) and device patches (opt-in changes to the device).
+
 You do not need to be a programmer. Building happens on your computer, never on the device, which only receives the finished plugin. For anything you install, the linked official pages have the current steps.
 
 ## What you need to build
