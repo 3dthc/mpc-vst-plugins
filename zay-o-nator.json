@@ -1,0 +1,17 @@
+{
+  "id": "zay-o-nator",
+  "name": "ZaY-o-Nator",
+  "author": "BeatsbyLonza",
+  "repo": "zay2001-beatsbylonza/Zay-o-Nator",
+  "kind": "effect",
+  "style": "utility",
+  "tags": [
+    "meter",
+    "visualizer",
+    "spectrum",
+    "network"
+  ],
+  "license": "MIT",
+  "summary": "Backlit VU meters, LED peak meters and a spectrum on your MPC or Force screen. Optionally sends the meters over Wi-Fi (UDP, local network only, no audio) to the free ZaY-o-Nator Display for your Mac or PC, for a second monitor or a live stream.",
+  "screenshot": "https://raw.githubusercontent.com/zay2001-beatsbylonza/Zay-o-Nator/c97b9a431ded13ee132cf89b5741c9b403b53fa4/docs/screenshot.png"
+}
