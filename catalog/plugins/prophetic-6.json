@@ -1,0 +1,12 @@
+{
+  "id": "prophetic-6",
+  "name": "PROPHETIC 6",
+  "author": "swtdr34mz",
+  "repo": "swtdr34mz-afk/PROPHET-67-VST",
+  "kind": "instrument",
+  "license": "MPL-2.0",
+  "summary": "A Prophet-6-style 7-voice analogue poly: two oscillators with sub, noise, sync and poly mod, a high-pass into a resonant 4-pole low-pass, two LFOs, distortion, chorus, delay, five reverbs, an arp on the MPC tempo and a low split. HIGH and ECO quality for the CPU. Panel-style touch pages.",
+  "style": "polysynth",
+  "tags": ["analog-modelling", "polyphonic", "subtractive", "arpeggiator"],
+  "screenshot": "https://raw.githubusercontent.com/swtdr34mz-afk/PROPHET-67-VST/v1.0.0/mpc/catalog/screenshot.png"
+}
