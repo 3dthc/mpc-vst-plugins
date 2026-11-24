@@ -18,7 +18,7 @@ while [ $# -gt 0 ]; do
         *) die "usage: sh uninstall.sh [-y] [-n] [-t <synths-dir>]" ;;
     esac
 done
-SETTINGS="${MPC_SETTINGS:-$(ls /media/az01-internal/Settings/*/MPC.settings /data/Settings/*/MPC.settings /data/Settings/*/MPC?Sample/MPC?Sample.settings 2>/dev/null | head -n 1)}"
+SETTINGS="${MPC_SETTINGS:-$(ls /media/az01-internal/Settings/*/MPC.settings /data/Settings/*/MPC.settings /data/Settings/*/MPC?Sample/MPC?Sample.settings /data/Settings/MPC?Sample/MPC?Sample.settings 2>/dev/null | head -n 1)}"
 SAMPLE=0; case "$SETTINGS" in *"MPC Sample"*) SAMPLE=1 ;; esac
 # sample_card_synths: the Synths folder of the MPC Sample's SD card (as in install.sh)
 sample_card_synths() {

@@ -19,7 +19,7 @@ while [ $# -gt 0 ]; do
         *) die "usage: sh install.sh [-y] [-n] [-t <synths-dir>]" ;;
     esac
 done
-SETTINGS="${MPC_SETTINGS:-$(ls /media/az01-internal/Settings/*/MPC.settings /data/Settings/*/MPC.settings /data/Settings/*/MPC?Sample/MPC?Sample.settings 2>/dev/null | head -n 1)}"
+SETTINGS="${MPC_SETTINGS:-$(ls /media/az01-internal/Settings/*/MPC.settings /data/Settings/*/MPC.settings /data/Settings/*/MPC?Sample/MPC?Sample.settings /data/Settings/MPC?Sample/MPC?Sample.settings 2>/dev/null | head -n 1)}"
 # The MPC Sample (its settings file is "MPC Sample.settings"): no plugin browser, a read-only root, and plugins only on its SD card.
 SAMPLE=0; case "$SETTINGS" in *"MPC Sample"*) SAMPLE=1 ;; esac
 # sample_card_synths: the Synths folder of the MPC Sample's SD card (MPC mounts the card at /media/<label>): the one MPC lists in
