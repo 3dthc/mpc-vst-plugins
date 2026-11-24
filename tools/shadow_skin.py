@@ -34,9 +34,12 @@ Layout file:
     popup   cx= cy= w= h= label="..." key=<param> [options="A,B,.."] [cols=<n>] [groups="Title:count[:headFill[:headInk[:optFill[:optInk]]]],.."] [cw=<option cell width>] [wheel=1] [accent=<hex|none>] [field=none]
                                                        (value text; tap opens a drawn option list, a pick closes it.
                                                         Needs the hidden "<param>__open" param: popup_params())
-    stepper cx= cy= w= h= label="..." key=<param> [label_align=center]   (live text;
+    stepper cx= cy= w= h= label="..." key=<param> [label_align=center] [arrow_art=1]   (live text;
                                                         arrows = <param>_prev / <param>_next;
-                                                        label_align=center needs "art": "html")
+                                                        label_align=center needs "art": "html";
+                                                        arrow_art=1: the background artwork draws the ◀ ▶ (e.g. a per-theme
+                                                        skin), so the builder leaves the arrow tap-zones transparent
+                                                        instead of cropping one generic arrow over the artwork's own)
     list    x= y= w= h= cols= rows= th= gap= key=<p>   (rows = params <p>_1..<p>_N: text + tap;
                                                         order=pads numbers the rows from the bottom, like a pad bank;
                                                         order=cols numbers down each column first, so it reads top to bottom;
@@ -881,8 +884,8 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
         # offImage ("") makes MPC show a generic placeholder caption ("Button") over the arrow
         # instead of nothing -- found on a real device (the stepper feature's first hardware test).
         for w in tab["widgets"]:
-            if w["kind"] != "stepper":
-                continue
+            if w["kind"] != "stepper" or w.get("arrow_art"):
+                continue   # arrow_art=: the artwork supplies the arrows; the tap-zone is a transparent hit plate (below)
             for side, (ax, ay, aw, ah) in zip(("prev", "next"), stepper_arrows(w)):
                 img = "sh_arrow_%d_%s_%s" % (t, w["key"], side)
                 script.append("crop|%s|%d|%d|%d|%d" % (art(img), ax, ay, aw, ah))
@@ -1197,7 +1200,10 @@ def build(layout_path, params, skin_dir, art_bin, png_from_ppm):
                                                           handle="Text", style=style, font=font)]))
                 kids.append(_placed(key, name, i, x0 + h + 3, y0, w["w"] - 2 * h - 6, h, extra={"Text": gi}))
                 for side, (ax, ay, aw, ah) in zip(("prev", "next"), stepper_arrows(w)):
-                    aimg = "sh_arrow_%d_%s_%s.png" % (t, w["key"], side)
+                    # arrow_art=: the per-theme artwork already draws the arrow (different on each theme);
+                    # use a transparent hit plate so that baked arrow stays visible instead of a generic one.
+                    aimg = write_hit_png(skin_dir, aw, ah) if w.get("arrow_art") \
+                        else "sh_arrow_%d_%s_%s.png" % (t, w["key"], side)
                     akey = "shTap_%d_%s_%s" % (t, w["key"], side)
                     defs.setdefault(akey, _local(akey, [_action("Enter Pressed", "Toggle Switch")],
                                                  [_button(aimg, aimg, 1, 1, aw, ah)]))

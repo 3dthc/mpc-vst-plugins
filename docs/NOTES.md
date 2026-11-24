@@ -12,6 +12,12 @@ from the Force and may differ on MPC Live/One/X/Key (e.g. `Force Documents` vs `
   again one block later, about 3 ms, so a correctly debounced stepper failed "steps one option". It was the only
   failing check in Fretty, which is the only port using a `stepper` and so the only one reaching that test. The
   test now waits out `debounce_ms` between presses and also checks that a faster second press does NOT step.
+- `stepper arrow_art=1` (2026-11-24, offline): a stepper normally has the builder draw a generic ◀ ▶ into the shared
+  background and crop it as the arrow tap-zone's image. A skin that bakes its own arrows into the artwork (e.g. Fretty's
+  per-theme backgrounds, one arrow style per theme) got that single generic arrow drawn over all of them, so every theme
+  showed the same light arrow. With `arrow_art=1` the builder skips the crop and gives the tap-zone a transparent hit plate
+  (`write_hit_png`), so each theme's own baked arrow shows. Opt-in: steppers without it are unchanged. Verified in an offline
+  `gen_vst.py` build (black shows its dark arrows, grey its light ones); not yet re-checked on device.
 
 - **The host processes in place**: an effect's `processReplacing` gets the same buffers as input and output, so read each
   frame's input before writing its output. Until 2026-10-31 the wrapper's effect path did not, for block sizes that are not a
