@@ -56,6 +56,11 @@ A device already updated to 3.10+ has no documented root route from this project
 OTA update to "3.10.0" left a device's rootfs still reporting "3.9.1" underneath — if real, that specific device might still take
 an old-scheme stick; not something to rely on.)
 
+**Update (2026-11-24, device: Live III, MPC OS 3.10.1.12): a different, unsigned route exists.** A plain `autorun.sh` in the root of a
+USB drive is offered as root while **Developer mode is ON** (AUTORUN SCRIPT dialog, YES/NO; run as `/bin/sh` by `az01-launch-MPC`, "unprotected
+script", no `.scriptpkg`/`az01-signed-fs`). Developer mode OFF: nothing. See docs/NOTES.md 2026-11-24 for the evidence and how to write one.
+It is not the salted `autorun/` route above (still gone), and it needs Developer mode, where SSH root is already available.
+
 Update (2026-10-20, community-reported, not run by us): the stock **autorun-stick route** (see NOTES.md 2026-10-13 and the
 2026-10-20 entry) is now reported to work on **Gen2** — one user confirmed it on Gen2 and used the same bug to enable SSH.
 If that holds, it would be a no-hack Gen2 root route usable by this project's USB stick, but we have not generated or run a

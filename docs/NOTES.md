@@ -2916,3 +2916,76 @@ device; the user played the guitar through the QC during each capture.
   the `AudioDevices` list) until 22 Nov 17:26 and empty by 22:14, before any addin of ours existed; selecting Internal in Preferences
   did not bring `Internal` back, and writing it by hand restores it (Preferences shows Internal, not `*`) but not the dialogs. No safe
   addin fix: making the duplicate open succeed leads into the crashing path.
+
+## 2026-11-24: unsigned `autorun.sh` on MPC OS 3.10.1.12 (Live III, device-tested)
+
+Device: Akai MPC Live III (Gen2), hostname `mpc-live-iii`, MPC OS 3.10.1.12, az0x 5.0.18, kernel 6.18.44. Disposable-by-owner
+FAT32 stick `10C1-8A76` (vfat, mounted `rw,nosuid,nodev,noexec`). Probe script wrote one marker file next to itself and one
+`logger -t AUTORUNTEST` line, nothing else. Journal is volatile on this device (`/var/log/journal` absent): read it before any reboot.
+Run once with YES; every other prompt answered NO or not shown.
+
+**1. Trigger path.** USB-A stick **root** works: `/media/<label>/autorun.sh`. Not yet tested: a named folder, SD card
+(`/media/card`), internal `/nvme` (see "To test").
+
+**2. Prompt.** Never silent. Dialog titled **AUTORUN SCRIPT**, text: *"The drive 10C1-8A76 contains an autorun script. Do you want
+to run it now?"*, buttons YES / NO. NO runs nothing and the dialog does not return on its own. Different wording from the
+"Script detected... Do you want to run it?" string seen in the 3.10.0 binary diff (2026-10-23): that string may belong to the signed
+`.scriptpkg` path, or it changed in 3.10.1; unresolved.
+
+**3. Developer-mode gating.** The Developer Panel setting is read live, not latched:
+- Developer mode OFF, stick inserted: no prompt, no run (control).
+- Developer mode ON at insert: prompt.
+- Developer mode switched ON with the stick already mounted: prompt appears immediately.
+- ON, then OFF, then insert: no prompt (enabling once does not leave the route open). Switching ON again: prompt again.
+Turning Developer mode OFF also stops SSH; the firmware's off handler logged `mount: /etc ... overlay` failing and
+`sshd.service is not active, cannot reload` (firmware's own, not ours; SSH returned normally on re-enable).
+
+**4. Privilege.** Root. Marker and journal: `uid=0 pwd=/ drive=/media/10C1-8A76`.
+
+**5. Signed path unaffected.** Journal on YES, all at the same second:
+```
+az01-launch-MPC: About to run unprotected script: /media/10C1-8A76/autorun.sh
+systemd: Started /bin/sh /media/10C1-8A76/autorun.sh.
+az01-launch-MPC: Running as unit: autorun-sh.service
+AUTORUNTEST: T1-root-devOFF uid=0 pwd=/ drive=/media/10C1-8A76
+autorun-sh.service: Deactivated successfully.   (240 ms)
+```
+So: a plain `autorun.sh` run by `/bin/sh` as a transient `autorun-sh.service` launched by `az01-launch-MPC` ("unprotected script"). No
+`.scriptpkg` and no `az01-signed-fs` in the log. The `noexec` mount does not matter because it is run via `sh`. (Marker is named
+`T1-root-devOFF` because the tag was set before we knew the run would come from the Dev-ON toggle; the run was with Developer mode ON.)
+
+**Differs from earlier assumptions.** The 2026-10-23 entry says 3.10.x removes the autorun root route. True for the salted
+`autorun/autorun.json` + `autorun.check` route, but on 3.10.1.12 an **unsigned `autorun.sh` is accepted, as root, after a YES, while
+Developer mode is ON**. It is not a no-hack route: it needs Developer Panel enabled (where SSH root is already available), and the
+user taps YES. No 2026-11-24 entry was found in the local repo's docs/NOTES.md to compare against.
+
+### How to write an autorun script (3.10.1.12)
+1. Developer mode ON (Preferences > Enhancements > Developer Panel).
+2. Put a plain `autorun.sh` in the **root** of a FAT32/vfat drive. LF line endings, no CRLF. No signing, hash or JSON.
+3. Insert the drive (or toggle Developer mode ON with it already inserted). Tap **YES** on the AUTORUN SCRIPT dialog.
+4. It runs as `/bin/sh /media/<label>/autorun.sh`, root, cwd `/`, as `autorun-sh.service`, so use `$(dirname "$0")` for the drive
+   path (the drive is `noexec`; call helpers with `sh helper.sh`, not `./helper.sh`).
+5. Output: write to files on the drive or use `logger -t TAG ...`; read with `journalctl -t TAG --no-pager`. A long-running job
+   should hand off properly (a transient service ends when the script exits).
+6. Probe template used here:
+```sh
+#!/bin/sh
+TAG="T1-root-devOFF"
+D="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
+TS="$(date +%Y%m%d-%H%M%S)"
+echo "$TAG $TS uid=$(id -u) pwd=$(pwd) drive=$D script=$0" > "$D/AUTORUN_MARKER_${TAG}_${TS}.txt"
+logger -t AUTORUNTEST "$TAG uid=$(id -u) pwd=$(pwd) drive=$D"
+exit 0
+```
+
+### To test next
+- Named folder: derive candidate names from strings in the `MPC` binary of `MPC-3.10.1-Gen2-update.img` (it is on the stick), then
+  test one name at a time (e.g. `autorun/autorun.sh`).
+- SD card (`/media/card`): needs a disposable card or owner OK; one script only.
+- Internal `/nvme`: changes the device (one file); owner decision.
+- Insert while Developer mode ON **and** a project with unsaved changes: does YES/NO touch the project? (Not observed to.)
+- Does anything else (the `.scriptpkg` / `az01-signed-fs` path) get offered, and with what wording? One dialog seen so far.
+- Two drives with scripts at once; script that takes long or forks; whether the prompt repeats after NO on reinsert vs. only on toggle.
+- Reconfirm on 3.10.1.x updates; keep 3.10.1 details out of public PRs/commits until Akai launches (see memory `no-public-3101-mentions`).
+
+State left on the stick: `autorun.sh` (T1 tag) and one `AUTORUN_MARKER_T1-root-devOFF_20261124-120908.txt`. Nothing else changed on the device.

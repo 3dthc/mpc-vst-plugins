@@ -15,6 +15,11 @@ Do you want to run it?" prompt code, 3.10 adds `*.scriptpkg` and `/usr/bin/az01-
 salted hash. This matches TheKikGen's prediction below. **A stick built by this tool will not be accepted once a device is
 updated to 3.10+;** it still works on any device still on 3.9.1 (or an earlier Gen1/Force build using the same scheme).
 
+**Update (2026-11-24, device: Live III, MPC OS 3.10.1.12): a different, unsigned route exists.** A plain `autorun.sh` in the root of a
+USB drive is offered as root while **Developer mode is ON** (AUTORUN SCRIPT dialog, YES/NO; run as `/bin/sh` by `az01-launch-MPC`, "unprotected
+script", no `.scriptpkg`/`az01-signed-fs`). Developer mode OFF: nothing. See NOTES.md 2026-11-24 for the evidence and how to write one.
+It is not the salted `autorun/` route above (still gone), and it needs Developer mode, where SSH root is already available.
+
 ## Easy stick: Eurikon's prebuilt release (2026-10-27, offline-tested only)
 
 The desktop app's no-SSH mode now leads with Eurikon's own stick (`Eurikon/plugin-manager-usb-for-open-mpc`, MIT, pinned to
