@@ -151,6 +151,14 @@
         d.appendChild(s); d.appendChild(plan(w[2]));
         var m = el("p", "gsub"); m.appendChild(link("More detail", w[3])); d.appendChild(m); c.appendChild(d);
       });
+      if (S.gen === 2) {   /* the Plugin Manager App: the same Manager as a MENU tile, no track (a catalog addin, Gen2 only for now) */
+        var ap = el("details", "gothers"); ap.appendChild(el("summary", null, "Want it as an app in MENU instead of a plugin on a track?"));
+        ap.appendChild(el("p", "gsub", "The Plugin Manager App is the same Manager as a Plugin Manager tile in MENU, full screen, with no track needed. It is an add-in that patches MPC while it loads (it checks the exact MPC build first and changes nothing on any other), so it is a bigger step than the plugin, which changes nothing in MPC OS."));
+        ap.appendChild(plan([["First do the steps above, so the Plugin Manager plugin is on a track", MPC],
+          ["In the Plugin Manager's list, set the filter to ADDINS and install Plugin Manager App", MPC, "It also installs Addin Restore, so the app comes back after a restart. MPC restarts once."],
+          ["Press Menu and tap the Plugin Manager tile", MPC, "To remove the app, use REMOVE on its card. Not yet available for Gen1 MPCs and the Force."]]));
+        c.appendChild(ap);
+      }
       var a = el("details", "gothers"); a.appendChild(el("summary", null, "Rather use the desktop app?"));
       installer(a, "It can write the stick for you, or install over Wi-Fi with Developer mode."); c.appendChild(a);
     } else {
