@@ -58,6 +58,29 @@ func TestDetectsMPCOS3101(t *testing.T) {
 	}
 }
 
+// MPC Sample 1.4 has the VST2 Support switch too, but its plugins stay on the card's Synths (emulator, 2026-11-24): with the switch on
+// it must not read as MPC OS 3.10.1's VST2 mode, or installs would go to <card>/VST2 Plugins.
+func TestSample14VST2SupportIsNotVST2Mode(t *testing.T) {
+	fd := newFakeDevice(t)
+	setUname(fd, "aarch64")
+	os.MkdirAll(filepath.Join(fd.dir, "Settings", "MPC Sample"), 0o755)
+	os.WriteFile(filepath.Join(fd.dir, "Settings", "MPC Sample", "MPC Sample.settings"),
+		[]byte("<PROPERTIES>\n  <VALUE name=\"Enhancements.VST2Support\" val=\"1\"/>\n</PROPERTIES>\n"), 0o644)
+	cfg := fd.cfg()
+	cfg.SettingsGlob = filepath.Join(fd.dir, "Settings", "MPC?Sample", "MPC?Sample.settings")
+	d, err := Dial("127.0.0.1", "secret", cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	if d.Info.Device() != "mpc-sample" {
+		t.Fatalf("a Sample's settings file must read as a Sample: %q", d.Info.Settings)
+	}
+	if d.Info.VST2 != "" {
+		t.Fatalf("a Sample with VST2 Support on must not be in VST2 mode, got %q", d.Info.VST2)
+	}
+}
+
 func TestInstallOnMPCOS3101GoesToVST2PluginsWithPluginJSON(t *testing.T) {
 	fd := newFakeDevice(t)
 	os.WriteFile(filepath.Join(fd.dir, "Settings", "MPC", "MPC.settings"), []byte(`<VALUE name="Enhancements.VST2Support" val="1"/>`), 0o644)

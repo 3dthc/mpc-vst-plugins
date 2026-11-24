@@ -611,6 +611,9 @@ true`, shQuote(d.cfg.SynthsDir), d.cfg.SettingsGlob, shQuote(d.cfg.RemoteTmp), d
 	// The MPC Sample's /sdcard is read-only: plugins live on its mounted SD card (/media/<label>/Synths), which is not an internal drive.
 	labelPrimary := primary
 	if info.Device() == "mpc-sample" {
+		// MPC Sample 1.4 has the same VST2 Support switch as MPC OS 3.10.1, but loads the plugin the project names, from the card's
+		// Synths, and did not pick one up from <card>/VST2 Plugins (emulator, 2026-11-24): keep it on the card's Synths.
+		info.VST2 = ""
 		primary, labelPrimary = "", ""
 		for _, r := range cands {
 			if strings.HasPrefix(r.Path, "/media/") {
