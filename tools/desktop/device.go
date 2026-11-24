@@ -40,7 +40,7 @@ func defaultConfig() Config {
 	// One, a Key 37; the firmware mounts /nvme or /storage from device tree flags). The extra entries are harmless on
 	// Gen1/Force (neither exists); SettingsGlob already finds /data. The first SynthsAlt found is promoted to the primary
 	// "internal drive" when /sdcard is absent (see readInfo).
-	return Config{Port: "22", User: "root", RemoteTmp: "/tmp", SynthsDir: "/sdcard/Synths", SynthsAlt: "/nvme/Synths /storage/Synths", RootGlobs: "/sdcard/Synths /nvme/Synths /storage/Synths /media/*/Synths", VST2Globs: "/sdcard /nvme /storage /media/*", ModelFile: "/proc/device-tree/model", MPCBin: "/usr/bin/MPC", DriveGlob: "/media/* /nvme /storage", MountsFile: "/proc/mounts", SettingsGlob: "/media/az01-internal/Settings/*/MPC.settings /data/Settings/*/MPC.settings /data/Settings/*/MPC?Sample/MPC?Sample.settings", AddinsDir: "/data/mpc-addins",
+	return Config{Port: "22", User: "root", RemoteTmp: "/tmp", SynthsDir: "/sdcard/Synths", SynthsAlt: "/nvme/Synths /storage/Synths", RootGlobs: "/sdcard/Synths /nvme/Synths /storage/Synths /media/*/Synths", VST2Globs: "/sdcard /nvme /storage /media/*", ModelFile: "/proc/device-tree/model", MPCBin: "/usr/bin/MPC", DriveGlob: "/media/* /nvme /storage", MountsFile: "/proc/mounts", SettingsGlob: "/media/az01-internal/Settings/*/MPC.settings /data/Settings/*/MPC.settings /data/Settings/*/MPC?Sample/MPC?Sample.settings /data/Settings/MPC?Sample/MPC?Sample.settings", AddinsDir: "/data/mpc-addins",
 		LibcPaths: "/lib/libc.so.6 /lib/arm-linux-gnueabihf/libc.so.6 /usr/lib/libc.so.6 /lib/libc-*.so /usr/lib/libc-*.so"}
 }
 
@@ -611,6 +611,9 @@ true`, shQuote(d.cfg.SynthsDir), d.cfg.SettingsGlob, shQuote(d.cfg.RemoteTmp), d
 	// The MPC Sample's /sdcard is read-only: plugins live on its mounted SD card (/media/<label>/Synths), which is not an internal drive.
 	labelPrimary := primary
 	if info.Device() == "mpc-sample" {
+		// MPC Sample 1.4 has the same VST2 Support switch as MPC OS 3.10.1, but loads the plugin the project names, from the card's
+		// Synths, and did not pick one up from <card>/VST2 Plugins (emulator, 2026-11-24): keep it on the card's Synths.
+		info.VST2 = ""
 		primary, labelPrimary = "", ""
 		for _, r := range cands {
 			if strings.HasPrefix(r.Path, "/media/") {
