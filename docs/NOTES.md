@@ -2989,3 +2989,17 @@ exit 0
 - Reconfirm on 3.10.1.x updates; keep 3.10.1 details out of public PRs/commits until Akai launches (see memory `no-public-3101-mentions`).
 
 State left on the stick: `autorun.sh` (T1 tag) and one `AUTORUN_MARKER_T1-root-devOFF_20261124-120908.txt`. Nothing else changed on the device.
+
+## 2026-11-24: MPC Sample 1.4.0.8 (emulator, QEngine, mpc-compat-tests `mpc-sample-140`; not yet checked on a device)
+
+- **Settings moved** to `/data/Settings/MPC Sample/MPC Sample.settings` (1.3.0.12: `/data/Settings/Akai/MPC Sample/...`). The
+  installers' and the desktop app's glob missed it ("MPC.settings not found" on every route); they now look in both places.
+- **VST2 Support switch.** Preferences > Enhancements, the same keys as MPC OS 3.10.1 (`Enhancements.Enabled`,
+  `Enhancements.VST2Support`). With them off MPC never tries to load a plugin in the project; with them on it does.
+- **The card is remounted exec by MPC.** With VST2 Support on, the first time MPC loads a plugin from the SD card it remounts the
+  card without `noexec`. The bind-mount workaround (2026-11-05) is not needed, and a plugin in the project still loads after a reboot.
+- **Where plugins go.** MPC loads the path the project names. A plugin copied to `<card>/VST2 Plugins` was not picked up when MPC
+  started, so the card's `Synths` stays the install target on a Sample; the desktop app no longer treats a Sample's VST2 Support as
+  MPC OS 3.10.1's VST2 mode.
+- MPC's main thread is named `<MPCSample>` (1.3: `MPC Sample`).
+- To check on a device: the remount, and whether 1.4's VST plugins page lists anything from `<card>/VST2 Plugins`.
