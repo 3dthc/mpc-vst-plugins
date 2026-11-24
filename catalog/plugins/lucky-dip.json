@@ -1,5 +1,5 @@
 { "id": "lucky-dip", "name": "Lucky Dip", "author": "sd88me", "repo": "sd88me/mpc-vst-luckydip",
-  "kind": "instrument", "license": "MIT",
+  "kind": "instrument", "license": "GPL-3.0-or-later",
   "summary": "A random 16-pad drum-kit builder and inspiration machine: dips into your sample library, fills the pads at random, plays the kit and exports it as an MPC drum program.",
   "style": "sampler-rompler", "tags": ["sampler", "utility", "kit-builder", "random", "drum-kit"],
   "asset_pattern": "*-mpc-armv7.zip",

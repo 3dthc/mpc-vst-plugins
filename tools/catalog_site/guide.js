@@ -4,8 +4,8 @@
   var root = document.getElementById("guide");
   if (!root) return;
   var REL = "https://github.com/open-mpc/mpc-vst-plugins/releases";
-  var PM = "https://github.com/open-mpc/plugin-manager/releases/download/plugin-manager-g2-v2.0.0/OpenMPC-Plugin-Manager-2.0.0-";
-  var PMSDK = "https://github.com/open-mpc/plugin-manager/releases/download/plugin-manager-g2-v2.0.0/Plugin-Manager-G2-2.0.0-mpc-sdk.zip";   /* one zip for every MPC on MPC OS 3.10.1+; used when the site publishes it (dl/downloads.json "pm-sdk") */
+  var PM = "https://github.com/open-mpc/plugin-manager/releases/download/plugin-manager-g2-v2.1.0/OpenMPC-Plugin-Manager-2.1.0-";
+  var PMSDK = "https://github.com/open-mpc/plugin-manager/releases/download/plugin-manager-g2-v2.1.0/Plugin-Manager-G2-2.1.0-mpc-sdk.zip";   /* one zip for every MPC on MPC OS 3.10.1+; used when the site publishes it (dl/downloads.json "pm-sdk") */
   var HERE = "on your computer", MPC = "on the MPC";
   var GROUPS = [["Gen1", 1, ["MPC Live / Live II", "MPC One / One+", "MPC X / X SE", "MPC Key 61 / Key 37", "Akai Force"]],
                 ["Gen2", 2, ["MPC Live III", "MPC One G2", "MPC Key G2", "MPC XL"]]];
@@ -126,7 +126,7 @@
       var g = S.gen === 2 ? "Gen2" : "Gen1";
       c = card(3, 3, "Put the Plugin Manager on your MPC", "Once it is on a track, you install everything else from its screen, or from your phone or computer.");
       c.appendChild(plan([["Menu > Preferences > Enhancements: tick Enable Enhancements and External Plugin Support, accept the warning, wait a few seconds, then restart", MPC, "MPC now looks for plugins in folders called VST2 Plugins."],
-        [["Download ", (DL && DL["pm-sdk"]) ? link("Plugin-Manager-G2-2.0.0-mpc-sdk.zip", PMSDK) : link("OpenMPC-Plugin-Manager-2.0.0-" + g + ".zip", PM + g + ".zip"), " and unzip it", " (or let this page write it for you, below)"], HERE, "You get one folder, OpenMPC - VST - Plugin Manager."],
+        [["Download ", (DL && DL["pm-sdk"]) ? link("Plugin-Manager-G2-2.1.0-mpc-sdk.zip", PMSDK) : link("OpenMPC-Plugin-Manager-2.1.0-" + g + ".zip", PM + g + ".zip"), " and unzip it", " (or let this page write it for you, below)"], HERE, "You get one folder, OpenMPC - VST - Plugin Manager."],
         ["Copy that whole folder into a VST2 Plugins folder on the MPC. Pick a way below", HERE, "MPC lists it in its plugin browser. On a stick or card that is as soon as you plug it in."],
         ["Press Menu, add a new Plugin track, tap its plugin slot and browse to External VST Plugins > OpenMPC > Plugin Manager", MPC, "Its screen lists the catalog. Install from there, or open the web address on its status line on your phone or computer (same Wi-Fi)."]]));
       var pdl = DL && (DL["pm-sdk"] || DL["pm-gen" + S.gen]);   /* the SDK zip holds both builds; else this generation's folder zip */
@@ -151,6 +151,14 @@
         d.appendChild(s); d.appendChild(plan(w[2]));
         var m = el("p", "gsub"); m.appendChild(link("More detail", w[3])); d.appendChild(m); c.appendChild(d);
       });
+      if (S.gen === 2) {   /* the Plugin Manager App: the same Manager as a MENU tile, no track (a catalog addin, Gen2 only for now) */
+        var ap = el("details", "gothers"); ap.appendChild(el("summary", null, "Want it as an app in MENU instead of a plugin on a track?"));
+        ap.appendChild(el("p", "gsub", "The Plugin Manager App is the same Manager as a Plugin Manager tile in MENU, full screen, with no track needed. It is an add-in that patches MPC while it loads (it checks the exact MPC build first and changes nothing on any other), so it is a bigger step than the plugin, which changes nothing in MPC OS."));
+        ap.appendChild(plan([["First do the steps above, so the Plugin Manager plugin is on a track", MPC],
+          ["In the Plugin Manager's list, set the filter to ADDINS and install Plugin Manager App", MPC, "It also installs Addin Restore, so the app comes back after a restart. MPC restarts once."],
+          ["Press Menu and tap the Plugin Manager tile", MPC, "To remove the app, use REMOVE on its card. Not yet available for Gen1 MPCs and the Force."]]));
+        c.appendChild(ap);
+      }
       var a = el("details", "gothers"); a.appendChild(el("summary", null, "Rather use the desktop app?"));
       installer(a, "It can write the stick for you, or install over Wi-Fi with Developer mode."); c.appendChild(a);
     } else {

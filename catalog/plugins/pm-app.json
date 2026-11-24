@@ -1,0 +1,24 @@
+{
+  "id": "pm-app",
+  "name": "Plugin Manager App",
+  "author": "sd88me",
+  "repo": "open-mpc/plugin-manager",
+  "kind": "addin",
+  "style": "utility",
+  "tags": [
+    "installer",
+    "catalog",
+    "manager",
+    "gen2",
+    "utility"
+  ],
+  "license": "MIT",
+  "summary": "The Open MPC Plugin Manager as an app: a Plugin Manager tile in MENU, full screen with its own tabs, instead of a plugin on a track. Patches MPC while it loads (only on the exact MPC OS 3.10.1 build it was made for; anything else is left alone). Installing it also installs Addin Restore so it survives a reboot.",
+  "screenshot": "https://raw.githubusercontent.com/open-mpc/plugin-manager/bc3d501c4592ce8e8e064460e9a356ed258b640c/docs/screenshots/app-full-screen.png",
+  "asset_pattern": "Plugin-Manager-App-*-mpc-aarch64.zip",
+  "flags_reviewed": [
+    "network",
+    "runs programs"
+  ],
+  "tip": "https://ko-fi.com/sd88me"
+}

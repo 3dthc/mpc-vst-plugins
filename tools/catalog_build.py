@@ -21,7 +21,9 @@ shown as one card on the site. A member entry sets
 "collection": "<id>"; it keeps its own release, versions, checks and tier. More than MAX_UNCOLLECTED entries from one repo by one
 author without a collection is a registry error. catalog.json gets a collections[] list (members, kind counts, best tier, total downloads).
 
-GITHUB_TOKEN (optional) raises the API rate limit. --check-registry only validates the registry files, and that no stray *.json sits beside them in catalog/ (for PRs).
+GITHUB_TOKEN (optional) raises the API rate limit. GitHub reads retry a server error (5xx, 429) or a timeout a few times. A plugin
+whose tested.json still can't be read keeps the test results of --previous (the published catalog.json, a path or URL), and its
+problem is marked "transient", so catalog_issues.py opens no issue for it. --check-registry only validates the registry files, and that no stray *.json sits beside them in catalog/ (for PRs).
 Standard library only. See docs/CATALOG.md and docs/CATALOG_SPEC.md.
 """
 import argparse
@@ -33,6 +35,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.parse
 import zipfile
@@ -261,6 +264,13 @@ def breakage_of(entry, latest, raw, confirmed, now, team_replied=None):
         return {"version": latest, "route": "reports", "device": dev, "os": osv, "people": len(people),
                 "issues": sorted(i["number"] for i in g)}
     return None
+
+
+ATTRIBUTION = {   # 2026-11-23 (docs/CATALOG.md "Risks"): the published data's licence and credit line
+    "source": "OpenMPC", "url": "https://open-mpc.github.io", "license": "CC-BY-4.0",
+    "license_url": "https://creativecommons.org/licenses/by/4.0/",
+    "text": "Plugin list data from OpenMPC (https://open-mpc.github.io), licensed CC BY 4.0. Reuse terms: catalog/README.md",
+}
 
 
 BAR = {   # id -> what the author sees. Informational: it never hides or demotes a plugin (docs/CATALOG_QUALITY.md, step 1).
@@ -538,6 +548,49 @@ def stray_files(catalog_dir):
             for f in sorted(glob.glob(os.path.join(catalog_dir, "*.json"))) if os.path.basename(f) not in CATALOG_FILES]
 
 
+RETRY_DELAYS = (5, 20, 60)   # seconds between tries of a GitHub read: 4 tries in all (tests set it to zeros)
+
+
+def transient(ex):
+    """An error a later try can fix: a server error (5xx, e.g. raw.githubusercontent.com's "503 Backend.max_conn reached",
+    2026-11-23), 429 Too Many Requests, a timeout or a dropped connection. A 404 or a bad file is not."""
+    if isinstance(ex, urllib.error.HTTPError):
+        return ex.code >= 500 or ex.code == 429
+    return isinstance(ex, (urllib.error.URLError, TimeoutError, ConnectionError))
+
+
+def read_json(req, timeout=60):
+    """urlopen + json.load, retried on a transient() error (RETRY_DELAYS)."""
+    for delay in RETRY_DELAYS + (None,):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return json.load(r)
+        except Exception as ex:
+            if delay is None or not transient(ex):
+                raise
+            time.sleep(delay)
+
+
+def previous_tested(catalog):
+    """{id: tested.json-style entries} from a published catalog.json (each version's tested list): what a build keeps for a
+    plugin whose tested.json it could not read this time."""
+    return {p["id"]: [dict(t, version=v["version"], id=p["id"]) for v in p.get("versions", []) for t in v.get("tested", [])]
+            for p in (catalog or {}).get("plugins", [])}
+
+
+def load_previous(where):
+    """The published catalog.json from a path or an http(s) URL; {} (and a warning) when it can't be read."""
+    if not where:
+        return {}
+    try:
+        if re.match(r"https?://", where):
+            return read_json(urllib.request.Request(where, headers={"User-Agent": "mpc-vst-catalog"}))
+        return json.load(open(where))
+    except Exception as ex:
+        print("warning: --previous %s not read (%s): a tested.json that can't be read loses its results" % (where, ex), file=sys.stderr)
+        return {}
+
+
 class GitHub:
     """Release listing and asset download over the GitHub API. Tests substitute a fake with the same two methods."""
     def __init__(self, token=None):
@@ -548,19 +601,14 @@ class GitHub:
     def list_releases(self, repo):
         out, page = [], 1
         while True:
-            req = urllib.request.Request("https://api.github.com/repos/%s/releases?per_page=100&page=%d" % (repo, page),
-                                         headers=self.headers)
-            with urllib.request.urlopen(req, timeout=60) as r:
-                chunk = json.load(r)
+            chunk = self._get("https://api.github.com/repos/%s/releases?per_page=100&page=%d" % (repo, page))
             out += chunk
             if len(chunk) < 100:
                 return out
             page += 1
 
     def _get(self, url):
-        req = urllib.request.Request(url, headers=self.headers)
-        with urllib.request.urlopen(req, timeout=60) as r:
-            return json.load(r)
+        return read_json(urllib.request.Request(url, headers=self.headers))
 
     def list_tags(self, repo):
         """[{name, sha}] for the repo's tags (sha = the tagged commit). Raises if the repo can't be read."""
@@ -591,8 +639,7 @@ class GitHub:
         req = urllib.request.Request("https://raw.githubusercontent.com/%s/HEAD/tested.json" % repo,
                                      headers={"User-Agent": "mpc-vst-catalog"})
         try:
-            with urllib.request.urlopen(req, timeout=60) as r:
-                return json.load(r)
+            return read_json(req)
         except urllib.error.HTTPError as ex:
             if ex.code == 404:
                 return []
@@ -760,9 +807,12 @@ def tag_versions(e, src, yanked, tested, keep, problems):
 catalog_breakage = []   # the last build()'s 5b dry-run list (kept out of catalog.json while it is a dry run)
 
 
-def build(entries, src, cache, yanked, keep=10, now=None, require_portable=(), added=None, collections=None, confirmed=None, all_entries=None):
-    """-> (catalog dict, problems list [{id, tag, error, unreadable?, superseded?}]). "unreadable" marks a repo or
-    release list that could not be read at all, as opposed to one that was read and found invalid.
+def build(entries, src, cache, yanked, keep=10, now=None, require_portable=(), added=None, collections=None, confirmed=None, all_entries=None,
+          previous=None):
+    """-> (catalog dict, problems list [{id, tag, error, unreadable?, transient?, superseded?}]). "unreadable" marks a repo or
+    release list that could not be read at all, as opposed to one that was read and found invalid. "transient": the read failed
+    with a server error or timeout even after retries (transient()), so catalog_issues.py opens no issue for it.
+    previous: the published catalog.json; a plugin whose tested.json can't be read this time keeps its test results from it.
     A plugin whose newest stable release is of the old layout (no "layout" field) gets a problem, so the catalog repo opens an
     issue for it. require_portable (entry ids): such a release is invalid instead (the PR check for new listings).
     all_entries: the whole registry when entries is only a part of it (the PR check builds just the entries under review); whether a
@@ -771,6 +821,7 @@ def build(entries, src, cache, yanked, keep=10, now=None, require_portable=(), a
     in it with the same repo, and the catalog gets collections[] (collections_of)."""
     os.makedirs(cache, exist_ok=True)
     plugins, problems = [], []
+    kept_tested = previous_tested(previous)
     hosted = None   # the converted SDK zips already hosted, read once when the first SDK-only release turns up
     for e in entries:
         versions = []
@@ -784,7 +835,8 @@ def build(entries, src, cache, yanked, keep=10, now=None, require_portable=(), a
             try:
                 releases = [dict(r, _repo=e["repo"]) for r in src.list_releases(e["repo"])]
             except Exception as ex:  # a repo we can't read: keep going, report it
-                problems.append({"id": e["id"], "tag": None, "unreadable": True, "error": "cannot list releases: %s" % ex})
+                problems.append({"id": e["id"], "tag": None, "unreadable": True, "error": "cannot list releases: %s" % ex,
+                                 **({"transient": True} if transient(ex) else {})})
             # a plugin that moved repo: its older releases (and their downloads) stay where they were published
             seen = {r.get("tag_name") for r in releases}
             for old in e.get("previous_repos", []):
@@ -798,7 +850,12 @@ def build(entries, src, cache, yanked, keep=10, now=None, require_portable=(), a
                 tested = [t for t in src.tested(e["repo"]) if isinstance(t, dict) and t.get("version") and t.get("device")
                           and (t["id"] == e["id"] if "id" in t else not shared_repo)]
             except Exception as ex:  # optional file: a bad one only costs the badges
-                problems.append({"id": e["id"], "tag": None, "error": "tested.json ignored: %s" % ex})
+                if transient(ex):   # the server, not the file: keep what the published catalog had
+                    tested = kept_tested.get(e["id"], [])
+                    problems.append({"id": e["id"], "tag": None, "transient": True,
+                                     "error": "tested.json not read (%s): kept %d published test results" % (ex, len(tested))})
+                else:
+                    problems.append({"id": e["id"], "tag": None, "error": "tested.json ignored: %s" % ex})
         if build_yourself:
             versions = tag_versions(e, src, yanked, tested, keep, problems)
         newest = max((r for r in releases if not r.get("draft")), key=lambda r: r.get("published_at") or "", default=None)
@@ -1004,7 +1061,7 @@ def build(entries, src, cache, yanked, keep=10, now=None, require_portable=(), a
             breakage.append(dict(b, id=p["id"]))
     hook_overlaps_of(plugins)
     catalog = {"schema": 1, "generated": (now or datetime.datetime.now(datetime.timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ"),
-               "bar": BAR, "plugins": plugins}
+               "attribution": ATTRIBUTION, "bar": BAR, "plugins": plugins}
     catalog_breakage[:] = breakage
     if collections:
         catalog["collections"] = collections_of(plugins, collections)
@@ -1220,6 +1277,8 @@ def main():
     ap.add_argument("--collections", default=None, help="collection files (default: collections/ next to --registry)")
     ap.add_argument("--listings", default=None, help="Other sources listings (default: listings/ next to --registry); written to listings.json, never to catalog.json")
     ap.add_argument("--keep", type=int, default=10)
+    ap.add_argument("--previous", default=None, metavar="PATH_OR_URL",
+                    help="the published catalog.json: a tested.json that can't be read (server error) keeps its results from it")
     ap.add_argument("--check-registry", action="store_true")
     ap.add_argument("--require-portable", metavar="ID", nargs="+",
                     help="validate only these entries' releases and fail when a newest release is of the old layout (PR check for new listings)")
@@ -1261,7 +1320,7 @@ def main():
         sys.exit(1 if bad or reg_problems else 0)
     confirmed = json.load(open(a.confirmed)) if os.path.exists(a.confirmed) else {}
     catalog, problems = build(entries, GitHub(os.environ.get("GITHUB_TOKEN")), a.cache, yanked, a.keep, added=added, collections=collections,
-                              confirmed=confirmed)
+                              confirmed=confirmed, previous=load_previous(a.previous))
     os.makedirs(a.out, exist_ok=True)
     json.dump(catalog, open(os.path.join(a.out, "catalog.json"), "w"), indent=1)
     json.dump(problems, open(os.path.join(a.out, "problems.json"), "w"), indent=1)

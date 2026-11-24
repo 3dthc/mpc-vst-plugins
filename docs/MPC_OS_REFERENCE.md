@@ -140,6 +140,9 @@ The guide does **not** describe a stock no-SSH route. What it adds:
 5. **SMEX `transferFile`** and **`az0x-webserver` `/files`** [U]: could copy files without SSH, but they would not register
    a plugin, and neither is decoded.
 
+   **3.10.1.12 (device, Live III, 2026-11-24):** the salted route is gone, but an unsigned `autorun.sh` in a drive root runs as root after a
+   YES prompt while Developer mode is ON (NOTES.md 2026-11-24). Folder, SD card and `/nvme` placement not yet tested.
+
 ## Leads for our work
 
 - `/dev/uinput` is present (MPC's acceptance untested): a possible way to inject button presses without hooking

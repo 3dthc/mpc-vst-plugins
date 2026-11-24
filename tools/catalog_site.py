@@ -19,6 +19,8 @@ import sys
 from html import escape as html_escape
 from xml.sax.saxutils import escape
 
+RIGHTS = "Plugin list data from OpenMPC (https://open-mpc.github.io), licensed CC BY 4.0. Reuse terms: catalog/README.md"   # = catalog_build.ATTRIBUTION["text"]
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import catalog_listings  # noqa: E402
@@ -231,6 +233,7 @@ def atom(catalog, base="", title="Open MPC - Plugin Catalog: new releases", iden
     out = ['<?xml version="1.0" encoding="utf-8"?>', '<feed xmlns="http://www.w3.org/2005/Atom">',
            "<title>%s</title>" % escape(title), "<id>tag:mpc-vst-catalog,2026:%s</id>" % escape(ident),
            "<updated>%s</updated>" % (items[0][0] + "T00:00:00Z" if items else catalog.get("generated", "1970-01-01T00:00:00Z"))]
+    out.append("<rights>%s</rights>" % escape(RIGHTS))
     if base:
         out.append('<link rel="self" href="%s"/>' % escape(base.rstrip("/") + "/" + path, {'"': "&quot;"}))
     q = {'"': "&quot;"}
@@ -271,6 +274,7 @@ def plugin_atom(p, base="", limit=30):
     out = ['<?xml version="1.0" encoding="utf-8"?>', '<feed xmlns="http://www.w3.org/2005/Atom">',
            "<title>%s: releases</title>" % escape(p["name"]), "<id>tag:mpc-vst-catalog,2026:feed/%s</id>" % escape(p["id"]),
            "<updated>%s</updated>" % (rel[0]["date"] + "T00:00:00Z" if rel else "1970-01-01T00:00:00Z")]
+    out.append("<rights>%s</rights>" % escape(RIGHTS))
     if base:
         out.append('<link rel="self" href="%s"/>' % escape(base.rstrip("/") + "/feed/%s.xml" % p["id"], q))
         out.append('<link rel="alternate" href="%s"/>' % escape(base.rstrip("/") + "/p/%s.html" % p["id"], q))

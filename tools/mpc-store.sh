@@ -51,7 +51,7 @@ if [ -z "$MPC_INSTALL_TEST" ] && [ "$CMD" != list ] && [ $DRY = 0 ]; then
     case "$ARCH" in armv7*|aarch64) ;; *) die "this is for MPC OS devices (Gen1 32-bit ARM or Gen2 aarch64); this one is $ARCH" ;; esac
     command -v systemctl >/dev/null || die "systemctl not found"
 fi
-SETTINGS="${MPC_SETTINGS:-$(ls /media/az01-internal/Settings/*/MPC.settings /data/Settings/*/MPC.settings /data/Settings/*/MPC?Sample/MPC?Sample.settings 2>/dev/null | head -n 1)}"
+SETTINGS="${MPC_SETTINGS:-$(ls /media/az01-internal/Settings/*/MPC.settings /data/Settings/*/MPC.settings /data/Settings/*/MPC?Sample/MPC?Sample.settings /data/Settings/MPC?Sample/MPC?Sample.settings 2>/dev/null | head -n 1)}"
 # The catalog's id for this device when an entry is limited to some (catalog.tsv column 24, registry "devices"): the MPC Sample's
 # settings file is "MPC Sample.settings"; "" for any other MPC.
 DEVICE="${MPC_STORE_DEVICE-$(case "$SETTINGS" in *"MPC Sample"*) echo mpc-sample ;; esac)}"
